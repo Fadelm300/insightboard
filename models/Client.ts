@@ -60,6 +60,10 @@ const ClientSchema = new Schema(
       ],
       default: "New Lead",
     },
+     isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

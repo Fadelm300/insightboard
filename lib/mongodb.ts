@@ -24,7 +24,7 @@ if (!global.mongooseCache) {
   global.mongooseCache = cached;
 }
 
-export async function connectDB() {
+async function connectDB() {
   if (cached.conn) {
     return cached.conn;
   }
@@ -39,3 +39,5 @@ export async function connectDB() {
 
   return cached.conn;
 }
+
+export default connectDB;
