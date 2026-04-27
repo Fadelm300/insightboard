@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { NextRequest } from "next/server";
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET as string;
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is not defined in environment variables");
@@ -21,7 +21,7 @@ export function signToken(payload: JwtPayload) {
 
 export function verifyToken(token: string) {
   try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
+    return jwt.verify(token, JWT_SECRET) as unknown as JwtPayload;
   } catch {
     return null;
   }
