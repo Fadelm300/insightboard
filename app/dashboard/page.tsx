@@ -4,6 +4,11 @@ import HandshakeIcon from "@mui/icons-material/Handshake";
 import PaymentsIcon from "@mui/icons-material/Payments";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 
+import RevenueChart from "@/components/dashboard/charts/RevenueChart";
+import DealsPipelineChart from "@/components/dashboard/charts/DealsPipelineChart";
+import ProjectStatusChart from "@/components/dashboard/charts/ProjectStatusChart";
+
+
 import KPIBox from "@/components/dashboard/KPIBox";
 import RecentDeals from "@/components/dashboard/RecentDeals";
 import RevenueSummary from "@/components/dashboard/RevenueSummary";
@@ -47,6 +52,26 @@ export default function DashboardPage() {
           <RevenueSummary />
         </Grid>
       </Grid>
+
+
+      <Box sx={{ mt: 4 }}>
+        <Grid container spacing={3}>
+
+          <Grid size={{ xs: 12, lg: 8 }}>
+            <RevenueChart />
+          </Grid>
+
+          <Grid size={{ xs: 12, lg: 4 }}>
+            <ProjectStatusChart />
+          </Grid>
+
+          <Grid size={{ xs: 12 }}>
+            <DealsPipelineChart />
+          </Grid>
+
+        </Grid>
+      </Box>
+
     </Box>
   );
 }
