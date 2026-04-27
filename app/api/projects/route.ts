@@ -62,6 +62,12 @@ export async function POST(req: NextRequest) {
     if (!deal) {
       return errorResponse("Deal not found", 404);
     }
+    if (deal.status !== "Closed Won") {
+      return errorResponse(
+        "Project can only be created if deal status is Closed Won",
+        400
+      );
+    }
 
     const project = await Project.create(body);
 
