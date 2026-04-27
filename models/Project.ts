@@ -67,6 +67,10 @@ const ProjectSchema = new Schema(
       enum: ["Unpaid", "Partially Paid", "Paid"],
       default: "Unpaid",
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
 
     description: {
       type: String,
