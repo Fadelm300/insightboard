@@ -21,10 +21,10 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
 
-    const deal = await Deal.findById(id).populate(
-      "clientId",
-      "companyName contactPerson email status"
-    );
+    const deal = await Deal.findOne({
+      _id: id,
+      isDeleted: { $ne: true },
+    }).populate("clientId", "companyName contactPerson email status");
 
     if (!deal) {
       return errorResponse("Deal not found", 404);
@@ -50,10 +50,17 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const body = await req.json();
 
-    const deal = await Deal.findByIdAndUpdate(id, body, {
-      new: true,
-      runValidators: true,
-    }).populate("clientId", "companyName contactPerson email status");
+    const deal = await Deal.findOneAndUpdate(
+      {
+        _id: id,
+        isDeleted: { $ne: true },
+      },
+      body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    ).populate("clientId", "companyName contactPerson email status");
 
     if (!deal) {
       return errorResponse("Deal not found", 404);
@@ -78,7 +85,18 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
 
-    const deal = await Deal.findByIdAndDelete(id);
+    const deal = await Deal.findOneAndUpdate(
+      {
+        _id: id,
+        isDeleted: { $ne: true },
+      },
+      {
+        isDeleted: true,
+      },
+      {
+        new: true,
+      }
+    );
 
     if (!deal) {
       return errorResponse("Deal not found", 404);
