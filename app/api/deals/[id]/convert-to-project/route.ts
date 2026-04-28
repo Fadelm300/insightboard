@@ -22,7 +22,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
 
-    const deal = await Deal.findById(id);
+    const deal = await Deal.findOne({
+      _id: id,
+      isDeleted: { $ne: true },
+    });
     if (!deal) {
       return errorResponse("Deal not found", 404);
     }
@@ -33,7 +36,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     const client = await Client.findOne({
       _id: deal.clientId,
-      isDeleted: false,
+      isDeleted: { $ne: true },
     });
 
     if (!client) {

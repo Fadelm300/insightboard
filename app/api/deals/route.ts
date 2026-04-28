@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const deals = await Deal.find()
+      const deals = await Deal.find({ isDeleted: { $ne: true } })
       .populate("clientId", "companyName contactPerson email status")
       .sort({ createdAt: -1 });
 
@@ -48,14 +48,17 @@ export async function POST(req: NextRequest) {
 
     const client = await Client.findOne({
       _id: body.clientId,
-      isDeleted: false,
+     isDeleted: { $ne: true },
     });
 
     if (!client) {
       return errorResponse("Client not found", 404);
     }
 
-    const deal = await Deal.create(body);
+    const deal = await Deal.create({
+        ...body,
+        isDeleted: { $ne: true },
+      });
 
     return successResponse({ deal }, "Deal created successfully", 201);
   } catch (error) {

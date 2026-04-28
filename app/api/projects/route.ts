@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-const projects = await Project.find({ isDeleted: false })
+const projects = await Project.find({ isDeleted: { $ne: true }})
       .populate("clientId", "companyName contactPerson email")
       .populate("dealId", "title status finalPrice")
       .sort({ createdAt: -1 });
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
     const client = await Client.findOne({
       _id: body.clientId,
-      isDeleted: false,
+      isDeleted: { $ne: true }
     });
 
     if (!client) {
