@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-const clients = await Client.find({ isDeleted: false })
+const clients = await Client.find({ isDeleted: { $ne: true } })
   .sort({ createdAt: -1 });
     return successResponse({ clients }, "Clients fetched successfully");
   } catch (error) {
