@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
 import connectDB from "@/lib/mongodb";
@@ -7,30 +7,64 @@ import { signToken } from "@/lib/auth";
 
 import User from "@/models/User";
 
+type LoginFailResponse = {
+  success: false;
+  message: string;
+};
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function loginFail(message: string) {
+  return NextResponse.json<LoginFailResponse>(
+    {
+      success: false,
+      message,
+    },
+    { status: 200 }
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
 
-    const { email, password } = await req.json();
+    const body = await req.json().catch(() => null);
 
-    if (!email || !password) {
-      return errorResponse("Email and password are required", 400);
+    if (!body) {
+      return loginFail("Invalid login request");
     }
 
-    const user = await User.findOne({ email });
+    const cleanEmail = normalizeEmail(String(body.email || ""));
+    const cleanPassword = String(body.password || "");
+
+    if (!cleanEmail || !cleanPassword) {
+      return loginFail("Email and password are required");
+    }
+
+    if (!isValidEmail(cleanEmail)) {
+      return loginFail("Enter a valid email address");
+    }
+
+    const user = await User.findOne({ email: cleanEmail });
 
     if (!user) {
-      return errorResponse("Invalid credentials", 401);
+      return loginFail("Invalid email or password");
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(cleanPassword, user.password);
 
     if (!isPasswordValid) {
-      return errorResponse("Invalid credentials", 401);
+      return loginFail("Invalid email or password");
     }
 
     const token = signToken({
-      id: user._id,
+      id: user._id.toString(),
       email: user.email,
       role: user.role,
     });
@@ -38,7 +72,7 @@ export async function POST(req: NextRequest) {
     return successResponse(
       {
         user: {
-          id: user._id,
+          id: user._id.toString(),
           name: user.name,
           email: user.email,
           role: user.role,
@@ -47,8 +81,7 @@ export async function POST(req: NextRequest) {
       },
       "Login successful"
     );
-  } catch (error) {
-    console.error(error);
+  } catch {
     return errorResponse("Server error", 500);
   }
 }

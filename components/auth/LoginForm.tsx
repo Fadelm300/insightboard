@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import {
   Alert,
   Box,
   Button,
   Card,
   CardContent,
+  IconButton,
+  InputAdornment,
   TextField,
   Typography,
 } from "@mui/material";
@@ -30,18 +34,80 @@ type LoginResponse = {
   token?: string;
 };
 
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function validateLoginForm(email: string, password: string) {
+  const cleanEmail = normalizeEmail(email);
+
+  if (!cleanEmail) {
+    return "Email is required";
+  }
+
+  if (!isValidEmail(cleanEmail)) {
+    return "Enter a valid email address";
+  }
+
+  if (!password) {
+    return "Password is required";
+  }
+
+  if (password.length < 6) {
+    return "Password must be at least 6 characters";
+  }
+
+  return "";
+}
+
+function getFriendlyLoginError(message: string) {
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    lowerMessage.includes("invalid credentials") ||
+    lowerMessage.includes("invalid email or password")
+  ) {
+    return "Invalid email or password";
+  }
+
+  if (lowerMessage.includes("email and password are required")) {
+    return "Email and password are required";
+  }
+
+  if (lowerMessage.includes("valid email")) {
+    return "Enter a valid email address";
+  }
+
+  if (lowerMessage.includes("token")) {
+    return "Login failed. Please try again.";
+  }
+
+  return message || "Login failed. Please try again.";
+}
+
 export default function LoginForm() {
   const router = useRouter();
-// لازم تشيلهم عقب لا تسوي تسجيل دخول عشان ماحد يقدر يدخل بحسابك لو شاف الكود ا
-  const [email, setEmail] = useState("admin@test.com");
-  const [password, setPassword] = useState("123456");
-//   const [email, setEmail] = useState("");
-// const [password, setPassword] = useState("");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const validationError = validateLoginForm(email, password);
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
 
     setError("");
     setLoading(true);
@@ -53,7 +119,7 @@ export default function LoginForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
+          email: normalizeEmail(email),
           password,
         }),
       });
@@ -71,10 +137,10 @@ export default function LoginForm() {
       }
 
       setToken(token);
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
-      setError(message);
+      setError(getFriendlyLoginError(message));
     } finally {
       setLoading(false);
     }
@@ -94,31 +160,49 @@ export default function LoginForm() {
         </Box>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
             {error}
           </Alert>
         )}
 
-        <Box component="form" onSubmit={handleSubmit}>
+        <Box component="form" onSubmit={handleSubmit} noValidate>
           <TextField
             label="Email"
             type="email"
             fullWidth
             required
+            autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             sx={{ mb: 2 }}
           />
 
           <TextField
-            label="Password"
-            type="password"
-            fullWidth
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            sx={{ mb: 3 }}
-          />
+              label="Password"
+              type={showPassword ? "text" : "password"}
+              fullWidth
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              sx={{ mb: 3 }}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        edge="end"
+                        onClick={() => setShowPassword((current) => !current)}
+                        onMouseDown={(event) => event.preventDefault()}
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
 
           <Button
             type="submit"
