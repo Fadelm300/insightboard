@@ -48,7 +48,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     const body = await req.json();
 
     const client = await Client.findByIdAndUpdate(id, body, {
-      new: true,
+       returnDocument: "after" ,
       runValidators: true,
     });
 
@@ -78,7 +78,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
         const client = await Client.findByIdAndUpdate(
         id,
         { isDeleted: true },
-        { new: true }
+       { returnDocument: "after" }
         );
     if (!client) {
       return errorResponse("Client not found", 404);

@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
 
     const deal = await Deal.create({
         ...body,
-        isDeleted: { $ne: true },
-      });
+              isDeleted: false,        
+        });
 
     return successResponse({ deal }, "Deal created successfully", 201);
   } catch (error) {

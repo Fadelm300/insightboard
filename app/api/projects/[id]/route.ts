@@ -63,7 +63,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     }
 
     const project = await Project.findByIdAndUpdate(id, body, {
-      new: true,
+      returnDocument: "after" ,
       runValidators: true,
     })
       .populate("clientId", "companyName contactPerson email")
@@ -96,7 +96,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 const project = await Project.findByIdAndUpdate(
   id,
   { isDeleted: true },
-  { new: true }
+  { returnDocument: "after" }
 );
     if (!project) {
       return errorResponse("Project not found", 404);

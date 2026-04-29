@@ -57,7 +57,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       },
       body,
       {
-        new: true,
+        returnDocument: "after" ,
         runValidators: true,
       }
     ).populate("clientId", "companyName contactPerson email status");
@@ -94,7 +94,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
         isDeleted: true,
       },
       {
-        new: true,
+        returnDocument: "after" ,
       }
     );
 

@@ -14,6 +14,7 @@ type RouteContext = {
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const authUser = getAuthUser(req);
+
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
@@ -26,12 +27,25 @@ export async function POST(req: NextRequest, context: RouteContext) {
       _id: id,
       isDeleted: { $ne: true },
     });
+
     if (!deal) {
       return errorResponse("Deal not found", 404);
     }
 
     if (deal.status !== "Closed Won") {
       return errorResponse("Deal must be Closed Won to convert to project", 400);
+    }
+
+    const existingProject = await Project.findOne({
+      dealId: deal._id,
+      isDeleted: { $ne: true },
+    });
+
+    if (existingProject) {
+      return errorResponse(
+        "This deal has already been converted to a project",
+        409
+      );
     }
 
     const client = await Client.findOne({

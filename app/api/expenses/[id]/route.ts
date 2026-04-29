@@ -65,7 +65,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     };
 
     const expense = await Expense.findByIdAndUpdate(id, updateData, {
-      new: true,
+      returnDocument: "after" ,
       runValidators: true,
     }).populate("projectId", "name type price cost profit status paymentStatus");
 
