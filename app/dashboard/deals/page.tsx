@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -56,6 +56,14 @@ type Deal = {
   createdAt?: string;
 };
 
+type ProjectDeal = string | { _id: string };
+
+type Project = {
+  _id: string;
+  name?: string;
+  dealId?: ProjectDeal;
+};
+
 type DealFormData = {
   clientId: string;
   title: string;
@@ -71,15 +79,46 @@ type DealFormData = {
 type DealsResponse = {
   success?: boolean;
   message?: string;
-  data?: Deal[] | { deals?: Deal[] };
+  data?:
+    | Deal[]
+    | {
+        deals?: Deal[];
+        items?: Deal[];
+        records?: Deal[];
+      };
   deals?: Deal[];
+  items?: Deal[];
+  records?: Deal[];
 };
 
 type ClientsResponse = {
   success?: boolean;
   message?: string;
-  data?: Client[] | { clients?: Client[] };
+  data?:
+    | Client[]
+    | {
+        clients?: Client[];
+        items?: Client[];
+        records?: Client[];
+      };
   clients?: Client[];
+  items?: Client[];
+  records?: Client[];
+};
+
+type ProjectsResponse = {
+  success?: boolean;
+  message?: string;
+  data?:
+    | Project[]
+    | {
+        projects?: Project[];
+        items?: Project[];
+        records?: Project[];
+      };
+  projects?: Project[];
+  items?: Project[];
+  records?: Project[];
 };
 
 const DEAL_STATUSES: DealStatus[] = [
@@ -105,32 +144,45 @@ const emptyForm: DealFormData = {
 
 function getDealsFromResponse(response: DealsResponse): Deal[] {
   if (Array.isArray(response.data)) return response.data;
-
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.deals)
-  ) {
-    return response.data.deals;
-  }
-
   if (Array.isArray(response.deals)) return response.deals;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.deals)) return response.data.deals;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
 
   return [];
 }
 
 function getClientsFromResponse(response: ClientsResponse): Client[] {
   if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.clients)) return response.clients;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
 
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.clients)
-  ) {
-    return response.data.clients;
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.clients)) return response.data.clients;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
   }
 
-  if (Array.isArray(response.clients)) return response.clients;
+  return [];
+}
+
+function getProjectsFromResponse(response: ProjectsResponse): Project[] {
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.projects)) return response.projects;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.projects)) return response.data.projects;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
 
   return [];
 }
@@ -148,9 +200,20 @@ function getDateInputValue(date?: string) {
   return date.slice(0, 10);
 }
 
+function getProjectDealId(project: Project) {
+  if (!project.dealId) return "";
+
+  if (typeof project.dealId === "object") {
+    return project.dealId._id;
+  }
+
+  return project.dealId;
+}
+
 export default function DealsPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
 
   const [formData, setFormData] = useState<DealFormData>(emptyForm);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
@@ -163,18 +226,29 @@ export default function DealsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const convertedDealIds = useMemo(() => {
+    return new Set(
+      projects
+        .map((project) => getProjectDealId(project))
+        .filter((dealId) => Boolean(dealId))
+    );
+  }, [projects]);
+
   async function fetchData() {
     setLoading(true);
     setError("");
 
     try {
-      const [dealsResponse, clientsResponse] = await Promise.all([
-        apiFetch<DealsResponse>("/api/deals"),
-        apiFetch<ClientsResponse>("/api/clients"),
-      ]);
+      const [dealsResponse, clientsResponse, projectsResponse] =
+        await Promise.all([
+          apiFetch<DealsResponse>("/api/deals"),
+          apiFetch<ClientsResponse>("/api/clients"),
+          apiFetch<ProjectsResponse>("/api/projects"),
+        ]);
 
       setDeals(getDealsFromResponse(dealsResponse));
       setClients(getClientsFromResponse(clientsResponse));
+      setProjects(getProjectsFromResponse(projectsResponse));
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load deals";
@@ -410,69 +484,79 @@ export default function DealsPage() {
               </TableHead>
 
               <TableBody>
-                {deals.map((deal) => (
-                  <TableRow key={deal._id} hover>
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 600 }}>
-                        {deal.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {deal.description || "No description"}
-                      </Typography>
-                    </TableCell>
+                {deals.map((deal) => {
+                  const isConverted = convertedDealIds.has(deal._id);
 
-                    <TableCell>{getClientName(deal.clientId)}</TableCell>
+                  return (
+                    <TableRow key={deal._id} hover>
+                      <TableCell>
+                        <Typography sx={{ fontWeight: 600 }}>
+                          {deal.title}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {deal.description || "No description"}
+                        </Typography>
+                      </TableCell>
 
-                    <TableCell>{deal.estimatedBudget} BHD</TableCell>
+                      <TableCell>{getClientName(deal.clientId)}</TableCell>
 
-                    <TableCell>{deal.finalPrice || 0} BHD</TableCell>
+                      <TableCell>{deal.estimatedBudget} BHD</TableCell>
 
-                    <TableCell>
-                      <Chip label={deal.status} size="small" />
-                    </TableCell>
+                      <TableCell>{deal.finalPrice || 0} BHD</TableCell>
 
-                    <TableCell>{deal.probability || 0}%</TableCell>
+                      <TableCell>
+                        <Chip label={deal.status} size="small" />
+                      </TableCell>
 
-                    <TableCell align="right">
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "flex-end",
-                          gap: 1,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        {deal.status === "Closed Won" && (
+                      <TableCell>{deal.probability || 0}%</TableCell>
+
+                      <TableCell align="right">
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            gap: 1,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          {deal.status === "Closed Won" && !isConverted && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => handleConvertToProject(deal)}
+                              disabled={saving}
+                            >
+                              Convert
+                            </Button>
+                          )}
+
+                          {deal.status === "Closed Won" && isConverted && (
+                            <Button size="small" variant="outlined" disabled>
+                              Converted
+                            </Button>
+                          )}
+
                           <Button
                             size="small"
-                            variant="contained"
-                            onClick={() => handleConvertToProject(deal)}
-                            disabled={saving}
+                            variant="outlined"
+                            onClick={() => handleEditOpen(deal)}
                           >
-                            Convert
+                            Edit
                           </Button>
-                        )}
 
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => handleEditOpen(deal)}
-                        >
-                          Edit
-                        </Button>
-
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => setDeleteDeal(deal)}
-                        >
-                          Delete
-                        </Button>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => setDeleteDeal(deal)}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -484,7 +568,14 @@ export default function DealsPage() {
           <DialogTitle>{editingDeal ? "Edit Deal" : "Add Deal"}</DialogTitle>
 
           <DialogContent>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                mt: 1,
+              }}
+            >
               <TextField
                 select
                 label="Client"
@@ -575,20 +666,20 @@ export default function DealsPage() {
                 />
               </Box>
 
-             <TextField
-                    label="Expected Close Date"
-                    type="date"
-                    fullWidth
-                    value={formData.expectedCloseDate}
-                    onChange={(event) =>
-                      updateFormField("expectedCloseDate", event.target.value)
-                    }
-                    slotProps={{
-                      inputLabel: {
-                        shrink: true,
-                      },
-                    }}
-                  />
+              <TextField
+                label="Expected Close Date"
+                type="date"
+                fullWidth
+                value={formData.expectedCloseDate}
+                onChange={(event) =>
+                  updateFormField("expectedCloseDate", event.target.value)
+                }
+                slotProps={{
+                  inputLabel: {
+                    shrink: true,
+                  },
+                }}
+              />
 
               <TextField
                 label="Description"
