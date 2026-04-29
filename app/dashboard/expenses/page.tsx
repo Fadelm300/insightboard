@@ -76,8 +76,18 @@ type ExpenseFormData = {
 type ExpensesResponse = {
   success?: boolean;
   message?: string;
-  data?: Expense[] | { expenses?: Expense[] };
+  data?:
+    | Expense[]
+    | {
+        expense?: Expense[];
+        expenses?: Expense[];
+        items?: Expense[];
+        records?: Expense[];
+      };
+  expense?: Expense[];
   expenses?: Expense[];
+  items?: Expense[];
+  records?: Expense[];
 };
 
 type ProjectsResponse = {
@@ -110,15 +120,17 @@ const emptyForm: ExpenseFormData = {
 function getExpensesFromResponse(response: ExpensesResponse): Expense[] {
   if (Array.isArray(response.data)) return response.data;
 
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.expenses)
-  ) {
-    return response.data.expenses;
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.expense)) return response.data.expense;
+    if (Array.isArray(response.data.expenses)) return response.data.expenses;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
   }
 
+  if (Array.isArray(response.expense)) return response.expense;
   if (Array.isArray(response.expenses)) return response.expenses;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
 
   return [];
 }
@@ -247,7 +259,7 @@ export default function ExpensesPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!formData.projectId) {
+    if (!editingExpense && !formData.projectId) {
       setError("Project is required");
       return;
     }
@@ -470,7 +482,14 @@ export default function ExpensesPage() {
           </DialogTitle>
 
           <DialogContent>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                mt: 1,
+              }}
+            >
               <TextField
                 select
                 label="Project"

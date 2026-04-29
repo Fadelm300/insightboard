@@ -76,8 +76,18 @@ type RevenueFormData = {
 type RevenueResponse = {
   success?: boolean;
   message?: string;
-  data?: Revenue[] | { revenue?: Revenue[] };
+  data?:
+    | Revenue[]
+    | {
+        revenue?: Revenue[];
+        revenues?: Revenue[];
+        items?: Revenue[];
+        records?: Revenue[];
+      };
   revenue?: Revenue[];
+  revenues?: Revenue[];
+  items?: Revenue[];
+  records?: Revenue[];
 };
 
 type ProjectsResponse = {
@@ -107,15 +117,17 @@ const emptyForm: RevenueFormData = {
 function getRevenueFromResponse(response: RevenueResponse): Revenue[] {
   if (Array.isArray(response.data)) return response.data;
 
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.revenue)
-  ) {
-    return response.data.revenue;
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.revenue)) return response.data.revenue;
+    if (Array.isArray(response.data.revenues)) return response.data.revenues;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
   }
 
   if (Array.isArray(response.revenue)) return response.revenue;
+  if (Array.isArray(response.revenues)) return response.revenues;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
 
   return [];
 }
@@ -251,7 +263,7 @@ export default function RevenuePage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!formData.projectId) {
+    if (!editingRevenue && !formData.projectId) {
       setError("Project is required");
       return;
     }
@@ -265,8 +277,16 @@ export default function RevenuePage() {
     setError("");
     setSuccess("");
 
-    const payload = {
+    const createPayload = {
       projectId: formData.projectId,
+      amount: Number(formData.amount),
+      paymentDate: formData.paymentDate || undefined,
+      paymentMethod: formData.paymentMethod,
+      description: formData.description,
+      notes: formData.notes,
+    };
+
+    const updatePayload = {
       amount: Number(formData.amount),
       paymentDate: formData.paymentDate || undefined,
       paymentMethod: formData.paymentMethod,
@@ -278,14 +298,14 @@ export default function RevenuePage() {
       if (editingRevenue) {
         await apiFetch(`/api/revenue/${editingRevenue._id}`, {
           method: "PUT",
-          body: JSON.stringify(payload),
+          body: JSON.stringify(updatePayload),
         });
 
         setSuccess("Revenue updated successfully");
       } else {
         await apiFetch("/api/revenue", {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify(createPayload),
         });
 
         setSuccess("Revenue created successfully");
@@ -459,12 +479,20 @@ export default function RevenuePage() {
           </DialogTitle>
 
           <DialogContent>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                mt: 1,
+              }}
+            >
               <TextField
                 select
                 label="Project"
                 required
                 fullWidth
+                disabled={Boolean(editingRevenue)}
                 value={formData.projectId}
                 onChange={(event) =>
                   updateFormField("projectId", event.target.value)
