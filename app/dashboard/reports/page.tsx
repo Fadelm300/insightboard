@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -10,317 +9,55 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  MenuItem,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from "@mui/material";
 import * as XLSX from "xlsx";
 
 import { apiFetch } from "@/lib/apiClient";
 
-type ApiResponse = {
-  success?: boolean;
-  message?: string;
-  data?: unknown;
-  [key: string]: unknown;
-};
+import EmptyTableRow from "./_components/EmptyTableRow";
+import FilteredPrintPanel from "./_components/FilteredPrintPanel";
+import ReportCard from "./_components/ReportCard";
+import ReportTable from "./_components/ReportTable";
 
-type FinanceSummary = {
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  revenueCount: number;
-  expenseCount: number;
-};
+import type {
+  ApiResponse,
+  ClientFinance,
+  ClientRecord,
+  Deal,
+  ExpenseRecord,
+  FilteredClientFinance,
+  FilteredProjectFinance,
+  FilteredProjectTypeFinance,
+  FinanceSummary,
+  MonthlyFinance,
+  ProjectFinance,
+  ProjectRecord,
+  ProjectTypeFinance,
+  RevenueRecord,
+} from "./_lib/reportTypes";
 
-type MonthlyFinance = {
-  month: string;
-  revenue: number;
-  expenses: number;
-  profit: number;
-  revenueCount?: number;
-  expenseCount?: number;
-};
-
-type ProjectFinance = {
-  project?: {
-    _id: string;
-    name: string;
-    type?: string;
-    price?: number;
-    status?: string;
-    paymentStatus?: string;
-  };
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  remainingBalance: number;
-  paymentProgress: number;
-  revenueCount?: number;
-  expenseCount?: number;
-};
-
-type ClientFinance = {
-  client?: {
-    _id: string;
-    companyName: string;
-    contactPerson?: string;
-    email?: string;
-  };
-  totalProjects: number;
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  revenueCount?: number;
-  expenseCount?: number;
-};
-
-type ProjectTypeFinance = {
-  type: string;
-  projectCount: number;
-  totalProjectValue: number;
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  revenueCount?: number;
-  expenseCount?: number;
-};
-
-type Deal = {
-  _id: string;
-  title: string;
-  status: string;
-  finalPrice?: number;
-  estimatedBudget?: number;
-};
-
-type ClientRecord = {
-  _id: string;
-  companyName: string;
-  contactPerson?: string;
-  email?: string;
-};
-
-type ProjectRecord = {
-  _id: string;
-  name: string;
-  type?: string;
-  price?: number;
-  cost?: number;
-  profit?: number;
-  status?: string;
-  paymentStatus?: string;
-  clientId?: ClientRecord | string;
-};
-
-type RevenueRecord = {
-  _id: string;
-  projectId?: ProjectRecord | string;
-  clientId?: ClientRecord | string;
-  amount: number;
-  paymentDate?: string;
-  paymentMethod?: string;
-  description?: string;
-  notes?: string;
-};
-
-type ExpenseRecord = {
-  _id: string;
-  projectId?: ProjectRecord | string;
-  title: string;
-  amount: number;
-  category?: string;
-  date?: string;
-  description?: string;
-  notes?: string;
-};
-
-type FilteredProjectFinance = {
-  project: ProjectRecord;
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  remainingBalance: number;
-  paymentProgress: number;
-  revenueCount: number;
-  expenseCount: number;
-};
-
-type FilteredClientFinance = {
-  client?: ClientRecord;
-  totalProjects: number;
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  revenueCount: number;
-  expenseCount: number;
-};
-
-type FilteredProjectTypeFinance = {
-  type: string;
-  projectCount: number;
-  totalProjectValue: number;
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  revenueCount: number;
-  expenseCount: number;
-};
-
-const emptySummary: FinanceSummary = {
-  totalRevenue: 0,
-  totalExpenses: 0,
-  netProfit: 0,
-  revenueCount: 0,
-  expenseCount: 0,
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function extractList<T>(response: ApiResponse, keys: string[]): T[] {
-  if (Array.isArray(response.data)) return response.data as T[];
-
-  if (isRecord(response.data)) {
-    for (const key of keys) {
-      const value = response.data[key];
-      if (Array.isArray(value)) return value as T[];
-    }
-  }
-
-  for (const key of keys) {
-    const value = response[key];
-    if (Array.isArray(value)) return value as T[];
-  }
-
-  return [];
-}
-
-function extractObject<T>(
-  response: ApiResponse,
-  keys: string[],
-  fallback: T
-): T {
-  if (isRecord(response.data)) {
-    for (const key of keys) {
-      const value = response.data[key];
-
-      if (isRecord(value)) {
-        return value as T;
-      }
-    }
-
-    return response.data as T;
-  }
-
-  for (const key of keys) {
-    const value = response[key];
-
-    if (isRecord(value)) {
-      return value as T;
-    }
-  }
-
-  return fallback;
-}
-
-function formatMoney(value?: number) {
-  return `${Number(value || 0).toFixed(2)} BHD`;
-}
-
-function formatNumber(value?: number) {
-  return Number(value || 0).toFixed(2);
-}
-
-function formatPercent(value?: number) {
-  return `${Number(value || 0).toFixed(1)}%`;
-}
-
-function getTodayFileDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function escapeHtml(value: string | number) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function buildHtmlTable(
-  title: string,
-  headers: string[],
-  rows: Array<Array<string | number>>
-) {
-  return `
-    <section>
-      <h2>${escapeHtml(title)}</h2>
-      <table>
-        <thead>
-          <tr>
-            ${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${
-            rows.length > 0
-              ? rows
-                  .map(
-                    (row) => `
-                      <tr>
-                        ${row
-                          .map((cell) => `<td>${escapeHtml(cell)}</td>`)
-                          .join("")}
-                      </tr>
-                    `
-                  )
-                  .join("")
-              : `<tr><td colspan="${headers.length}">No data available</td></tr>`
-          }
-        </tbody>
-      </table>
-    </section>
-  `;
-}
-
-function setSheetColumnWidths(sheet: XLSX.WorkSheet, widths: number[]) {
-  sheet["!cols"] = widths.map((width) => ({ wch: width }));
-}
-
-function getEntityId(value?: { _id: string } | string | null) {
-  if (!value) return "";
-  return typeof value === "object" ? value._id : value;
-}
-
-function formatDateToInputValue(date?: string) {
-  if (!date) return "";
-
-  const parsedDate = new Date(date);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return "";
-  }
-
-  const year = parsedDate.getFullYear();
-  const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
-  const day = String(parsedDate.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function getMonthKey(date?: string) {
-  const inputDate = formatDateToInputValue(date);
-  return inputDate ? inputDate.slice(0, 7) : "";
-}
+import {
+  buildHtmlTable,
+  emptySummary,
+  escapeHtml,
+  extractList,
+  extractObject,
+  formatDateToInputValue,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  getEntityId,
+  getMonthKey,
+  getTodayFileDate,
+  setSheetColumnWidths,
+} from "./_lib/reportUtils";
 
 export default function ReportsPage() {
   const [summary, setSummary] = useState<FinanceSummary>(emptySummary);
@@ -424,7 +161,11 @@ export default function ReportsPage() {
       setDeals(extractList<Deal>(dealsResponse, ["deals", "items", "records"]));
 
       setClients(
-        extractList<ClientRecord>(clientsResponse, ["clients", "items", "records"])
+        extractList<ClientRecord>(clientsResponse, [
+          "clients",
+          "items",
+          "records",
+        ])
       );
 
       setProjects(
@@ -1354,117 +1095,20 @@ export default function ReportsPage() {
         </Alert>
       )}
 
-      <Card sx={{ borderRadius: 3, mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-            Filtered Print
-          </Typography>
-
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Filter the report by day, month, or client, then print only the
-            filtered results.
-          </Typography>
-
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: {
-                xs: "1fr",
-                md: "repeat(4, 1fr)",
-              },
-              gap: 2,
-              alignItems: "center",
-            }}
-          >
-            <TextField
-              label="Filter by Day"
-              type="date"
-              fullWidth
-              value={filterDay}
-              onChange={(event) => setFilterDay(event.target.value)}
-              slotProps={{
-                inputLabel: {
-                  shrink: true,
-                },
-              }}
-            />
-
-            <TextField
-              label="Filter by Month"
-              type="month"
-              fullWidth
-              value={filterMonth}
-              onChange={(event) => setFilterMonth(event.target.value)}
-              slotProps={{
-                inputLabel: {
-                  shrink: true,
-                },
-              }}
-            />
-
-            <TextField
-              select
-              label="Filter by Client"
-              fullWidth
-              value={filterClientId}
-              onChange={(event) => setFilterClientId(event.target.value)}
-            >
-              <MenuItem value="">All Clients</MenuItem>
-
-              {clients.map((client) => (
-                <MenuItem key={client._id} value={client._id}>
-                  {client.companyName}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
-              <Button
-                variant="contained"
-                color="secondary"
-                onClick={handlePrintFilteredPdf}
-                disabled={!hasActiveFilters}
-              >
-                Print Filtered PDF
-              </Button>
-
-              <Button variant="outlined" onClick={handleClearFilters}>
-                Clear
-              </Button>
-            </Stack>
-          </Box>
-
-          <Box
-            sx={{
-              mt: 2,
-              display: "grid",
-              gridTemplateColumns: {
-                xs: "1fr",
-                sm: "1fr 1fr",
-                md: "repeat(4, 1fr)",
-              },
-              gap: 1.5,
-            }}
-          >
-            <MiniFilterCard
-              title="Filtered Revenue"
-              value={formatMoney(filteredSummary.totalRevenue)}
-            />
-            <MiniFilterCard
-              title="Filtered Expenses"
-              value={formatMoney(filteredSummary.totalExpenses)}
-            />
-            <MiniFilterCard
-              title="Filtered Profit"
-              value={formatMoney(filteredSummary.netProfit)}
-            />
-            <MiniFilterCard
-              title="Active Filter"
-              value={hasActiveFilters ? filterLabel : "None"}
-            />
-          </Box>
-        </CardContent>
-      </Card>
+      <FilteredPrintPanel
+        clients={clients}
+        filterDay={filterDay}
+        filterMonth={filterMonth}
+        filterClientId={filterClientId}
+        hasActiveFilters={hasActiveFilters}
+        filterLabel={filterLabel}
+        filteredSummary={filteredSummary}
+        setFilterDay={setFilterDay}
+        setFilterMonth={setFilterMonth}
+        setFilterClientId={setFilterClientId}
+        onPrintFilteredPdf={handlePrintFilteredPdf}
+        onClearFilters={handleClearFilters}
+      />
 
       <Box
         sx={{
@@ -1707,86 +1351,5 @@ export default function ReportsPage() {
         </Table>
       </ReportTable>
     </Box>
-  );
-}
-
-function ReportCard({
-  title,
-  value,
-}: {
-  title: string;
-  value: string | number;
-}) {
-  return (
-    <Card sx={{ borderRadius: 3 }}>
-      <CardContent>
-        <Typography color="text.secondary">{title}</Typography>
-        <Typography variant="h5" sx={{ fontWeight: 700, mt: 1 }}>
-          {value}
-        </Typography>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MiniFilterCard({
-  title,
-  value,
-}: {
-  title: string;
-  value: string | number;
-}) {
-  return (
-    <Box
-      sx={{
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 2,
-        p: 1.5,
-      }}
-    >
-      <Typography variant="body2" color="text.secondary">
-        {title}
-      </Typography>
-      <Typography sx={{ fontWeight: 700, mt: 0.5 }}>{value}</Typography>
-    </Box>
-  );
-}
-
-function ReportTable({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <Card sx={{ borderRadius: 3, mb: 3 }}>
-      <CardContent>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-          {title}
-        </Typography>
-
-        <Box sx={{ overflowX: "auto" }}>{children}</Box>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyTableRow({
-  colSpan,
-  message,
-}: {
-  colSpan: number;
-  message: string;
-}) {
-  return (
-    <TableRow>
-      <TableCell colSpan={colSpan}>
-        <Typography color="text.secondary" sx={{ py: 2 }}>
-          {message}
-        </Typography>
-      </TableCell>
-    </TableRow>
   );
 }
