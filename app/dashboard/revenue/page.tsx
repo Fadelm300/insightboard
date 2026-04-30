@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import type React from "react";
 import {
   Alert,
   Box,
@@ -17,11 +18,14 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import type { SxProps, Theme } from "@mui/material/styles";
 
 import { apiFetch } from "@/lib/apiClient";
 
@@ -95,8 +99,16 @@ type RevenueResponse = {
 type ProjectsResponse = {
   success?: boolean;
   message?: string;
-  data?: Project[] | { projects?: Project[] };
+  data?:
+    | Project[]
+    | {
+        projects?: Project[];
+        items?: Project[];
+        records?: Project[];
+      };
   projects?: Project[];
+  items?: Project[];
+  records?: Project[];
 };
 
 const PAYMENT_METHODS: PaymentMethod[] = [
@@ -109,8 +121,14 @@ const PAYMENT_METHODS: PaymentMethod[] = [
 
 const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 
-const UNSAFE_TEXT_PATTERN =
-  /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
+const emptyForm: RevenueFormData = {
+  projectId: "",
+  amount: "",
+  paymentDate: "",
+  paymentMethod: "BenefitPay",
+  description: "",
+  notes: "",
+};
 
 function getTodayInputValue() {
   const today = new Date();
@@ -121,15 +139,6 @@ function getTodayInputValue() {
 
   return `${year}-${month}-${day}`;
 }
-
-const emptyForm: RevenueFormData = {
-  projectId: "",
-  amount: "",
-  paymentDate: getTodayInputValue(),
-  paymentMethod: "BenefitPay",
-  description: "",
-  notes: "",
-};
 
 function getRevenueFromResponse(response: RevenueResponse): Revenue[] {
   if (Array.isArray(response.data)) return response.data;
@@ -151,16 +160,15 @@ function getRevenueFromResponse(response: RevenueResponse): Revenue[] {
 
 function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   if (Array.isArray(response.data)) return response.data;
-
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.projects)
-  ) {
-    return response.data.projects;
-  }
-
   if (Array.isArray(response.projects)) return response.projects;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.projects)) return response.data.projects;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
 
   return [];
 }
@@ -207,12 +215,24 @@ function formatDate(date?: string) {
   return formattedDate || "-";
 }
 
-function cleanText(value: string) {
+function cleanSingleLineText(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function cleanMultiLineText(value: string) {
+  return value.trim().replace(/[ \t]+/g, " ");
+}
+
+function hasUnsafeCharacters(value: string) {
+  return /[<>{}\[\]`$|\\]/.test(value);
+}
+
+function hasUnsafePattern(value: string) {
+  return /(javascript:|data:|on\w+\s*=|<\s*script)/i.test(value);
+}
+
 function hasUnsafeText(value: string) {
-  return UNSAFE_TEXT_PATTERN.test(value);
+  return hasUnsafeCharacters(value) || hasUnsafePattern(value);
 }
 
 function isValidMoney(value: string) {
@@ -240,9 +260,7 @@ function isFutureDate(value: string) {
   return inputDate > today;
 }
 
-function validateRevenueForm(
-  formData: RevenueFormData
-):
+function validateRevenueForm(formData: RevenueFormData):
   | {
       isValid: true;
       values: RevenueFormData;
@@ -258,8 +276,8 @@ function validateRevenueForm(
     amount: formData.amount.trim(),
     paymentDate: formData.paymentDate.trim(),
     paymentMethod: formData.paymentMethod,
-    description: cleanText(formData.description),
-    notes: cleanText(formData.notes),
+    description: cleanMultiLineText(formData.description),
+    notes: cleanMultiLineText(formData.notes),
   };
 
   if (!cleanedValues.projectId) {
@@ -315,11 +333,54 @@ function validateRevenueForm(
   };
 }
 
+function getPaymentMethodChipSx(method: PaymentMethod): SxProps<Theme> {
+  const methodColors: Record<PaymentMethod, string> = {
+    Cash: "#64748B",
+    BenefitPay: "#10B981",
+    "Bank Transfer": "#2563EB",
+    Card: "#6366F1",
+    Other: "#F59E0B",
+  };
+
+  const color = methodColors[method];
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
+
+function getProjectInitial(projectName: string) {
+  return projectName.trim().charAt(0).toUpperCase() || "R";
+}
+
+function formatBHD(value?: number) {
+  return `${Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} BHD`;
+}
+
+function getAmountSx(): SxProps<Theme> {
+  return {
+    fontWeight: 900,
+    color: "success.main",
+  };
+}
+
 export default function RevenuePage() {
   const [revenue, setRevenue] = useState<Revenue[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
 
-  const [formData, setFormData] = useState<RevenueFormData>(emptyForm);
+  const [formData, setFormData] = useState<RevenueFormData>({
+    ...emptyForm,
+    paymentDate: getTodayInputValue(),
+  });
   const [formErrors, setFormErrors] = useState<RevenueFormErrors>({});
   const [editingRevenue, setEditingRevenue] = useState<Revenue | null>(null);
   const [deleteRevenue, setDeleteRevenue] = useState<Revenue | null>(null);
@@ -388,6 +449,8 @@ export default function RevenuePage() {
   }
 
   function handleFormClose() {
+    if (saving) return;
+
     setOpenForm(false);
     setEditingRevenue(null);
     setFormData({
@@ -412,7 +475,7 @@ export default function RevenuePage() {
     }));
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const validation = validateRevenueForm(formData);
@@ -512,7 +575,13 @@ export default function RevenuePage() {
         }}
       >
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+            }}
+          >
             Revenue
           </Typography>
 
@@ -521,7 +590,17 @@ export default function RevenuePage() {
           </Typography>
         </Box>
 
-        <Button variant="contained" onClick={handleCreateOpen}>
+        <Button
+          variant="contained"
+          onClick={handleCreateOpen}
+          sx={{
+            px: 2.5,
+            height: 44,
+            borderRadius: 2,
+            fontWeight: 800,
+            alignSelf: { xs: "stretch", sm: "center" },
+          }}
+        >
           Add Revenue
         </Button>
       </Box>
@@ -542,92 +621,209 @@ export default function RevenuePage() {
         </Alert>
       )}
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
+      <Card
+        sx={{
+          borderRadius: 4,
+          overflow: "hidden",
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+          bgcolor: "background.paper",
+        }}
+      >
+        <CardContent sx={{ p: 0 }}>
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
               <CircularProgress />
             </Box>
           ) : revenue.length === 0 ? (
-            <Box sx={{ textAlign: "center", py: 6 }}>
-              <Typography variant="h6">No revenue yet</Typography>
+            <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                No revenue yet
+              </Typography>
+
               <Typography color="text.secondary" sx={{ mt: 1 }}>
                 Add your first payment record to start tracking income.
               </Typography>
+
+              <Button
+                variant="contained"
+                onClick={handleCreateOpen}
+                sx={{ mt: 3, borderRadius: 2, fontWeight: 800 }}
+              >
+                Add Revenue
+              </Button>
             </Box>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Project</TableCell>
-                  <TableCell>Client</TableCell>
-                  <TableCell>Amount</TableCell>
-                  <TableCell>Method</TableCell>
-                  <TableCell>Payment Date</TableCell>
-                  <TableCell>Description</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow
+                    sx={{
+                      bgcolor: (theme) =>
+                        theme.palette.mode === "dark"
+                          ? alpha(theme.palette.primary.main, 0.08)
+                          : alpha(theme.palette.primary.main, 0.04),
+                    }}
+                  >
+                    <TableCell>Project</TableCell>
+                    <TableCell>Client</TableCell>
+                    <TableCell>Amount</TableCell>
+                    <TableCell>Method</TableCell>
+                    <TableCell>Payment Date</TableCell>
+                    <TableCell>Description</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
 
-              <TableBody>
-                {revenue.map((item) => (
-                  <TableRow key={item._id} hover>
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 600 }}>
-                        {getProjectName(item.projectId)}
-                      </Typography>
-                    </TableCell>
+                <TableBody>
+                  {revenue.map((item) => {
+                    const projectName = getProjectName(item.projectId);
 
-                    <TableCell>{getClientName(item.clientId)}</TableCell>
-
-                    <TableCell>{item.amount} BHD</TableCell>
-
-                    <TableCell>
-                      <Chip label={item.paymentMethod} size="small" />
-                    </TableCell>
-
-                    <TableCell>{formatDate(item.paymentDate)}</TableCell>
-
-                    <TableCell>{item.description || "-"}</TableCell>
-
-                    <TableCell align="right">
-                      <Box
+                    return (
+                      <TableRow
+                        key={item._id}
+                        hover
                         sx={{
-                          display: "flex",
-                          justifyContent: "flex-end",
-                          gap: 1,
-                          flexWrap: "wrap",
+                          "&:last-child td": {
+                            borderBottom: 0,
+                          },
                         }}
                       >
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => handleEditOpen(item)}
-                        >
-                          Edit
-                        </Button>
+                        <TableCell sx={{ minWidth: 260 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1.5,
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 2.5,
+                                display: "grid",
+                                placeItems: "center",
+                                fontWeight: 900,
+                                color: "success.main",
+                                bgcolor: (theme) =>
+                                  alpha(theme.palette.success.main, 0.12),
+                                border: (theme) =>
+                                  `1px solid ${alpha(
+                                    theme.palette.success.main,
+                                    0.18
+                                  )}`,
+                              }}
+                            >
+                              {getProjectInitial(projectName)}
+                            </Box>
 
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => setDeleteRevenue(item)}
+                            <Box>
+                              <Typography sx={{ fontWeight: 800 }}>
+                                {projectName}
+                              </Typography>
+
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ mt: 0.25 }}
+                              >
+                                Revenue record
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+
+                        <TableCell>{getClientName(item.clientId)}</TableCell>
+
+                        <TableCell sx={getAmountSx()}>
+                          {formatBHD(item.amount)}
+                        </TableCell>
+
+                        <TableCell>
+                          <Chip
+                            label={item.paymentMethod}
+                            size="small"
+                            sx={getPaymentMethodChipSx(item.paymentMethod)}
+                          />
+                        </TableCell>
+
+                        <TableCell>{formatDate(item.paymentDate)}</TableCell>
+
+                        <TableCell
+                          sx={{
+                            maxWidth: 260,
+                            color: "text.secondary",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
                         >
-                          Delete
-                        </Button>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                          {item.description || "-"}
+                        </TableCell>
+
+                        <TableCell align="right">
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "flex-end",
+                              gap: 1,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => handleEditOpen(item)}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 800,
+                              }}
+                            >
+                              Edit
+                            </Button>
+
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              onClick={() => setDeleteRevenue(item)}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 800,
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </CardContent>
       </Card>
 
-      <Dialog open={openForm} onClose={handleFormClose} maxWidth="sm" fullWidth>
+      <Dialog
+        open={openForm}
+        onClose={handleFormClose}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
         <Box component="form" onSubmit={handleSubmit}>
-          <DialogTitle>
+          <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
             {editingRevenue ? "Edit Revenue" : "Add Revenue"}
           </DialogTitle>
 
@@ -706,7 +902,9 @@ export default function RevenuePage() {
                 fullWidth
                 value={formData.paymentDate}
                 error={Boolean(formErrors.paymentDate)}
-                helperText={formErrors.paymentDate}
+                helperText={
+                  formErrors.paymentDate || "Payment date cannot be in the future"
+                }
                 onChange={(event) =>
                   updateFormField("paymentDate", event.target.value)
                 }
@@ -762,12 +960,26 @@ export default function RevenuePage() {
 
       <Dialog
         open={Boolean(deleteRevenue)}
-        onClose={() => setDeleteRevenue(null)}
+        onClose={() => {
+          if (!saving) setDeleteRevenue(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
       >
-        <DialogTitle>Delete Revenue</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>Delete Revenue</DialogTitle>
 
         <DialogContent>
-          <Typography>
+          <Typography color="text.secondary">
             Are you sure you want to delete this revenue record?
           </Typography>
         </DialogContent>

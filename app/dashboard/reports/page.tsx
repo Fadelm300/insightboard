@@ -9,7 +9,6 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -17,6 +16,8 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import type { SxProps, Theme } from "@mui/material/styles";
 import * as XLSX from "xlsx";
 
 import { apiFetch } from "@/lib/apiClient";
@@ -58,6 +59,54 @@ import {
   getTodayFileDate,
   setSheetColumnWidths,
 } from "./_lib/reportUtils";
+
+function getTableHeadSx(): SxProps<Theme> {
+  return {
+    bgcolor: (theme) =>
+      theme.palette.mode === "dark"
+        ? alpha(theme.palette.primary.main, 0.08)
+        : alpha(theme.palette.primary.main, 0.04),
+  };
+}
+
+function getProfitTextSx(value?: number): SxProps<Theme> {
+  const numberValue = Number(value || 0);
+
+  return {
+    fontWeight: 900,
+    color: numberValue >= 0 ? "success.main" : "error.main",
+  };
+}
+
+function getRevenueTextSx(): SxProps<Theme> {
+  return {
+    fontWeight: 900,
+    color: "success.main",
+  };
+}
+
+function getExpenseTextSx(): SxProps<Theme> {
+  return {
+    fontWeight: 900,
+    color: "error.main",
+  };
+}
+
+function getProgressChipSx(value?: number): SxProps<Theme> {
+  const progress = Number(value || 0);
+  const color =
+    progress >= 100 ? "#10B981" : progress >= 50 ? "#0EA5E9" : "#F59E0B";
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
 
 export default function ReportsPage() {
   const [summary, setSummary] = useState<FinanceSummary>(emptySummary);
@@ -1068,25 +1117,59 @@ export default function ReportsPage() {
         }}
       >
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+            }}
+          >
             Reports
           </Typography>
 
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+          <Typography color="text.secondary" sx={{ mt: 0.5, maxWidth: 820 }}>
             Business performance reports based on revenue, expenses, projects,
             clients, and sales conversion.
           </Typography>
         </Box>
 
-        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }} useFlexGap>
-          <Button variant="contained" onClick={handleExportExcel}>
+        <Box
+          sx={{
+            display: "flex",
+            gap: 1,
+            flexWrap: "wrap",
+            justifyContent: { xs: "stretch", md: "flex-end" },
+          }}
+        >
+          <Button
+            variant="contained"
+            onClick={handleExportExcel}
+            sx={{
+              height: 44,
+              borderRadius: 2,
+              fontWeight: 800,
+              px: 2.5,
+              flex: { xs: "1 1 auto", sm: "0 0 auto" },
+            }}
+          >
             Export Excel
           </Button>
 
-          <Button variant="outlined" color="secondary" onClick={handlePrintPdf}>
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={handlePrintPdf}
+            sx={{
+              height: 44,
+              borderRadius: 2,
+              fontWeight: 800,
+              px: 2.5,
+              flex: { xs: "1 1 auto", sm: "0 0 auto" },
+            }}
+          >
             Print / PDF
           </Button>
-        </Stack>
+        </Box>
       </Box>
 
       {error && (
@@ -1152,15 +1235,21 @@ export default function ReportsPage() {
           mb: 3,
         }}
       >
-        <Card sx={{ borderRadius: 3 }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+        <Card
+          sx={{
+            borderRadius: 4,
+            border: (theme) => `1px solid ${theme.palette.divider}`,
+            bgcolor: "background.paper",
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
               Best Client
             </Typography>
 
             {bestClient ? (
               <>
-                <Typography sx={{ fontWeight: 600 }}>
+                <Typography sx={{ fontWeight: 800 }}>
                   {bestClient.client?.companyName || "-"}
                 </Typography>
                 <Typography color="text.secondary" sx={{ mt: 0.5 }}>
@@ -1178,15 +1267,21 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        <Card sx={{ borderRadius: 3 }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+        <Card
+          sx={{
+            borderRadius: 4,
+            border: (theme) => `1px solid ${theme.palette.divider}`,
+            bgcolor: "background.paper",
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
               Best Project Type
             </Typography>
 
             {bestProjectType ? (
               <>
-                <Typography sx={{ fontWeight: 600 }}>
+                <Typography sx={{ fontWeight: 800 }}>
                   {bestProjectType.type}
                 </Typography>
                 <Typography color="text.secondary" sx={{ mt: 0.5 }}>
@@ -1208,7 +1303,7 @@ export default function ReportsPage() {
       <ReportTable title="Monthly Finance">
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={getTableHeadSx()}>
               <TableCell>Month</TableCell>
               <TableCell>Revenue</TableCell>
               <TableCell>Expenses</TableCell>
@@ -1222,10 +1317,16 @@ export default function ReportsPage() {
             ) : (
               monthly.map((item) => (
                 <TableRow key={item.month} hover>
-                  <TableCell>{item.month}</TableCell>
-                  <TableCell>{formatMoney(item.revenue)}</TableCell>
-                  <TableCell>{formatMoney(item.expenses)}</TableCell>
-                  <TableCell>{formatMoney(item.profit)}</TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>{item.month}</TableCell>
+                  <TableCell sx={getRevenueTextSx()}>
+                    {formatMoney(item.revenue)}
+                  </TableCell>
+                  <TableCell sx={getExpenseTextSx()}>
+                    {formatMoney(item.expenses)}
+                  </TableCell>
+                  <TableCell sx={getProfitTextSx(item.profit)}>
+                    {formatMoney(item.profit)}
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -1236,7 +1337,7 @@ export default function ReportsPage() {
       <ReportTable title="Project Finance Report">
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={getTableHeadSx()}>
               <TableCell>Project</TableCell>
               <TableCell>Price</TableCell>
               <TableCell>Revenue</TableCell>
@@ -1259,22 +1360,33 @@ export default function ReportsPage() {
                   hover
                 >
                   <TableCell>
-                    <Typography sx={{ fontWeight: 600 }}>
+                    <Typography sx={{ fontWeight: 800 }}>
                       {item.project?.name || "-"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       {item.project?.type || "-"}
                     </Typography>
                   </TableCell>
-                  <TableCell>{formatMoney(item.project?.price)}</TableCell>
-                  <TableCell>{formatMoney(item.totalRevenue)}</TableCell>
-                  <TableCell>{formatMoney(item.totalExpenses)}</TableCell>
-                  <TableCell>{formatMoney(item.netProfit)}</TableCell>
-                  <TableCell>{formatMoney(item.remainingBalance)}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {formatMoney(item.project?.price)}
+                  </TableCell>
+                  <TableCell sx={getRevenueTextSx()}>
+                    {formatMoney(item.totalRevenue)}
+                  </TableCell>
+                  <TableCell sx={getExpenseTextSx()}>
+                    {formatMoney(item.totalExpenses)}
+                  </TableCell>
+                  <TableCell sx={getProfitTextSx(item.netProfit)}>
+                    {formatMoney(item.netProfit)}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {formatMoney(item.remainingBalance)}
+                  </TableCell>
                   <TableCell>
                     <Chip
                       label={formatPercent(item.paymentProgress)}
                       size="small"
+                      sx={getProgressChipSx(item.paymentProgress)}
                     />
                   </TableCell>
                 </TableRow>
@@ -1287,7 +1399,7 @@ export default function ReportsPage() {
       <ReportTable title="Client Finance Report">
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={getTableHeadSx()}>
               <TableCell>Client</TableCell>
               <TableCell>Projects</TableCell>
               <TableCell>Revenue</TableCell>
@@ -1307,11 +1419,21 @@ export default function ReportsPage() {
                   }-${index}`}
                   hover
                 >
-                  <TableCell>{item.client?.companyName || "-"}</TableCell>
-                  <TableCell>{item.totalProjects}</TableCell>
-                  <TableCell>{formatMoney(item.totalRevenue)}</TableCell>
-                  <TableCell>{formatMoney(item.totalExpenses)}</TableCell>
-                  <TableCell>{formatMoney(item.netProfit)}</TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>
+                    {item.client?.companyName || "-"}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {item.totalProjects}
+                  </TableCell>
+                  <TableCell sx={getRevenueTextSx()}>
+                    {formatMoney(item.totalRevenue)}
+                  </TableCell>
+                  <TableCell sx={getExpenseTextSx()}>
+                    {formatMoney(item.totalExpenses)}
+                  </TableCell>
+                  <TableCell sx={getProfitTextSx(item.netProfit)}>
+                    {formatMoney(item.netProfit)}
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -1322,7 +1444,7 @@ export default function ReportsPage() {
       <ReportTable title="Project Type Report">
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={getTableHeadSx()}>
               <TableCell>Type</TableCell>
               <TableCell>Projects</TableCell>
               <TableCell>Total Value</TableCell>
@@ -1338,12 +1460,22 @@ export default function ReportsPage() {
             ) : (
               projectTypesFinance.map((item) => (
                 <TableRow key={item.type} hover>
-                  <TableCell>{item.type}</TableCell>
-                  <TableCell>{item.projectCount}</TableCell>
-                  <TableCell>{formatMoney(item.totalProjectValue)}</TableCell>
-                  <TableCell>{formatMoney(item.totalRevenue)}</TableCell>
-                  <TableCell>{formatMoney(item.totalExpenses)}</TableCell>
-                  <TableCell>{formatMoney(item.netProfit)}</TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>{item.type}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {item.projectCount}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {formatMoney(item.totalProjectValue)}
+                  </TableCell>
+                  <TableCell sx={getRevenueTextSx()}>
+                    {formatMoney(item.totalRevenue)}
+                  </TableCell>
+                  <TableCell sx={getExpenseTextSx()}>
+                    {formatMoney(item.totalExpenses)}
+                  </TableCell>
+                  <TableCell sx={getProfitTextSx(item.netProfit)}>
+                    {formatMoney(item.netProfit)}
+                  </TableCell>
                 </TableRow>
               ))
             )}

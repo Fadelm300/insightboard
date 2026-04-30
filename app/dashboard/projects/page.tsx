@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type React from "react";
 import {
   Alert,
   Box,
@@ -17,11 +18,14 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import type { SxProps, Theme } from "@mui/material/styles";
 
 import { apiFetch } from "@/lib/apiClient";
 
@@ -97,22 +101,46 @@ type ProjectFormErrors = Partial<Record<keyof ProjectFormData, string>>;
 type ProjectsResponse = {
   success?: boolean;
   message?: string;
-  data?: Project[] | { projects?: Project[] };
+  data?:
+    | Project[]
+    | {
+        projects?: Project[];
+        items?: Project[];
+        records?: Project[];
+      };
   projects?: Project[];
+  items?: Project[];
+  records?: Project[];
 };
 
 type ClientsResponse = {
   success?: boolean;
   message?: string;
-  data?: Client[] | { clients?: Client[] };
+  data?:
+    | Client[]
+    | {
+        clients?: Client[];
+        items?: Client[];
+        records?: Client[];
+      };
   clients?: Client[];
+  items?: Client[];
+  records?: Client[];
 };
 
 type DealsResponse = {
   success?: boolean;
   message?: string;
-  data?: Deal[] | { deals?: Deal[] };
+  data?:
+    | Deal[]
+    | {
+        deals?: Deal[];
+        items?: Deal[];
+        records?: Deal[];
+      };
   deals?: Deal[];
+  items?: Deal[];
+  records?: Deal[];
 };
 
 const PROJECT_TYPES: ProjectType[] = [
@@ -132,16 +160,9 @@ const PROJECT_STATUSES: ProjectStatus[] = [
   "Cancelled",
 ];
 
-const PAYMENT_STATUSES: PaymentStatus[] = [
-  "Unpaid",
-  "Partially Paid",
-  "Paid",
-];
+const PAYMENT_STATUSES: PaymentStatus[] = ["Unpaid", "Partially Paid", "Paid"];
 
 const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
-
-const UNSAFE_TEXT_PATTERN =
-  /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
 
 const emptyForm: ProjectFormData = {
   clientId: "",
@@ -159,48 +180,45 @@ const emptyForm: ProjectFormData = {
 
 function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   if (Array.isArray(response.data)) return response.data;
-
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.projects)
-  ) {
-    return response.data.projects;
-  }
-
   if (Array.isArray(response.projects)) return response.projects;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.projects)) return response.data.projects;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
 
   return [];
 }
 
 function getClientsFromResponse(response: ClientsResponse): Client[] {
   if (Array.isArray(response.data)) return response.data;
-
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.clients)
-  ) {
-    return response.data.clients;
-  }
-
   if (Array.isArray(response.clients)) return response.clients;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.clients)) return response.data.clients;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
 
   return [];
 }
 
 function getDealsFromResponse(response: DealsResponse): Deal[] {
   if (Array.isArray(response.data)) return response.data;
-
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.deals)
-  ) {
-    return response.data.deals;
-  }
-
   if (Array.isArray(response.deals)) return response.deals;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.deals)) return response.data.deals;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
 
   return [];
 }
@@ -239,12 +257,24 @@ function getTodayInputValue() {
   return new Date(today.getTime() - timezoneOffset).toISOString().slice(0, 10);
 }
 
-function cleanText(value: string) {
+function cleanSingleLineText(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function cleanMultiLineText(value: string) {
+  return value.trim().replace(/[ \t]+/g, " ");
+}
+
+function hasUnsafeCharacters(value: string) {
+  return /[<>{}\[\]`$|\\]/.test(value);
+}
+
+function hasUnsafePattern(value: string) {
+  return /(javascript:|data:|on\w+\s*=|<\s*script)/i.test(value);
+}
+
 function hasUnsafeText(value: string) {
-  return UNSAFE_TEXT_PATTERN.test(value);
+  return hasUnsafeCharacters(value) || hasUnsafePattern(value);
 }
 
 function isValidMoney(value: string) {
@@ -279,15 +309,15 @@ function validateProjectForm(formData: ProjectFormData):
   const cleanedValues: ProjectFormData = {
     clientId: formData.clientId.trim(),
     dealId: formData.dealId.trim(),
-    name: cleanText(formData.name),
+    name: cleanSingleLineText(formData.name),
     type: formData.type,
     price: formData.price.trim(),
     cost: formData.cost.trim() || "0",
     deadline: formData.deadline.trim(),
     status: formData.status,
     paymentStatus: formData.paymentStatus,
-    description: cleanText(formData.description),
-    notes: cleanText(formData.notes),
+    description: cleanMultiLineText(formData.description),
+    notes: cleanMultiLineText(formData.notes),
   };
 
   if (!cleanedValues.clientId) {
@@ -334,10 +364,7 @@ function validateProjectForm(formData: ProjectFormData):
 
   if (cleanedValues.description.length > 1000) {
     errors.description = "Description cannot exceed 1000 characters";
-  } else if (
-    cleanedValues.description &&
-    hasUnsafeText(cleanedValues.description)
-  ) {
+  } else if (cleanedValues.description && hasUnsafeText(cleanedValues.description)) {
     errors.description = "Description contains invalid characters";
   }
 
@@ -360,30 +387,64 @@ function validateProjectForm(formData: ProjectFormData):
   };
 }
 
-function getStatusChipColor(status: ProjectStatus) {
-  switch (status) {
-    case "Completed":
-      return "success";
-    case "In Progress":
-      return "primary";
-    case "Review":
-      return "warning";
-    case "Cancelled":
-      return "error";
-    default:
-      return "default";
-  }
+function getProjectStatusChipSx(status: ProjectStatus): SxProps<Theme> {
+  const statusColors: Record<ProjectStatus, string> = {
+    "Not Started": "#64748B",
+    "In Progress": "#0EA5E9",
+    Review: "#F59E0B",
+    Completed: "#10B981",
+    Cancelled: "#EF4444",
+  };
+
+  const color = statusColors[status];
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
 }
 
-function getPaymentChipColor(status: PaymentStatus) {
-  switch (status) {
-    case "Paid":
-      return "success";
-    case "Partially Paid":
-      return "warning";
-    default:
-      return "default";
-  }
+function getPaymentStatusChipSx(status: PaymentStatus): SxProps<Theme> {
+  const statusColors: Record<PaymentStatus, string> = {
+    Unpaid: "#64748B",
+    "Partially Paid": "#F59E0B",
+    Paid: "#10B981",
+  };
+
+  const color = statusColors[status];
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
+
+function getProjectInitial(name: string) {
+  return name.trim().charAt(0).toUpperCase() || "P";
+}
+
+function formatBHD(value?: number) {
+  return `${Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} BHD`;
+}
+
+function getProfitSx(profit: number): SxProps<Theme> {
+  return {
+    fontWeight: 900,
+    color: profit >= 0 ? "success.main" : "error.main",
+  };
 }
 
 export default function ProjectsPage() {
@@ -478,6 +539,8 @@ export default function ProjectsPage() {
   }
 
   function handleFormClose() {
+    if (saving) return;
+
     setOpenForm(false);
     setEditingProject(null);
     setFormData(emptyForm);
@@ -545,7 +608,7 @@ export default function ProjectsPage() {
     }));
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const validation = validateProjectForm(formData);
@@ -642,7 +705,13 @@ export default function ProjectsPage() {
         }}
       >
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+            }}
+          >
             Projects
           </Typography>
 
@@ -651,7 +720,17 @@ export default function ProjectsPage() {
           </Typography>
         </Box>
 
-        <Button variant="contained" onClick={handleCreateOpen}>
+        <Button
+          variant="contained"
+          onClick={handleCreateOpen}
+          sx={{
+            px: 2.5,
+            height: 44,
+            borderRadius: 2,
+            fontWeight: 800,
+            alignSelf: { xs: "stretch", sm: "center" },
+          }}
+        >
           Add Project
         </Button>
       </Box>
@@ -672,107 +751,210 @@ export default function ProjectsPage() {
         </Alert>
       )}
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
+      <Card
+        sx={{
+          borderRadius: 4,
+          overflow: "hidden",
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+          bgcolor: "background.paper",
+        }}
+      >
+        <CardContent sx={{ p: 0 }}>
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
               <CircularProgress />
             </Box>
           ) : projects.length === 0 ? (
-            <Box sx={{ textAlign: "center", py: 6 }}>
-              <Typography variant="h6">No projects yet</Typography>
+            <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                No projects yet
+              </Typography>
+
               <Typography color="text.secondary" sx={{ mt: 1 }}>
                 Convert a closed deal or add a project manually.
               </Typography>
+
+              <Button
+                variant="contained"
+                onClick={handleCreateOpen}
+                sx={{ mt: 3, borderRadius: 2, fontWeight: 800 }}
+              >
+                Add Project
+              </Button>
             </Box>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Project</TableCell>
-                  <TableCell>Client</TableCell>
-                  <TableCell>Deal</TableCell>
-                  <TableCell>Price</TableCell>
-                  <TableCell>Cost</TableCell>
-                  <TableCell>Profit</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Payment</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-
-              <TableBody>
-                {projects.map((project) => (
-                  <TableRow key={project._id} hover>
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 600 }}>
-                        {project.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {project.type}
-                      </Typography>
-                    </TableCell>
-
-                    <TableCell>{getClientName(project.clientId)}</TableCell>
-                    <TableCell>{getDealName(project.dealId)}</TableCell>
-                    <TableCell>{project.price} BHD</TableCell>
-                    <TableCell>{project.cost} BHD</TableCell>
-                    <TableCell>{project.profit} BHD</TableCell>
-
-                    <TableCell>
-                      <Chip
-                        label={project.status}
-                        size="small"
-                        color={getStatusChipColor(project.status)}
-                      />
-                    </TableCell>
-
-                    <TableCell>
-                      <Chip
-                        label={project.paymentStatus}
-                        size="small"
-                        color={getPaymentChipColor(project.paymentStatus)}
-                      />
-                    </TableCell>
-
-                    <TableCell align="right">
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "flex-end",
-                          gap: 1,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => handleEditOpen(project)}
-                        >
-                          Edit
-                        </Button>
-
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => setDeleteProject(project)}
-                        >
-                          Delete
-                        </Button>
-                      </Box>
-                    </TableCell>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow
+                    sx={{
+                      bgcolor: (theme) =>
+                        theme.palette.mode === "dark"
+                          ? alpha(theme.palette.primary.main, 0.08)
+                          : alpha(theme.palette.primary.main, 0.04),
+                    }}
+                  >
+                    <TableCell>Project</TableCell>
+                    <TableCell>Client</TableCell>
+                    <TableCell>Deal</TableCell>
+                    <TableCell>Price</TableCell>
+                    <TableCell>Cost</TableCell>
+                    <TableCell>Profit</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Payment</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+
+                <TableBody>
+                  {projects.map((project) => (
+                    <TableRow
+                      key={project._id}
+                      hover
+                      sx={{
+                        "&:last-child td": {
+                          borderBottom: 0,
+                        },
+                      }}
+                    >
+                      <TableCell sx={{ minWidth: 260 }}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1.5,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 2.5,
+                              display: "grid",
+                              placeItems: "center",
+                              fontWeight: 900,
+                              color: "primary.main",
+                              bgcolor: (theme) =>
+                                alpha(theme.palette.primary.main, 0.12),
+                              border: (theme) =>
+                                `1px solid ${alpha(
+                                  theme.palette.primary.main,
+                                  0.18
+                                )}`,
+                            }}
+                          >
+                            {getProjectInitial(project.name)}
+                          </Box>
+
+                          <Box>
+                            <Typography sx={{ fontWeight: 800 }}>
+                              {project.name}
+                            </Typography>
+
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.25 }}
+                            >
+                              {project.type}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </TableCell>
+
+                      <TableCell>{getClientName(project.clientId)}</TableCell>
+                      <TableCell>{getDealName(project.dealId)}</TableCell>
+
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        {formatBHD(project.price)}
+                      </TableCell>
+
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        {formatBHD(project.cost)}
+                      </TableCell>
+
+                      <TableCell sx={getProfitSx(project.profit)}>
+                        {formatBHD(project.profit)}
+                      </TableCell>
+
+                      <TableCell>
+                        <Chip
+                          label={project.status}
+                          size="small"
+                          sx={getProjectStatusChipSx(project.status)}
+                        />
+                      </TableCell>
+
+                      <TableCell>
+                        <Chip
+                          label={project.paymentStatus}
+                          size="small"
+                          sx={getPaymentStatusChipSx(project.paymentStatus)}
+                        />
+                      </TableCell>
+
+                      <TableCell align="right">
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            gap: 1,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleEditOpen(project)}
+                            sx={{
+                              borderRadius: 2,
+                              fontWeight: 800,
+                            }}
+                          >
+                            Edit
+                          </Button>
+
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => setDeleteProject(project)}
+                            sx={{
+                              borderRadius: 2,
+                              fontWeight: 800,
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </CardContent>
       </Card>
 
-      <Dialog open={openForm} onClose={handleFormClose} maxWidth="md" fullWidth>
+      <Dialog
+        open={openForm}
+        onClose={handleFormClose}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
         <Box component="form" onSubmit={handleSubmit}>
-          <DialogTitle>
+          <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
             {editingProject ? "Edit Project" : "Add Project"}
           </DialogTitle>
 
@@ -949,7 +1131,7 @@ export default function ProjectsPage() {
                 fullWidth
                 value={formData.deadline}
                 error={Boolean(formErrors.deadline)}
-                helperText={formErrors.deadline}
+                helperText={formErrors.deadline || "Choose today or a future date"}
                 onChange={(event) =>
                   updateFormField("deadline", event.target.value)
                 }
@@ -1005,14 +1187,31 @@ export default function ProjectsPage() {
 
       <Dialog
         open={Boolean(deleteProject)}
-        onClose={() => setDeleteProject(null)}
+        onClose={() => {
+          if (!saving) setDeleteProject(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
       >
-        <DialogTitle>Delete Project</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>Delete Project</DialogTitle>
 
         <DialogContent>
-          <Typography>
+          <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <strong>{deleteProject?.name}</strong>?
+            <Box component="span" sx={{ color: "text.primary", fontWeight: 900 }}>
+              {deleteProject?.name}
+            </Box>
+            ?
           </Typography>
         </DialogContent>
 

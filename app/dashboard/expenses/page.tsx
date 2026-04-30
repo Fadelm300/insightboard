@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type React from "react";
 import {
   Alert,
   Box,
@@ -17,11 +18,14 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import type { SxProps, Theme } from "@mui/material/styles";
 
 import { apiFetch } from "@/lib/apiClient";
 
@@ -95,8 +99,16 @@ type ExpensesResponse = {
 type ProjectsResponse = {
   success?: boolean;
   message?: string;
-  data?: Project[] | { projects?: Project[] };
+  data?:
+    | Project[]
+    | {
+        projects?: Project[];
+        items?: Project[];
+        records?: Project[];
+      };
   projects?: Project[];
+  items?: Project[];
+  records?: Project[];
 };
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -111,8 +123,15 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
 
 const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 
-const UNSAFE_TEXT_PATTERN =
-  /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[<>{}\[\]`$|\\]/i;
+const emptyForm: ExpenseFormData = {
+  projectId: "",
+  title: "",
+  amount: "",
+  category: "Hosting",
+  date: "",
+  description: "",
+  notes: "",
+};
 
 function getTodayInputValue() {
   const today = new Date();
@@ -123,16 +142,6 @@ function getTodayInputValue() {
 
   return `${year}-${month}-${day}`;
 }
-
-const emptyForm: ExpenseFormData = {
-  projectId: "",
-  title: "",
-  amount: "",
-  category: "Hosting",
-  date: getTodayInputValue(),
-  description: "",
-  notes: "",
-};
 
 function getExpensesFromResponse(response: ExpensesResponse): Expense[] {
   if (Array.isArray(response.data)) return response.data;
@@ -154,16 +163,15 @@ function getExpensesFromResponse(response: ExpensesResponse): Expense[] {
 
 function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   if (Array.isArray(response.data)) return response.data;
-
-  if (
-    response.data &&
-    !Array.isArray(response.data) &&
-    Array.isArray(response.data.projects)
-  ) {
-    return response.data.projects;
-  }
-
   if (Array.isArray(response.projects)) return response.projects;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.projects)) return response.data.projects;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
 
   return [];
 }
@@ -201,12 +209,24 @@ function formatDate(date?: string) {
   return formatDateToInputValue(date) || "-";
 }
 
-function cleanText(value: string) {
+function cleanSingleLineText(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function cleanMultiLineText(value: string) {
+  return value.trim().replace(/[ \t]+/g, " ");
+}
+
+function hasUnsafeCharacters(value: string) {
+  return /[<>{}\[\]`$|\\]/.test(value);
+}
+
+function hasUnsafePattern(value: string) {
+  return /(javascript:|data:|on\w+\s*=|<\s*script)/i.test(value);
+}
+
 function hasUnsafeText(value: string) {
-  return UNSAFE_TEXT_PATTERN.test(value);
+  return hasUnsafeCharacters(value) || hasUnsafePattern(value);
 }
 
 function isValidMoney(value: string) {
@@ -217,7 +237,6 @@ function isValidDate(value: string) {
   if (!value) return true;
 
   const parsedDate = new Date(value);
-
   return !Number.isNaN(parsedDate.getTime());
 }
 
@@ -249,12 +268,12 @@ function validateExpenseForm(
 
   const cleanedValues: ExpenseFormData = {
     projectId: formData.projectId.trim(),
-    title: cleanText(formData.title),
+    title: cleanSingleLineText(formData.title),
     amount: formData.amount.trim(),
     category: formData.category,
     date: formData.date.trim(),
-    description: cleanText(formData.description),
-    notes: cleanText(formData.notes),
+    description: cleanMultiLineText(formData.description),
+    notes: cleanMultiLineText(formData.notes),
   };
 
   if (!isEditing && !cleanedValues.projectId) {
@@ -315,11 +334,56 @@ function validateExpenseForm(
   };
 }
 
+function getExpenseCategoryChipSx(category: ExpenseCategory): SxProps<Theme> {
+  const categoryColors: Record<ExpenseCategory, string> = {
+    Domain: "#2563EB",
+    Hosting: "#0EA5E9",
+    "Design Assets": "#6366F1",
+    Tools: "#10B981",
+    Ads: "#F59E0B",
+    "Freelance Help": "#EF4444",
+    Other: "#64748B",
+  };
+
+  const color = categoryColors[category];
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
+
+function getExpenseInitial(title: string) {
+  return title.trim().charAt(0).toUpperCase() || "E";
+}
+
+function formatBHD(value?: number) {
+  return `${Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} BHD`;
+}
+
+function getAmountSx(): SxProps<Theme> {
+  return {
+    fontWeight: 900,
+    color: "error.main",
+  };
+}
+
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
 
-  const [formData, setFormData] = useState<ExpenseFormData>(emptyForm);
+  const [formData, setFormData] = useState<ExpenseFormData>({
+    ...emptyForm,
+    date: getTodayInputValue(),
+  });
   const [formErrors, setFormErrors] = useState<ExpenseFormErrors>({});
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
@@ -388,6 +452,8 @@ export default function ExpensesPage() {
   }
 
   function handleFormClose() {
+    if (saving) return;
+
     setOpenForm(false);
     setEditingExpense(null);
     setFormData({
@@ -412,7 +478,7 @@ export default function ExpensesPage() {
     }));
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const validation = validateExpenseForm(formData, Boolean(editingExpense));
@@ -514,7 +580,13 @@ export default function ExpensesPage() {
         }}
       >
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+            }}
+          >
             Expenses
           </Typography>
 
@@ -523,7 +595,17 @@ export default function ExpensesPage() {
           </Typography>
         </Box>
 
-        <Button variant="contained" onClick={handleCreateOpen}>
+        <Button
+          variant="contained"
+          onClick={handleCreateOpen}
+          sx={{
+            px: 2.5,
+            height: 44,
+            borderRadius: 2,
+            fontWeight: 800,
+            alignSelf: { xs: "stretch", sm: "center" },
+          }}
+        >
           Add Expense
         </Button>
       </Box>
@@ -544,92 +626,205 @@ export default function ExpensesPage() {
         </Alert>
       )}
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
+      <Card
+        sx={{
+          borderRadius: 4,
+          overflow: "hidden",
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+          bgcolor: "background.paper",
+        }}
+      >
+        <CardContent sx={{ p: 0 }}>
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
               <CircularProgress />
             </Box>
           ) : expenses.length === 0 ? (
-            <Box sx={{ textAlign: "center", py: 6 }}>
-              <Typography variant="h6">No expenses yet</Typography>
+            <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                No expenses yet
+              </Typography>
+
               <Typography color="text.secondary" sx={{ mt: 1 }}>
                 Add your first expense record to start tracking costs.
               </Typography>
+
+              <Button
+                variant="contained"
+                onClick={handleCreateOpen}
+                sx={{ mt: 3, borderRadius: 2, fontWeight: 800 }}
+              >
+                Add Expense
+              </Button>
             </Box>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Expense</TableCell>
-                  <TableCell>Project</TableCell>
-                  <TableCell>Amount</TableCell>
-                  <TableCell>Category</TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Description</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow
+                    sx={{
+                      bgcolor: (theme) =>
+                        theme.palette.mode === "dark"
+                          ? alpha(theme.palette.primary.main, 0.08)
+                          : alpha(theme.palette.primary.main, 0.04),
+                    }}
+                  >
+                    <TableCell>Expense</TableCell>
+                    <TableCell>Project</TableCell>
+                    <TableCell>Amount</TableCell>
+                    <TableCell>Category</TableCell>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Description</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
 
-              <TableBody>
-                {expenses.map((item) => (
-                  <TableRow key={item._id} hover>
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 600 }}>
-                        {item.title}
-                      </Typography>
-                    </TableCell>
+                <TableBody>
+                  {expenses.map((item) => (
+                    <TableRow
+                      key={item._id}
+                      hover
+                      sx={{
+                        "&:last-child td": {
+                          borderBottom: 0,
+                        },
+                      }}
+                    >
+                      <TableCell sx={{ minWidth: 240 }}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1.5,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 2.5,
+                              display: "grid",
+                              placeItems: "center",
+                              fontWeight: 900,
+                              color: "error.main",
+                              bgcolor: (theme) =>
+                                alpha(theme.palette.error.main, 0.12),
+                              border: (theme) =>
+                                `1px solid ${alpha(
+                                  theme.palette.error.main,
+                                  0.18
+                                )}`,
+                            }}
+                          >
+                            {getExpenseInitial(item.title)}
+                          </Box>
 
-                    <TableCell>{getProjectName(item.projectId)}</TableCell>
+                          <Box>
+                            <Typography sx={{ fontWeight: 800 }}>
+                              {item.title}
+                            </Typography>
 
-                    <TableCell>{item.amount} BHD</TableCell>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.25 }}
+                            >
+                              Expense record
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </TableCell>
 
-                    <TableCell>
-                      <Chip label={item.category} size="small" />
-                    </TableCell>
+                      <TableCell>{getProjectName(item.projectId)}</TableCell>
 
-                    <TableCell>{formatDate(item.date)}</TableCell>
+                      <TableCell sx={getAmountSx()}>
+                        {formatBHD(item.amount)}
+                      </TableCell>
 
-                    <TableCell>{item.description || "-"}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={item.category}
+                          size="small"
+                          sx={getExpenseCategoryChipSx(item.category)}
+                        />
+                      </TableCell>
 
-                    <TableCell align="right">
-                      <Box
+                      <TableCell>{formatDate(item.date)}</TableCell>
+
+                      <TableCell
                         sx={{
-                          display: "flex",
-                          justifyContent: "flex-end",
-                          gap: 1,
-                          flexWrap: "wrap",
+                          maxWidth: 260,
+                          color: "text.secondary",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         }}
                       >
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => handleEditOpen(item)}
-                        >
-                          Edit
-                        </Button>
+                        {item.description || "-"}
+                      </TableCell>
 
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => setDeleteExpense(item)}
+                      <TableCell align="right">
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            gap: 1,
+                            flexWrap: "wrap",
+                          }}
                         >
-                          Delete
-                        </Button>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleEditOpen(item)}
+                            sx={{
+                              borderRadius: 2,
+                              fontWeight: 800,
+                            }}
+                          >
+                            Edit
+                          </Button>
+
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => setDeleteExpense(item)}
+                            sx={{
+                              borderRadius: 2,
+                              fontWeight: 800,
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </CardContent>
       </Card>
 
-      <Dialog open={openForm} onClose={handleFormClose} maxWidth="sm" fullWidth>
+      <Dialog
+        open={openForm}
+        onClose={handleFormClose}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
         <Box component="form" onSubmit={handleSubmit}>
-          <DialogTitle>
+          <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
             {editingExpense ? "Edit Expense" : "Add Expense"}
           </DialogTitle>
 
@@ -720,7 +915,9 @@ export default function ExpensesPage() {
                 fullWidth
                 value={formData.date}
                 error={Boolean(formErrors.date)}
-                helperText={formErrors.date}
+                helperText={
+                  formErrors.date || "Expense date cannot be in the future"
+                }
                 onChange={(event) =>
                   updateFormField("date", event.target.value)
                 }
@@ -776,14 +973,31 @@ export default function ExpensesPage() {
 
       <Dialog
         open={Boolean(deleteExpense)}
-        onClose={() => setDeleteExpense(null)}
+        onClose={() => {
+          if (!saving) setDeleteExpense(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
       >
-        <DialogTitle>Delete Expense</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>Delete Expense</DialogTitle>
 
         <DialogContent>
-          <Typography>
+          <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <strong>{deleteExpense?.title}</strong>?
+            <Box component="span" sx={{ color: "text.primary", fontWeight: 900 }}>
+              {deleteExpense?.title}
+            </Box>
+            ?
           </Typography>
         </DialogContent>
 

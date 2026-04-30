@@ -18,11 +18,14 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import type { SxProps, Theme } from "@mui/material/styles";
 
 import { apiFetch } from "@/lib/apiClient";
 
@@ -266,6 +269,32 @@ function validateClientForm(data: ClientFormData) {
   return { values, errors };
 }
 
+function getStatusChipSx(status: ClientStatus): SxProps<Theme> {
+  const statusColors: Record<ClientStatus, string> = {
+    "New Lead": "#64748B",
+    Contacted: "#0EA5E9",
+    Interested: "#F59E0B",
+    "Not Interested": "#EF4444",
+    Converted: "#10B981",
+  };
+
+  const color = statusColors[status];
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 700,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
+
+function getClientInitial(companyName: string) {
+  return companyName.trim().charAt(0).toUpperCase() || "C";
+}
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [formData, setFormData] = useState<ClientFormData>(emptyForm);
@@ -330,6 +359,8 @@ export default function ClientsPage() {
   }
 
   function handleFormClose() {
+    if (saving) return;
+
     setOpenForm(false);
     setEditingClient(null);
     setFormData(emptyForm);
@@ -432,7 +463,13 @@ export default function ClientsPage() {
         }}
       >
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+            }}
+          >
             Clients
           </Typography>
 
@@ -441,7 +478,17 @@ export default function ClientsPage() {
           </Typography>
         </Box>
 
-        <Button variant="contained" onClick={handleCreateOpen}>
+        <Button
+          variant="contained"
+          onClick={handleCreateOpen}
+          sx={{
+            px: 2.5,
+            height: 44,
+            borderRadius: 2,
+            fontWeight: 700,
+            alignSelf: { xs: "stretch", sm: "center" },
+          }}
+        >
           Add Client
         </Button>
       </Stack>
@@ -462,87 +509,179 @@ export default function ClientsPage() {
         </Alert>
       )}
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
+      <Card
+        sx={{
+          borderRadius: 4,
+          overflow: "hidden",
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+          bgcolor: "background.paper",
+        }}
+      >
+        <CardContent sx={{ p: 0 }}>
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
               <CircularProgress />
             </Box>
           ) : clients.length === 0 ? (
-            <Box sx={{ textAlign: "center", py: 6 }}>
-              <Typography variant="h6">No clients yet</Typography>
+            <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                No clients yet
+              </Typography>
+
               <Typography color="text.secondary" sx={{ mt: 1 }}>
                 Add your first client to start building the CRM.
               </Typography>
+
+              <Button
+                variant="contained"
+                onClick={handleCreateOpen}
+                sx={{ mt: 3, borderRadius: 2, fontWeight: 700 }}
+              >
+                Add Client
+              </Button>
             </Box>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Company</TableCell>
-                  <TableCell>Contact</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Phone</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-
-              <TableBody>
-                {clients.map((client) => (
-                  <TableRow key={client._id} hover>
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 600 }}>
-                        {client.companyName}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {client.businessType || "No business type"}
-                      </Typography>
-                    </TableCell>
-
-                    <TableCell>{client.contactPerson || "-"}</TableCell>
-                    <TableCell>{client.email || "-"}</TableCell>
-                    <TableCell>{client.phone || "-"}</TableCell>
-
-                    <TableCell>
-                      <Chip label={client.status} size="small" />
-                    </TableCell>
-
-                    <TableCell align="right">
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ justifyContent: "flex-end" }}
-                      >
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => handleEditOpen(client)}
-                        >
-                          Edit
-                        </Button>
-
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => setDeleteClient(client)}
-                        >
-                          Delete
-                        </Button>
-                      </Stack>
-                    </TableCell>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow
+                    sx={{
+                      bgcolor: (theme) =>
+                        theme.palette.mode === "dark"
+                          ? alpha(theme.palette.primary.main, 0.08)
+                          : alpha(theme.palette.primary.main, 0.04),
+                    }}
+                  >
+                    <TableCell>Company</TableCell>
+                    <TableCell>Contact</TableCell>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Phone</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+
+                <TableBody>
+                  {clients.map((client) => (
+                    <TableRow
+                      key={client._id}
+                      hover
+                      sx={{
+                        "&:last-child td": {
+                          borderBottom: 0,
+                        },
+                      }}
+                    >
+                      <TableCell sx={{ minWidth: 240 }}>
+                      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>  
+                          <Box
+                            sx={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 2.5,
+                              display: "grid",
+                              placeItems: "center",
+                              fontWeight: 800,
+                              color: "primary.main",
+                              bgcolor: (theme) =>
+                                alpha(theme.palette.primary.main, 0.12),
+                              border: (theme) =>
+                                `1px solid ${alpha(
+                                  theme.palette.primary.main,
+                                  0.18
+                                )}`,
+                            }}
+                          >
+                            {getClientInitial(client.companyName)}
+                          </Box>
+
+                          <Box>
+                            <Typography sx={{ fontWeight: 800 }}>
+                              {client.companyName}
+                            </Typography>
+
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.25 }}
+                            >
+                              {client.businessType || "No business type"}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </TableCell>
+
+                      <TableCell>{client.contactPerson || "-"}</TableCell>
+                      <TableCell>{client.email || "-"}</TableCell>
+                      <TableCell>{client.phone || "-"}</TableCell>
+
+                      <TableCell>
+                        <Chip
+                          label={client.status}
+                          size="small"
+                          sx={getStatusChipSx(client.status)}
+                        />
+                      </TableCell>
+
+                      <TableCell align="right">
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ justifyContent: "flex-end" }}
+                        >
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleEditOpen(client)}
+                            sx={{
+                              borderRadius: 2,
+                              fontWeight: 700,
+                            }}
+                          >
+                            Edit
+                          </Button>
+
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => setDeleteClient(client)}
+                            sx={{
+                              borderRadius: 2,
+                              fontWeight: 700,
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </CardContent>
       </Card>
 
-      <Dialog open={openForm} onClose={handleFormClose} maxWidth="md" fullWidth>
+      <Dialog
+        open={openForm}
+        onClose={handleFormClose}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
         <Box component="form" onSubmit={handleSubmit}>
-          <DialogTitle>
+          <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
             {editingClient ? "Edit Client" : "Add Client"}
           </DialogTitle>
 
@@ -689,13 +828,33 @@ export default function ClientsPage() {
         </Box>
       </Dialog>
 
-      <Dialog open={Boolean(deleteClient)} onClose={() => setDeleteClient(null)}>
-        <DialogTitle>Delete Client</DialogTitle>
+      <Dialog
+        open={Boolean(deleteClient)}
+        onClose={() => {
+          if (!saving) setDeleteClient(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Delete Client</DialogTitle>
 
         <DialogContent>
-          <Typography>
+          <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <strong>{deleteClient?.companyName}</strong>?
+            <Box component="span" sx={{ color: "text.primary", fontWeight: 800 }}>
+              {deleteClient?.companyName}
+            </Box>
+            ?
           </Typography>
         </DialogContent>
 
