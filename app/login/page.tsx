@@ -10,7 +10,8 @@ export default function LoginPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        bgcolor: "#f5f6f8",
+        bgcolor: "background.default",
+        color: "text.primary",
         p: 2,
       }}
     >

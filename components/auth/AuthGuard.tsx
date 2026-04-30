@@ -54,7 +54,8 @@ export default function AuthGuard({ children }: AuthGuardProps) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          bgcolor: "#f9fafb",
+          bgcolor: "background.default",
+          color: "text.primary",
         }}
       >
         <CircularProgress />

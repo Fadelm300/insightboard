@@ -35,18 +35,28 @@ type MeResponse = {
   user?: User;
 };
 
+type ThemeMode = "Light" | "Dark" | "System";
+
 const BUSINESS_NAME_KEY = "insightboard_business_name";
 const CURRENCY_KEY = "insightboard_currency";
 const THEME_MODE_KEY = "insightboard_theme_mode";
 
 const DEFAULT_BUSINESS_NAME = "InsightBoard CRM";
 const DEFAULT_CURRENCY = "BHD";
-const DEFAULT_THEME_MODE = "Light";
+const DEFAULT_THEME_MODE: ThemeMode = "Light";
 
 function getUserFromResponse(response: MeResponse): User | null {
   if (response.data?.user) return response.data.user;
   if (response.user) return response.user;
   return null;
+}
+
+function isThemeMode(value: string | null): value is ThemeMode {
+  return value === "Light" || value === "Dark" || value === "System";
+}
+
+function notifyThemeChanged() {
+  window.dispatchEvent(new Event("insightboard-theme-changed"));
 }
 
 export default function SettingsPage() {
@@ -55,7 +65,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [businessName, setBusinessName] = useState(DEFAULT_BUSINESS_NAME);
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
-  const [themeMode, setThemeMode] = useState(DEFAULT_THEME_MODE);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(DEFAULT_THEME_MODE);
 
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -89,7 +99,7 @@ export default function SettingsPage() {
 
     if (savedBusinessName) setBusinessName(savedBusinessName);
     if (savedCurrency) setCurrency(savedCurrency);
-    if (savedThemeMode) setThemeMode(savedThemeMode);
+    if (isThemeMode(savedThemeMode)) setThemeMode(savedThemeMode);
   }
 
   function handleSavePreferences() {
@@ -104,6 +114,8 @@ export default function SettingsPage() {
       );
       localStorage.setItem(CURRENCY_KEY, currency);
       localStorage.setItem(THEME_MODE_KEY, themeMode);
+
+      notifyThemeChanged();
 
       setSuccess("Settings saved successfully");
     } catch {
@@ -121,6 +133,9 @@ export default function SettingsPage() {
     setBusinessName(DEFAULT_BUSINESS_NAME);
     setCurrency(DEFAULT_CURRENCY);
     setThemeMode(DEFAULT_THEME_MODE);
+
+    notifyThemeChanged();
+
     setSuccess("Settings reset successfully");
     setError("");
   }
@@ -163,7 +178,7 @@ export default function SettingsPage() {
   return (
     <Box>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700 }}>
+        <Typography variant="h4">
           Settings
         </Typography>
 
@@ -195,9 +210,9 @@ export default function SettingsPage() {
           gap: 3,
         }}
       >
-        <Card sx={{ borderRadius: 3 }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        <Card>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
               Account
             </Typography>
 
@@ -237,9 +252,9 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card sx={{ borderRadius: 3 }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        <Card>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
               Dashboard Preferences
             </Typography>
 
@@ -268,7 +283,9 @@ export default function SettingsPage() {
                 select
                 label="Theme Mode"
                 value={themeMode}
-                onChange={(event) => setThemeMode(event.target.value)}
+                onChange={(event) =>
+                  setThemeMode(event.target.value as ThemeMode)
+                }
                 fullWidth
               >
                 <MenuItem value="Light">Light</MenuItem>

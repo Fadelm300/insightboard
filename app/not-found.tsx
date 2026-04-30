@@ -11,7 +11,8 @@ export default function NotFound() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        bgcolor: "#f8fafc",
+        bgcolor: "background.default",
+        color: "text.primary",
         px: 2,
       }}
     >
@@ -25,6 +26,7 @@ export default function NotFound() {
           borderRadius: 4,
           border: "1px solid",
           borderColor: "divider",
+          bgcolor: "background.paper",
         }}
       >
         <Typography
