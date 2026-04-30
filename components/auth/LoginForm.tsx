@@ -156,6 +156,11 @@ function LockIcon() {
 export default function LoginForm() {
   const router = useRouter();
 
+  // يشتغل على اللابتوبات فقط: عرض متوسط + ارتفاع قصير
+  // المقاس الكبير ما يتأثر.
+  const compactLaptop =
+    "@media (min-width: 900px) and (max-width: 1700px) and (max-height: 850px)";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -213,7 +218,7 @@ export default function LoginForm() {
 
   const inputSx = {
     "& .MuiOutlinedInput-root": {
-      minHeight: 58,
+      minHeight: { xs: 52, sm: 56, md: 58 },
       borderRadius: "999px",
       color: "#F8FBFF",
       background:
@@ -222,6 +227,10 @@ export default function LoginForm() {
       boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
       transition: "all 0.2s ease",
       overflow: "hidden",
+
+      [compactLaptop]: {
+        minHeight: 50,
+      },
 
       "& fieldset": {
         borderColor: alpha("#93C5FD", 0.22),
@@ -245,9 +254,14 @@ export default function LoginForm() {
 
     "& .MuiInputBase-input": {
       color: "#F8FBFF",
-      fontSize: 16,
+      fontSize: { xs: 15, sm: 15.5, md: 16 },
       fontWeight: 700,
-      py: 1.8,
+      py: { xs: 1.45, sm: 1.65, md: 1.8 },
+
+      [compactLaptop]: {
+        fontSize: 15,
+        py: 1.35,
+      },
 
       "&::placeholder": {
         color: alpha("#BFDBFE", 0.65),
@@ -285,134 +299,154 @@ export default function LoginForm() {
     },
   };
 
- return (
-  <Box
-    sx={{
-      width: "100%",
-      maxWidth: 1180,
-      minHeight: { xs: 620, md: 700 },
-      display: "flex",
-      borderRadius: 6,
-      overflow: "hidden",
-      position: "relative",
-      bgcolor: "#102A58",
-      isolation: "isolate",
+  return (
+    <Box
+      sx={{
+        width: "100%",
+        maxWidth: {
+          xs: "calc(100vw - 24px)",
+          sm: "calc(100vw - 40px)",
+          lg: 1180,
+        },
+        minHeight: {
+          xs: "auto",
+          sm: "auto",
+          md: 700,
+        },
+        display: "flex",
+        flexDirection: { xs: "column", md: "row" },
+        borderRadius: { xs: 4, sm: 5, md: 6 },
+        overflow: "hidden",
+        position: "relative",
+        bgcolor: "#102A58",
+        isolation: "isolate",
 
-      boxShadow: `
-        0 0 0 3px rgba(56,189,248,0.26),
-        0 0 52px rgba(56,189,248,0.42),
-        0 0 95px rgba(56,189,248,0.30),
-        0 0 110px rgba(37,99,235,0.22),
-        0 40px 100px rgba(0,0,0,0.45)
-      `,
+        // فقط اللابتوب يصغر
+        [compactLaptop]: {
+          maxWidth: 944,
+          minHeight: 560,
+        },
 
-      "&::before": {
-        content: '""',
-        position: "absolute",
-        inset: 0,
-        borderRadius: "inherit",
-        padding: "2.5px",
-        background: `
-          conic-gradient(
-            from 0deg,
-            transparent 0deg,
-            transparent 18deg,
-            rgba(56,189,248,0.08) 30deg,
-            rgba(125,211,252,0.95) 48deg,
-            rgba(59,130,246,1) 66deg,
-            rgba(147,197,253,0.88) 84deg,
-            rgba(56,189,248,0.18) 102deg,
-            transparent 128deg,
-            transparent 180deg,
-            rgba(56,189,248,0.08) 208deg,
-            rgba(125,211,252,0.82) 228deg,
-            rgba(59,130,246,0.95) 246deg,
-            rgba(147,197,253,0.70) 262deg,
-            transparent 286deg,
-            transparent 360deg
-          )
-        `,
-        WebkitMask:
-          "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
-        WebkitMaskComposite: "xor",
-        maskComposite: "exclude",
-        filter:
-          "drop-shadow(0 0 10px rgba(21, 31, 35, 0.95)) drop-shadow(0 0 24px rgba(59,130,246,0.70)) drop-shadow(0 0 42px rgba(96,165,250,0.35))",
-        pointerEvents: "none",
-        zIndex: 20,
-        animation: "neonWaveFlow 12s linear infinite",
-      },
-
-      "&::after": {
-        content: '""',
-        position: "absolute",
-        inset: 0,
-        borderRadius: "inherit",
         boxShadow: `
-          inset 0 0 18px rgba(56,189,248,0.20),
-          inset 0 0 40px rgba(59,130,246,0.12),
-          inset 0 0 70px rgba(96,165,250,0.06)
+          0 0 0 3px rgba(56,189,248,0.26),
+          0 0 52px rgba(56,189,248,0.42),
+          0 0 95px rgba(56,189,248,0.30),
+          0 0 110px rgba(37,99,235,0.22),
+          0 40px 100px rgba(0,0,0,0.45)
         `,
-        pointerEvents: "none",
-        zIndex: 19,
-        animation: "neonGlowPulse 5.5s ease-in-out infinite",
-      },
 
-      "@keyframes neonWaveFlow": {
-        "0%": {
-          transform: "rotate(0deg) scale(1)",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          inset: 0,
+          borderRadius: "inherit",
+          padding: "2.5px",
+          background: `
+            conic-gradient(
+              from 0deg,
+              transparent 0deg,
+              transparent 18deg,
+              rgba(56,189,248,0.08) 30deg,
+              rgba(125,211,252,0.95) 48deg,
+              rgba(59,130,246,1) 66deg,
+              rgba(147,197,253,0.88) 84deg,
+              rgba(56,189,248,0.18) 102deg,
+              transparent 128deg,
+              transparent 180deg,
+              rgba(56,189,248,0.08) 208deg,
+              rgba(125,211,252,0.82) 228deg,
+              rgba(59,130,246,0.95) 246deg,
+              rgba(147,197,253,0.70) 262deg,
+              transparent 286deg,
+              transparent 360deg
+            )
+          `,
+          WebkitMask:
+            "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+          WebkitMaskComposite: "xor",
+          maskComposite: "exclude",
+          filter:
+            "drop-shadow(0 0 10px rgba(21, 31, 35, 0.95)) drop-shadow(0 0 24px rgba(59,130,246,0.70)) drop-shadow(0 0 42px rgba(96,165,250,0.35))",
+          pointerEvents: "none",
+          zIndex: 20,
+          animation: "neonWaveFlow 12s linear infinite",
         },
-        "25%": {
-          transform: "rotate(90deg) scale(1.006)",
-        },
-        "50%": {
-          transform: "rotate(180deg) scale(1)",
-        },
-        "75%": {
-          transform: "rotate(270deg) scale(1.006)",
-        },
-        "100%": {
-          transform: "rotate(360deg) scale(1)",
-        },
-      },
 
-      "@keyframes neonGlowPulse": {
-        "0%, 100%": {
-          opacity: 0.82,
+        "&::after": {
+          content: '""',
+          position: "absolute",
+          inset: 0,
+          borderRadius: "inherit",
+          boxShadow: `
+            inset 0 0 18px rgba(56,189,248,0.20),
+            inset 0 0 40px rgba(59,130,246,0.12),
+            inset 0 0 70px rgba(96,165,250,0.06)
+          `,
+          pointerEvents: "none",
+          zIndex: 19,
+          animation: "neonGlowPulse 5.5s ease-in-out infinite",
         },
-        "50%": {
-          opacity: 1,
+
+        "@keyframes neonWaveFlow": {
+          "0%": {
+            transform: "rotate(0deg) scale(1)",
+          },
+          "25%": {
+            transform: "rotate(90deg) scale(1.006)",
+          },
+          "50%": {
+            transform: "rotate(180deg) scale(1)",
+          },
+          "75%": {
+            transform: "rotate(270deg) scale(1.006)",
+          },
+          "100%": {
+            transform: "rotate(360deg) scale(1)",
+          },
         },
-      },
 
-      "@keyframes floatA": {
-        "0%, 100%": { transform: "translateY(0px) rotate(0deg)" },
-        "50%": { transform: "translateY(-14px) rotate(5deg)" },
-      },
+        "@keyframes neonGlowPulse": {
+          "0%, 100%": {
+            opacity: 0.82,
+          },
+          "50%": {
+            opacity: 1,
+          },
+        },
 
-      "@keyframes floatB": {
-        "0%, 100%": { transform: "translateY(0px) rotate(0deg)" },
-        "50%": { transform: "translateY(12px) rotate(-4deg)" },
-      },
+        "@keyframes floatA": {
+          "0%, 100%": { transform: "translateY(0px) rotate(0deg)" },
+          "50%": { transform: "translateY(-14px) rotate(5deg)" },
+        },
 
-      "@keyframes spinShape": {
-        from: { transform: "rotate(0deg)" },
-        to: { transform: "rotate(360deg)" },
-      },
-    }}
-  >
+        "@keyframes floatB": {
+          "0%, 100%": { transform: "translateY(0px) rotate(0deg)" },
+          "50%": { transform: "translateY(12px) rotate(-4deg)" },
+        },
+
+        "@keyframes spinShape": {
+          from: { transform: "rotate(0deg)" },
+          to: { transform: "rotate(360deg)" },
+        },
+      }}
+    >
       <Box
         sx={{
-          width: "46%",
+          width: { md: "46%" },
           display: { xs: "none", md: "flex" },
           position: "relative",
           overflow: "hidden",
           flexDirection: "column",
           justifyContent: "center",
-          px: 6,
-          py: 6,
+          px: { md: 4, lg: 6 },
+          py: { md: 5, lg: 6 },
           background:
             "linear-gradient(145deg, #1E40AF 0%, #312E81 42%, #0F172A 100%)",
+
+          [compactLaptop]: {
+            px: 4,
+            py: 4,
+          },
         }}
       >
         <Box
@@ -528,7 +562,18 @@ export default function LoginForm() {
         />
 
         <Box sx={{ position: "relative", zIndex: 2 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 4 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+              mb: 4,
+
+              [compactLaptop]: {
+                mb: 3,
+              },
+            }}
+          >
             <Box
               sx={{
                 width: 56,
@@ -538,6 +583,11 @@ export default function LoginForm() {
                 placeItems: "center",
                 background: "linear-gradient(135deg, #6366F1, #4F46E5)",
                 boxShadow: "0 0 24px rgba(99,102,241,0.5)",
+
+                [compactLaptop]: {
+                  width: 50,
+                  height: 50,
+                },
               }}
             >
               <PulseIcon />
@@ -546,9 +596,13 @@ export default function LoginForm() {
             <Typography
               sx={{
                 color: "#FFFFFF",
-                fontSize: 42,
+                fontSize: { md: 36, lg: 42 },
                 fontWeight: 900,
                 letterSpacing: "-0.05em",
+
+                [compactLaptop]: {
+                  fontSize: 36,
+                },
               }}
             >
               InsightBoard
@@ -558,11 +612,16 @@ export default function LoginForm() {
           <Typography
             sx={{
               color: "#FFFFFF",
-              fontSize: { md: 46, lg: 58 },
+              fontSize: { md: 40, lg: 58 },
               fontWeight: 900,
               lineHeight: 1.12,
               letterSpacing: "-0.06em",
               mb: 2,
+
+              [compactLaptop]: {
+                fontSize: 46,
+                mb: 1.5,
+              },
             }}
           >
             Your Business,
@@ -586,6 +645,12 @@ export default function LoginForm() {
               lineHeight: 1.8,
               maxWidth: 360,
               mb: 4,
+
+              [compactLaptop]: {
+                fontSize: 16,
+                lineHeight: 1.65,
+                mb: 3,
+              },
             }}
           >
             Enterprise CRM intelligence that helps you close faster, sell
@@ -598,6 +663,11 @@ export default function LoginForm() {
               flexDirection: "column",
               gap: 1.6,
               maxWidth: 420,
+
+              [compactLaptop]: {
+                gap: 1.1,
+                maxWidth: 400,
+              },
             }}
           >
             {[
@@ -617,6 +687,11 @@ export default function LoginForm() {
                   bgcolor: alpha("#FFFFFF", 0.06),
                   border: `1px solid ${alpha("#FFFFFF", 0.1)}`,
                   color: alpha("#F8FAFC", 0.88),
+
+                  [compactLaptop]: {
+                    px: 2,
+                    py: 1.15,
+                  },
                 }}
               >
                 <Box
@@ -630,7 +705,16 @@ export default function LoginForm() {
                   }}
                 />
 
-                <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
+                <Typography
+                  sx={{
+                    fontSize: 15,
+                    fontWeight: 600,
+
+                    [compactLaptop]: {
+                      fontSize: 14,
+                    },
+                  }}
+                >
                   {text}
                 </Typography>
               </Box>
@@ -646,10 +730,16 @@ export default function LoginForm() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          px: { xs: 3, sm: 4, md: 6 },
-          py: { xs: 5, md: 6 },
+          px: { xs: 2.25, sm: 4, md: 5, lg: 6 },
+          py: { xs: 3, sm: 4, md: 6 },
+          minHeight: { xs: "auto", sm: "auto", md: "auto" },
           overflow: "hidden",
           background: "linear-gradient(180deg, #234983 0%, #1D4178 100%)",
+
+          [compactLaptop]: {
+            px: 5,
+            py: 4,
+          },
 
           "&::before": {
             content: '""',
@@ -692,18 +782,26 @@ export default function LoginForm() {
           noValidate
           sx={{
             width: "100%",
-            maxWidth: 460,
+            maxWidth: { xs: "100%", sm: 460 },
             position: "relative",
             zIndex: 2,
+
+            [compactLaptop]: {
+              maxWidth: 430,
+            },
           }}
         >
           <Typography
             sx={{
               color: "#F8FAFC",
-              fontSize: { xs: 34, sm: 48 },
+              fontSize: { xs: 28, sm: 38, md: 48 },
               fontWeight: 900,
               letterSpacing: "-0.05em",
               mb: 0.5,
+
+              [compactLaptop]: {
+                fontSize: 40,
+              },
             }}
           >
             Welcome back
@@ -712,9 +810,14 @@ export default function LoginForm() {
           <Typography
             sx={{
               color: "#93C5FD",
-              fontSize: 17,
+              fontSize: { xs: 14, sm: 16, md: 17 },
               fontWeight: 500,
-              mb: 4.5,
+              mb: { xs: 3, sm: 4, md: 4.5 },
+
+              [compactLaptop]: {
+                fontSize: 15.5,
+                mb: 3,
+              },
             }}
           >
             Sign in to your InsightBoard account
@@ -730,6 +833,10 @@ export default function LoginForm() {
                 color: "#FEE2E2",
                 border: `1px solid ${alpha("#EF4444", 0.35)}`,
 
+                [compactLaptop]: {
+                  mb: 1.8,
+                },
+
                 "& .MuiAlert-icon": {
                   color: "#FCA5A5",
                 },
@@ -740,15 +847,27 @@ export default function LoginForm() {
             </Alert>
           )}
 
-          <Box sx={{ mb: 2.3 }}>
+          <Box
+            sx={{
+              mb: { xs: 1.7, sm: 2.1, md: 2.3 },
+
+              [compactLaptop]: {
+                mb: 1.6,
+              },
+            }}
+          >
             <Typography
               sx={{
-                mb: 1,
+                mb: { xs: 0.8, md: 1 },
                 color: "#93C5FD",
                 fontSize: 12.5,
                 fontWeight: 800,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
+
+                [compactLaptop]: {
+                  mb: 0.7,
+                },
               }}
             >
               Email Address
@@ -774,15 +893,27 @@ export default function LoginForm() {
             />
           </Box>
 
-          <Box sx={{ mb: 2.4 }}>
+          <Box
+            sx={{
+              mb: { xs: 1.8, sm: 2.1, md: 2.4 },
+
+              [compactLaptop]: {
+                mb: 1.7,
+              },
+            }}
+          >
             <Typography
               sx={{
-                mb: 1,
+                mb: { xs: 0.8, md: 1 },
                 color: "#93C5FD",
                 fontSize: 12.5,
                 fontWeight: 800,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
+
+                [compactLaptop]: {
+                  mb: 0.7,
+                },
               }}
             >
               Password
@@ -833,10 +964,15 @@ export default function LoginForm() {
           <Box
             sx={{
               display: "flex",
-              alignItems: "center",
+              flexDirection: { xs: "column", sm: "row" },
+              alignItems: { xs: "flex-start", sm: "center" },
               justifyContent: "space-between",
-              gap: 2,
-              mb: 4,
+              gap: { xs: 1.2, sm: 2 },
+              mb: { xs: 2.7, sm: 3.5, md: 4 },
+
+              [compactLaptop]: {
+                mb: 2.5,
+              },
             }}
           >
             <Box
@@ -847,7 +983,7 @@ export default function LoginForm() {
                 gap: 0.8,
                 cursor: "pointer",
                 color: "#93C5FD",
-                fontSize: 15,
+                fontSize: { xs: 14, md: 15 },
                 fontWeight: 600,
                 userSelect: "none",
               }}
@@ -875,7 +1011,7 @@ export default function LoginForm() {
                 minWidth: 0,
                 p: 0,
                 color: "#93C5FD",
-                fontSize: 15,
+                fontSize: { xs: 14, md: 15 },
                 fontWeight: 700,
                 textTransform: "none",
 
@@ -894,14 +1030,19 @@ export default function LoginForm() {
             fullWidth
             disabled={loading}
             sx={{
-              height: 58,
+              height: { xs: 52, sm: 56, md: 58 },
               borderRadius: "999px",
               textTransform: "none",
-              fontSize: 17,
+              fontSize: { xs: 15.5, sm: 16, md: 17 },
               fontWeight: 900,
               color: "#FFFFFF",
               background: "linear-gradient(135deg, #3B82F6, #6366F1)",
               boxShadow: "0 8px 28px rgba(59,130,246,0.35)",
+
+              [compactLaptop]: {
+                height: 52,
+                fontSize: 16,
+              },
 
               "&:hover": {
                 background: "linear-gradient(135deg, #2563EB, #4F46E5)",
