@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Alert,
   Box,
@@ -92,6 +92,8 @@ type ProjectFormData = {
   notes: string;
 };
 
+type ProjectFormErrors = Partial<Record<keyof ProjectFormData, string>>;
+
 type ProjectsResponse = {
   success?: boolean;
   message?: string;
@@ -135,6 +137,11 @@ const PAYMENT_STATUSES: PaymentStatus[] = [
   "Partially Paid",
   "Paid",
 ];
+
+const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
+
+const UNSAFE_TEXT_PATTERN =
+  /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
 
 const emptyForm: ProjectFormData = {
   clientId: "",
@@ -216,7 +223,7 @@ function getDealName(dealId?: ProjectDeal) {
   return "-";
 }
 
-function getId(value?: { _id: string } | string) {
+function getId(value?: { _id: string } | string | null) {
   if (!value) return "";
   return typeof value === "object" ? value._id : value;
 }
@@ -226,12 +233,166 @@ function getDateInputValue(date?: string) {
   return date.slice(0, 10);
 }
 
+function getTodayInputValue() {
+  const today = new Date();
+  const timezoneOffset = today.getTimezoneOffset() * 60_000;
+  return new Date(today.getTime() - timezoneOffset).toISOString().slice(0, 10);
+}
+
+function cleanText(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function hasUnsafeText(value: string) {
+  return UNSAFE_TEXT_PATTERN.test(value);
+}
+
+function isValidMoney(value: string) {
+  return MONEY_PATTERN.test(value.trim());
+}
+
+function isPastDate(value: string) {
+  const inputDate = new Date(value);
+
+  if (Number.isNaN(inputDate.getTime())) {
+    return true;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  inputDate.setHours(0, 0, 0, 0);
+
+  return inputDate < today;
+}
+
+function validateProjectForm(formData: ProjectFormData):
+  | {
+      isValid: true;
+      values: ProjectFormData;
+    }
+  | {
+      isValid: false;
+      errors: ProjectFormErrors;
+    } {
+  const errors: ProjectFormErrors = {};
+
+  const cleanedValues: ProjectFormData = {
+    clientId: formData.clientId.trim(),
+    dealId: formData.dealId.trim(),
+    name: cleanText(formData.name),
+    type: formData.type,
+    price: formData.price.trim(),
+    cost: formData.cost.trim() || "0",
+    deadline: formData.deadline.trim(),
+    status: formData.status,
+    paymentStatus: formData.paymentStatus,
+    description: cleanText(formData.description),
+    notes: cleanText(formData.notes),
+  };
+
+  if (!cleanedValues.clientId) {
+    errors.clientId = "Client is required";
+  }
+
+  if (!cleanedValues.name) {
+    errors.name = "Project name is required";
+  } else if (cleanedValues.name.length > 120) {
+    errors.name = "Project name cannot exceed 120 characters";
+  } else if (hasUnsafeText(cleanedValues.name)) {
+    errors.name = "Project name contains invalid characters";
+  }
+
+  if (!PROJECT_TYPES.includes(cleanedValues.type)) {
+    errors.type = "Invalid project type";
+  }
+
+  if (!cleanedValues.price) {
+    errors.price = "Price is required";
+  } else if (!isValidMoney(cleanedValues.price)) {
+    errors.price = "Price must be a valid number with up to 2 decimals";
+  } else if (Number(cleanedValues.price) <= 0) {
+    errors.price = "Price must be greater than 0";
+  }
+
+  if (!isValidMoney(cleanedValues.cost)) {
+    errors.cost = "Cost must be a valid number with up to 2 decimals";
+  } else if (Number(cleanedValues.cost) < 0) {
+    errors.cost = "Cost cannot be negative";
+  }
+
+  if (cleanedValues.deadline && isPastDate(cleanedValues.deadline)) {
+    errors.deadline = "Deadline cannot be in the past";
+  }
+
+  if (!PROJECT_STATUSES.includes(cleanedValues.status)) {
+    errors.status = "Invalid project status";
+  }
+
+  if (!PAYMENT_STATUSES.includes(cleanedValues.paymentStatus)) {
+    errors.paymentStatus = "Invalid payment status";
+  }
+
+  if (cleanedValues.description.length > 1000) {
+    errors.description = "Description cannot exceed 1000 characters";
+  } else if (
+    cleanedValues.description &&
+    hasUnsafeText(cleanedValues.description)
+  ) {
+    errors.description = "Description contains invalid characters";
+  }
+
+  if (cleanedValues.notes.length > 1000) {
+    errors.notes = "Notes cannot exceed 1000 characters";
+  } else if (cleanedValues.notes && hasUnsafeText(cleanedValues.notes)) {
+    errors.notes = "Notes contain invalid characters";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return {
+      isValid: false,
+      errors,
+    };
+  }
+
+  return {
+    isValid: true,
+    values: cleanedValues,
+  };
+}
+
+function getStatusChipColor(status: ProjectStatus) {
+  switch (status) {
+    case "Completed":
+      return "success";
+    case "In Progress":
+      return "primary";
+    case "Review":
+      return "warning";
+    case "Cancelled":
+      return "error";
+    default:
+      return "default";
+  }
+}
+
+function getPaymentChipColor(status: PaymentStatus) {
+  switch (status) {
+    case "Paid":
+      return "success";
+    case "Partially Paid":
+      return "warning";
+    default:
+      return "default";
+  }
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
 
   const [formData, setFormData] = useState<ProjectFormData>(emptyForm);
+  const [formErrors, setFormErrors] = useState<ProjectFormErrors>({});
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
 
@@ -241,6 +402,20 @@ export default function ProjectsPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const todayInputValue = getTodayInputValue();
+
+  const availableDeals = useMemo(() => {
+    return deals.filter((deal) => {
+      const isClosedWon = deal.status === "Closed Won";
+      const isSelectedDeal = deal._id === formData.dealId;
+      const dealClientId = getId(deal.clientId);
+      const belongsToSelectedClient =
+        !formData.clientId || !dealClientId || dealClientId === formData.clientId;
+
+      return (isClosedWon || isSelectedDeal) && belongsToSelectedClient;
+    });
+  }, [deals, formData.clientId, formData.dealId]);
 
   async function fetchData() {
     setLoading(true);
@@ -273,6 +448,7 @@ export default function ProjectsPage() {
   function handleCreateOpen() {
     setEditingProject(null);
     setFormData(emptyForm);
+    setFormErrors({});
     setOpenForm(true);
     setError("");
     setSuccess("");
@@ -287,7 +463,7 @@ export default function ProjectsPage() {
       name: project.name || "",
       type: project.type || "Business Website",
       price: String(project.price || ""),
-      cost: String(project.cost || 0),
+      cost: String(project.cost ?? 0),
       deadline: getDateInputValue(project.deadline),
       status: project.status || "Not Started",
       paymentStatus: project.paymentStatus || "Unpaid",
@@ -295,6 +471,7 @@ export default function ProjectsPage() {
       notes: project.notes || "",
     });
 
+    setFormErrors({});
     setOpenForm(true);
     setError("");
     setSuccess("");
@@ -304,6 +481,7 @@ export default function ProjectsPage() {
     setOpenForm(false);
     setEditingProject(null);
     setFormData(emptyForm);
+    setFormErrors({});
   }
 
   function updateFormField<K extends keyof ProjectFormData>(
@@ -314,62 +492,89 @@ export default function ProjectsPage() {
       ...current,
       [field]: value,
     }));
+
+    setFormErrors((current) => ({
+      ...current,
+      [field]: undefined,
+    }));
+  }
+
+  function handleClientSelect(clientId: string) {
+    const selectedDeal = deals.find((deal) => deal._id === formData.dealId);
+    const selectedDealClientId = getId(selectedDeal?.clientId);
+
+    setFormData((current) => ({
+      ...current,
+      clientId,
+      dealId:
+        selectedDealClientId && selectedDealClientId !== clientId
+          ? ""
+          : current.dealId,
+    }));
+
+    setFormErrors((current) => ({
+      ...current,
+      clientId: undefined,
+      dealId: undefined,
+    }));
   }
 
   function handleDealSelect(dealId: string) {
     const selectedDeal = deals.find((deal) => deal._id === dealId);
+    const selectedDealClientId = getId(selectedDeal?.clientId);
 
     setFormData((current) => ({
       ...current,
       dealId,
+      clientId: selectedDealClientId || current.clientId,
       name: selectedDeal?.title || current.name,
-      price: selectedDeal?.finalPrice
-        ? String(selectedDeal.finalPrice)
-        : selectedDeal?.estimatedBudget
-          ? String(selectedDeal.estimatedBudget)
-          : current.price,
+      price:
+        selectedDeal?.finalPrice !== undefined
+          ? String(selectedDeal.finalPrice)
+          : selectedDeal?.estimatedBudget !== undefined
+            ? String(selectedDeal.estimatedBudget)
+            : current.price,
+    }));
+
+    setFormErrors((current) => ({
+      ...current,
+      dealId: undefined,
+      clientId: undefined,
+      name: undefined,
+      price: undefined,
     }));
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!formData.clientId) {
-      setError("Client is required");
-      return;
-    }
+    const validation = validateProjectForm(formData);
 
-    if (!formData.dealId) {
-      setError("Deal is required");
-      return;
-    }
-
-    if (!formData.name.trim()) {
-      setError("Project name is required");
-      return;
-    }
-
-    if (!formData.price || Number(formData.price) <= 0) {
-      setError("Price must be greater than 0");
+    if (!validation.isValid) {
+      setFormErrors(validation.errors);
+      setError("Please fix the highlighted fields");
       return;
     }
 
     setSaving(true);
     setError("");
     setSuccess("");
+    setFormErrors({});
+
+    const values = validation.values;
 
     const payload = {
-      clientId: formData.clientId,
-      dealId: formData.dealId,
-      name: formData.name,
-      type: formData.type,
-      price: Number(formData.price),
-      cost: Number(formData.cost || 0),
-      deadline: formData.deadline || undefined,
-      status: formData.status,
-      paymentStatus: formData.paymentStatus,
-      description: formData.description,
-      notes: formData.notes,
+      clientId: values.clientId,
+      dealId: values.dealId,
+      name: values.name,
+      type: values.type,
+      price: Number(values.price),
+      cost: Number(values.cost || 0),
+      deadline: values.deadline,
+      status: values.status,
+      paymentStatus: values.paymentStatus,
+      description: values.description,
+      notes: values.notes,
     };
 
     try {
@@ -515,11 +720,19 @@ export default function ProjectsPage() {
                     <TableCell>{project.profit} BHD</TableCell>
 
                     <TableCell>
-                      <Chip label={project.status} size="small" />
+                      <Chip
+                        label={project.status}
+                        size="small"
+                        color={getStatusChipColor(project.status)}
+                      />
                     </TableCell>
 
                     <TableCell>
-                      <Chip label={project.paymentStatus} size="small" />
+                      <Chip
+                        label={project.paymentStatus}
+                        size="small"
+                        color={getPaymentChipColor(project.paymentStatus)}
+                      />
                     </TableCell>
 
                     <TableCell align="right">
@@ -564,16 +777,18 @@ export default function ProjectsPage() {
           </DialogTitle>
 
           <DialogContent>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
+            >
               <TextField
                 select
                 label="Client"
                 required
                 fullWidth
                 value={formData.clientId}
-                onChange={(event) =>
-                  updateFormField("clientId", event.target.value)
-                }
+                error={Boolean(formErrors.clientId)}
+                helperText={formErrors.clientId}
+                onChange={(event) => handleClientSelect(event.target.value)}
               >
                 {clients.map((client) => (
                   <MenuItem key={client._id} value={client._id}>
@@ -585,12 +800,18 @@ export default function ProjectsPage() {
               <TextField
                 select
                 label="Deal"
-                required
                 fullWidth
                 value={formData.dealId}
+                error={Boolean(formErrors.dealId)}
+                helperText={
+                  formErrors.dealId ||
+                  "Optional. Only Closed Won deals can be linked."
+                }
                 onChange={(event) => handleDealSelect(event.target.value)}
               >
-                {deals.map((deal) => (
+                <MenuItem value="">No linked deal</MenuItem>
+
+                {availableDeals.map((deal) => (
                   <MenuItem key={deal._id} value={deal._id}>
                     {deal.title}
                   </MenuItem>
@@ -602,6 +823,8 @@ export default function ProjectsPage() {
                 required
                 fullWidth
                 value={formData.name}
+                error={Boolean(formErrors.name)}
+                helperText={formErrors.name}
                 onChange={(event) =>
                   updateFormField("name", event.target.value)
                 }
@@ -612,6 +835,8 @@ export default function ProjectsPage() {
                 label="Project Type"
                 fullWidth
                 value={formData.type}
+                error={Boolean(formErrors.type)}
+                helperText={formErrors.type}
                 onChange={(event) =>
                   updateFormField("type", event.target.value as ProjectType)
                 }
@@ -636,9 +861,17 @@ export default function ProjectsPage() {
                   required
                   fullWidth
                   value={formData.price}
+                  error={Boolean(formErrors.price)}
+                  helperText={formErrors.price}
                   onChange={(event) =>
                     updateFormField("price", event.target.value)
                   }
+                  slotProps={{
+                    htmlInput: {
+                      step: "0.01",
+                      min: "0",
+                    },
+                  }}
                 />
 
                 <TextField
@@ -646,9 +879,17 @@ export default function ProjectsPage() {
                   type="number"
                   fullWidth
                   value={formData.cost}
+                  error={Boolean(formErrors.cost)}
+                  helperText={formErrors.cost}
                   onChange={(event) =>
                     updateFormField("cost", event.target.value)
                   }
+                  slotProps={{
+                    htmlInput: {
+                      step: "0.01",
+                      min: "0",
+                    },
+                  }}
                 />
               </Box>
 
@@ -664,6 +905,8 @@ export default function ProjectsPage() {
                   label="Status"
                   fullWidth
                   value={formData.status}
+                  error={Boolean(formErrors.status)}
+                  helperText={formErrors.status}
                   onChange={(event) =>
                     updateFormField(
                       "status",
@@ -683,6 +926,8 @@ export default function ProjectsPage() {
                   label="Payment Status"
                   fullWidth
                   value={formData.paymentStatus}
+                  error={Boolean(formErrors.paymentStatus)}
+                  helperText={formErrors.paymentStatus}
                   onChange={(event) =>
                     updateFormField(
                       "paymentStatus",
@@ -703,12 +948,17 @@ export default function ProjectsPage() {
                 type="date"
                 fullWidth
                 value={formData.deadline}
+                error={Boolean(formErrors.deadline)}
+                helperText={formErrors.deadline}
                 onChange={(event) =>
                   updateFormField("deadline", event.target.value)
                 }
                 slotProps={{
                   inputLabel: {
                     shrink: true,
+                  },
+                  htmlInput: {
+                    min: todayInputValue,
                   },
                 }}
               />
@@ -719,6 +969,8 @@ export default function ProjectsPage() {
                 multiline
                 minRows={3}
                 value={formData.description}
+                error={Boolean(formErrors.description)}
+                helperText={formErrors.description}
                 onChange={(event) =>
                   updateFormField("description", event.target.value)
                 }
@@ -730,6 +982,8 @@ export default function ProjectsPage() {
                 multiline
                 minRows={3}
                 value={formData.notes}
+                error={Boolean(formErrors.notes)}
+                helperText={formErrors.notes}
                 onChange={(event) =>
                   updateFormField("notes", event.target.value)
                 }
