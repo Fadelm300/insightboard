@@ -53,6 +53,7 @@ const PAYMENT_STATUSES: PaymentStatus[] = [
 ];
 
 const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const UNSAFE_TEXT_PATTERN =
   /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
@@ -62,7 +63,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function getString(value: unknown) {
-  if (typeof value !== "string" && typeof value !== "number") return "";
+  if (value === undefined || value === null) return "";
   return String(value).trim();
 }
 
@@ -83,14 +84,21 @@ function parseMoney(value: unknown) {
   return Number(getString(value));
 }
 
+function isValidDateInput(value: string) {
+  if (!DATE_PATTERN.test(value)) return false;
+
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+
+  return date.toISOString().slice(0, 10) === value;
+}
+
 function isPastDate(value: string) {
-  const inputDate = new Date(value);
+  if (!isValidDateInput(value)) return true;
 
-  if (Number.isNaN(inputDate.getTime())) {
-    return true;
-  }
-
+  const inputDate = new Date(`${value}T00:00:00`);
   const today = new Date();
+
   today.setHours(0, 0, 0, 0);
   inputDate.setHours(0, 0, 0, 0);
 
@@ -161,19 +169,58 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid request body", 400);
     }
 
-    const clientId = getString(body.clientId || existingProject.clientId);
-    const dealId = getString(body.dealId);
-    const name = cleanText(body.name || existingProject.name);
-    const type = getString(body.type || existingProject.type) as ProjectType;
-    const status = getString(
-      body.status || existingProject.status
-    ) as ProjectStatus;
-    const paymentStatus = getString(
-      body.paymentStatus || existingProject.paymentStatus
-    ) as PaymentStatus;
-    const description = cleanText(body.description);
-    const notes = cleanText(body.notes);
-    const deadline = getString(body.deadline);
+    const clientId =
+      body.clientId === undefined || body.clientId === null
+        ? String(existingProject.clientId)
+        : getString(body.clientId);
+
+    const hasDealIdField = Object.prototype.hasOwnProperty.call(body, "dealId");
+    const hasDeadlineField = Object.prototype.hasOwnProperty.call(
+      body,
+      "deadline"
+    );
+
+    const dealId = hasDealIdField
+      ? getString(body.dealId)
+      : existingProject.dealId
+        ? String(existingProject.dealId)
+        : "";
+
+    const name =
+      body.name === undefined || body.name === null
+        ? cleanText(existingProject.name)
+        : cleanText(body.name);
+
+    const type =
+      body.type === undefined || body.type === null
+        ? (existingProject.type as ProjectType)
+        : (getString(body.type) as ProjectType);
+
+    const status =
+      body.status === undefined || body.status === null
+        ? (existingProject.status as ProjectStatus)
+        : (getString(body.status) as ProjectStatus);
+
+    const paymentStatus =
+      body.paymentStatus === undefined || body.paymentStatus === null
+        ? (existingProject.paymentStatus as PaymentStatus)
+        : (getString(body.paymentStatus) as PaymentStatus);
+
+    const description =
+      body.description === undefined || body.description === null
+        ? cleanText(existingProject.description || "")
+        : cleanText(body.description);
+
+    const notes =
+      body.notes === undefined || body.notes === null
+        ? cleanText(existingProject.notes || "")
+        : cleanText(body.notes);
+
+    const deadline = hasDeadlineField
+      ? getString(body.deadline)
+      : existingProject.deadline
+        ? new Date(existingProject.deadline).toISOString().slice(0, 10)
+        : "";
 
     if (!clientId) {
       return errorResponse("Client is required", 400);
@@ -315,11 +362,11 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
     const unsetPayload: Record<string, string> = {};
 
-    if (!dealId) {
+    if (hasDealIdField && !dealId) {
       unsetPayload.dealId = "";
     }
 
-    if (!deadline) {
+    if (hasDeadlineField && !deadline) {
       unsetPayload.deadline = "";
     }
 

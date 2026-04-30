@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -73,6 +73,8 @@ type ExpenseFormData = {
   notes: string;
 };
 
+type ExpenseFormErrors = Partial<Record<keyof ExpenseFormData, string>>;
+
 type ExpensesResponse = {
   success?: boolean;
   message?: string;
@@ -107,12 +109,27 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Other",
 ];
 
+const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
+
+const UNSAFE_TEXT_PATTERN =
+  /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[<>{}\[\]`$|\\]/i;
+
+function getTodayInputValue() {
+  const today = new Date();
+
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 const emptyForm: ExpenseFormData = {
   projectId: "",
   title: "",
   amount: "",
   category: "Hosting",
-  date: "",
+  date: getTodayInputValue(),
   description: "",
   notes: "",
 };
@@ -164,14 +181,138 @@ function getProjectName(projectId: ExpenseProject) {
   return "-";
 }
 
-function getDateInputValue(date?: string) {
+function formatDateToInputValue(date?: string) {
   if (!date) return "";
-  return date.slice(0, 10);
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  const year = parsedDate.getFullYear();
+  const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
+  const day = String(parsedDate.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function formatDate(date?: string) {
-  if (!date) return "-";
-  return new Date(date).toLocaleDateString();
+  return formatDateToInputValue(date) || "-";
+}
+
+function cleanText(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function hasUnsafeText(value: string) {
+  return UNSAFE_TEXT_PATTERN.test(value);
+}
+
+function isValidMoney(value: string) {
+  return MONEY_PATTERN.test(value.trim());
+}
+
+function isValidDate(value: string) {
+  if (!value) return true;
+
+  const parsedDate = new Date(value);
+
+  return !Number.isNaN(parsedDate.getTime());
+}
+
+function isFutureDate(value: string) {
+  if (!isValidDate(value)) return true;
+
+  const inputDate = new Date(value);
+  const today = new Date();
+
+  today.setHours(0, 0, 0, 0);
+  inputDate.setHours(0, 0, 0, 0);
+
+  return inputDate > today;
+}
+
+function validateExpenseForm(
+  formData: ExpenseFormData,
+  isEditing: boolean
+):
+  | {
+      isValid: true;
+      values: ExpenseFormData;
+    }
+  | {
+      isValid: false;
+      errors: ExpenseFormErrors;
+    } {
+  const errors: ExpenseFormErrors = {};
+
+  const cleanedValues: ExpenseFormData = {
+    projectId: formData.projectId.trim(),
+    title: cleanText(formData.title),
+    amount: formData.amount.trim(),
+    category: formData.category,
+    date: formData.date.trim(),
+    description: cleanText(formData.description),
+    notes: cleanText(formData.notes),
+  };
+
+  if (!isEditing && !cleanedValues.projectId) {
+    errors.projectId = "Project is required";
+  }
+
+  if (!cleanedValues.title) {
+    errors.title = "Title is required";
+  } else if (cleanedValues.title.length > 120) {
+    errors.title = "Title cannot exceed 120 characters";
+  } else if (hasUnsafeText(cleanedValues.title)) {
+    errors.title = "Title contains invalid characters";
+  }
+
+  if (!cleanedValues.amount) {
+    errors.amount = "Amount is required";
+  } else if (!isValidMoney(cleanedValues.amount)) {
+    errors.amount = "Amount must be a valid number with up to 2 decimals";
+  } else if (Number(cleanedValues.amount) <= 0) {
+    errors.amount = "Amount must be greater than 0";
+  }
+
+  if (!EXPENSE_CATEGORIES.includes(cleanedValues.category)) {
+    errors.category = "Invalid expense category";
+  }
+
+  if (cleanedValues.date && !isValidDate(cleanedValues.date)) {
+    errors.date = "Invalid expense date";
+  } else if (cleanedValues.date && isFutureDate(cleanedValues.date)) {
+    errors.date = "Expense date cannot be in the future";
+  }
+
+  if (cleanedValues.description.length > 1000) {
+    errors.description = "Description cannot exceed 1000 characters";
+  } else if (
+    cleanedValues.description &&
+    hasUnsafeText(cleanedValues.description)
+  ) {
+    errors.description = "Description contains invalid characters";
+  }
+
+  if (cleanedValues.notes.length > 1000) {
+    errors.notes = "Notes cannot exceed 1000 characters";
+  } else if (cleanedValues.notes && hasUnsafeText(cleanedValues.notes)) {
+    errors.notes = "Notes contain invalid characters";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return {
+      isValid: false,
+      errors,
+    };
+  }
+
+  return {
+    isValid: true,
+    values: cleanedValues,
+  };
 }
 
 export default function ExpensesPage() {
@@ -179,6 +320,7 @@ export default function ExpensesPage() {
   const [projects, setProjects] = useState<Project[]>([]);
 
   const [formData, setFormData] = useState<ExpenseFormData>(emptyForm);
+  const [formErrors, setFormErrors] = useState<ExpenseFormErrors>({});
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
 
@@ -216,7 +358,11 @@ export default function ExpensesPage() {
 
   function handleCreateOpen() {
     setEditingExpense(null);
-    setFormData(emptyForm);
+    setFormData({
+      ...emptyForm,
+      date: getTodayInputValue(),
+    });
+    setFormErrors({});
     setOpenForm(true);
     setError("");
     setSuccess("");
@@ -230,11 +376,12 @@ export default function ExpensesPage() {
       title: item.title || "",
       amount: String(item.amount || ""),
       category: item.category || "Hosting",
-      date: getDateInputValue(item.date),
+      date: formatDateToInputValue(item.date) || getTodayInputValue(),
       description: item.description || "",
       notes: item.notes || "",
     });
 
+    setFormErrors({});
     setOpenForm(true);
     setError("");
     setSuccess("");
@@ -243,7 +390,11 @@ export default function ExpensesPage() {
   function handleFormClose() {
     setOpenForm(false);
     setEditingExpense(null);
-    setFormData(emptyForm);
+    setFormData({
+      ...emptyForm,
+      date: getTodayInputValue(),
+    });
+    setFormErrors({});
   }
 
   function updateFormField<K extends keyof ExpenseFormData>(
@@ -254,47 +405,48 @@ export default function ExpensesPage() {
       ...current,
       [field]: value,
     }));
+
+    setFormErrors((current) => ({
+      ...current,
+      [field]: undefined,
+    }));
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!editingExpense && !formData.projectId) {
-      setError("Project is required");
-      return;
-    }
+    const validation = validateExpenseForm(formData, Boolean(editingExpense));
 
-    if (!formData.title.trim()) {
-      setError("Title is required");
-      return;
-    }
-
-    if (!formData.amount || Number(formData.amount) <= 0) {
-      setError("Amount must be greater than 0");
+    if (!validation.isValid) {
+      setFormErrors(validation.errors);
+      setError("Please fix the highlighted fields");
       return;
     }
 
     setSaving(true);
     setError("");
     setSuccess("");
+    setFormErrors({});
+
+    const values = validation.values;
 
     const createPayload = {
-      projectId: formData.projectId,
-      title: formData.title,
-      amount: Number(formData.amount),
-      category: formData.category,
-      date: formData.date || undefined,
-      description: formData.description,
-      notes: formData.notes,
+      projectId: values.projectId,
+      title: values.title,
+      amount: Number(values.amount),
+      category: values.category,
+      date: values.date || undefined,
+      description: values.description,
+      notes: values.notes,
     };
 
     const updatePayload = {
-      title: formData.title,
-      amount: Number(formData.amount),
-      category: formData.category,
-      date: formData.date || undefined,
-      description: formData.description,
-      notes: formData.notes,
+      title: values.title,
+      amount: Number(values.amount),
+      category: values.category,
+      date: values.date || undefined,
+      description: values.description,
+      notes: values.notes,
     };
 
     try {
@@ -497,6 +649,8 @@ export default function ExpensesPage() {
                 fullWidth
                 disabled={Boolean(editingExpense)}
                 value={formData.projectId}
+                error={Boolean(formErrors.projectId)}
+                helperText={formErrors.projectId}
                 onChange={(event) =>
                   updateFormField("projectId", event.target.value)
                 }
@@ -513,6 +667,8 @@ export default function ExpensesPage() {
                 required
                 fullWidth
                 value={formData.title}
+                error={Boolean(formErrors.title)}
+                helperText={formErrors.title}
                 onChange={(event) =>
                   updateFormField("title", event.target.value)
                 }
@@ -524,9 +680,17 @@ export default function ExpensesPage() {
                 required
                 fullWidth
                 value={formData.amount}
+                error={Boolean(formErrors.amount)}
+                helperText={formErrors.amount}
                 onChange={(event) =>
                   updateFormField("amount", event.target.value)
                 }
+                slotProps={{
+                  htmlInput: {
+                    min: "0.01",
+                    step: "0.01",
+                  },
+                }}
               />
 
               <TextField
@@ -534,6 +698,8 @@ export default function ExpensesPage() {
                 label="Category"
                 fullWidth
                 value={formData.category}
+                error={Boolean(formErrors.category)}
+                helperText={formErrors.category}
                 onChange={(event) =>
                   updateFormField(
                     "category",
@@ -553,12 +719,17 @@ export default function ExpensesPage() {
                 type="date"
                 fullWidth
                 value={formData.date}
+                error={Boolean(formErrors.date)}
+                helperText={formErrors.date}
                 onChange={(event) =>
                   updateFormField("date", event.target.value)
                 }
                 slotProps={{
                   inputLabel: {
                     shrink: true,
+                  },
+                  htmlInput: {
+                    max: getTodayInputValue(),
                   },
                 }}
               />
@@ -569,6 +740,8 @@ export default function ExpensesPage() {
                 multiline
                 minRows={3}
                 value={formData.description}
+                error={Boolean(formErrors.description)}
+                helperText={formErrors.description}
                 onChange={(event) =>
                   updateFormField("description", event.target.value)
                 }
@@ -580,6 +753,8 @@ export default function ExpensesPage() {
                 multiline
                 minRows={3}
                 value={formData.notes}
+                error={Boolean(formErrors.notes)}
+                helperText={formErrors.notes}
                 onChange={(event) =>
                   updateFormField("notes", event.target.value)
                 }
