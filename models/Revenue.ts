@@ -17,6 +17,7 @@ const RevenueSchema = new Schema(
     amount: {
       type: Number,
       required: true,
+      min: 0.01,
     },
 
     paymentDate: {
@@ -33,11 +34,13 @@ const RevenueSchema = new Schema(
     description: {
       type: String,
       trim: true,
+      maxlength: 1000,
     },
 
     notes: {
       type: String,
       trim: true,
+      maxlength: 1000,
     },
   },
   {

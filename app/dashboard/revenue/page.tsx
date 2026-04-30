@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Alert,
   Box,
@@ -73,6 +73,8 @@ type RevenueFormData = {
   notes: string;
 };
 
+type RevenueFormErrors = Partial<Record<keyof RevenueFormData, string>>;
+
 type RevenueResponse = {
   success?: boolean;
   message?: string;
@@ -105,10 +107,25 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   "Other",
 ];
 
+const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
+
+const UNSAFE_TEXT_PATTERN =
+  /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
+
+function getTodayInputValue() {
+  const today = new Date();
+
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 const emptyForm: RevenueFormData = {
   projectId: "",
   amount: "",
-  paymentDate: "",
+  paymentDate: getTodayInputValue(),
   paymentMethod: "BenefitPay",
   description: "",
   notes: "",
@@ -169,14 +186,133 @@ function getClientName(clientId?: RevenueClient) {
   return "-";
 }
 
-function getDateInputValue(date?: string) {
+function formatDateToInputValue(date?: string) {
   if (!date) return "";
-  return date.slice(0, 10);
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  const year = parsedDate.getFullYear();
+  const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
+  const day = String(parsedDate.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function formatDate(date?: string) {
-  if (!date) return "-";
-  return new Date(date).toLocaleDateString();
+  const formattedDate = formatDateToInputValue(date);
+  return formattedDate || "-";
+}
+
+function cleanText(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function hasUnsafeText(value: string) {
+  return UNSAFE_TEXT_PATTERN.test(value);
+}
+
+function isValidMoney(value: string) {
+  return MONEY_PATTERN.test(value.trim());
+}
+
+function isValidDate(value: string) {
+  if (!value) return true;
+
+  const parsedDate = new Date(value);
+  return !Number.isNaN(parsedDate.getTime());
+}
+
+function isFutureDate(value: string) {
+  const inputDate = new Date(value);
+
+  if (Number.isNaN(inputDate.getTime())) {
+    return true;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  inputDate.setHours(0, 0, 0, 0);
+
+  return inputDate > today;
+}
+
+function validateRevenueForm(
+  formData: RevenueFormData
+):
+  | {
+      isValid: true;
+      values: RevenueFormData;
+    }
+  | {
+      isValid: false;
+      errors: RevenueFormErrors;
+    } {
+  const errors: RevenueFormErrors = {};
+
+  const cleanedValues: RevenueFormData = {
+    projectId: formData.projectId.trim(),
+    amount: formData.amount.trim(),
+    paymentDate: formData.paymentDate.trim(),
+    paymentMethod: formData.paymentMethod,
+    description: cleanText(formData.description),
+    notes: cleanText(formData.notes),
+  };
+
+  if (!cleanedValues.projectId) {
+    errors.projectId = "Project is required";
+  }
+
+  if (!cleanedValues.amount) {
+    errors.amount = "Amount is required";
+  } else if (!isValidMoney(cleanedValues.amount)) {
+    errors.amount = "Amount must be a valid number with up to 2 decimals";
+  } else if (Number(cleanedValues.amount) <= 0) {
+    errors.amount = "Amount must be greater than 0";
+  }
+
+  if (!PAYMENT_METHODS.includes(cleanedValues.paymentMethod)) {
+    errors.paymentMethod = "Invalid payment method";
+  }
+
+  if (cleanedValues.paymentDate && !isValidDate(cleanedValues.paymentDate)) {
+    errors.paymentDate = "Invalid payment date";
+  } else if (
+    cleanedValues.paymentDate &&
+    isFutureDate(cleanedValues.paymentDate)
+  ) {
+    errors.paymentDate = "Payment date cannot be in the future";
+  }
+
+  if (cleanedValues.description.length > 1000) {
+    errors.description = "Description cannot exceed 1000 characters";
+  } else if (
+    cleanedValues.description &&
+    hasUnsafeText(cleanedValues.description)
+  ) {
+    errors.description = "Description contains invalid characters";
+  }
+
+  if (cleanedValues.notes.length > 1000) {
+    errors.notes = "Notes cannot exceed 1000 characters";
+  } else if (cleanedValues.notes && hasUnsafeText(cleanedValues.notes)) {
+    errors.notes = "Notes contain invalid characters";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return {
+      isValid: false,
+      errors,
+    };
+  }
+
+  return {
+    isValid: true,
+    values: cleanedValues,
+  };
 }
 
 export default function RevenuePage() {
@@ -184,6 +320,7 @@ export default function RevenuePage() {
   const [projects, setProjects] = useState<Project[]>([]);
 
   const [formData, setFormData] = useState<RevenueFormData>(emptyForm);
+  const [formErrors, setFormErrors] = useState<RevenueFormErrors>({});
   const [editingRevenue, setEditingRevenue] = useState<Revenue | null>(null);
   const [deleteRevenue, setDeleteRevenue] = useState<Revenue | null>(null);
 
@@ -221,7 +358,11 @@ export default function RevenuePage() {
 
   function handleCreateOpen() {
     setEditingRevenue(null);
-    setFormData(emptyForm);
+    setFormData({
+      ...emptyForm,
+      paymentDate: getTodayInputValue(),
+    });
+    setFormErrors({});
     setOpenForm(true);
     setError("");
     setSuccess("");
@@ -233,12 +374,14 @@ export default function RevenuePage() {
     setFormData({
       projectId: getId(item.projectId),
       amount: String(item.amount || ""),
-      paymentDate: getDateInputValue(item.paymentDate),
+      paymentDate:
+        formatDateToInputValue(item.paymentDate) || getTodayInputValue(),
       paymentMethod: item.paymentMethod || "BenefitPay",
       description: item.description || "",
       notes: item.notes || "",
     });
 
+    setFormErrors({});
     setOpenForm(true);
     setError("");
     setSuccess("");
@@ -247,7 +390,11 @@ export default function RevenuePage() {
   function handleFormClose() {
     setOpenForm(false);
     setEditingRevenue(null);
-    setFormData(emptyForm);
+    setFormData({
+      ...emptyForm,
+      paymentDate: getTodayInputValue(),
+    });
+    setFormErrors({});
   }
 
   function updateFormField<K extends keyof RevenueFormData>(
@@ -258,40 +405,46 @@ export default function RevenuePage() {
       ...current,
       [field]: value,
     }));
+
+    setFormErrors((current) => ({
+      ...current,
+      [field]: undefined,
+    }));
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!editingRevenue && !formData.projectId) {
-      setError("Project is required");
-      return;
-    }
+    const validation = validateRevenueForm(formData);
 
-    if (!formData.amount || Number(formData.amount) <= 0) {
-      setError("Amount must be greater than 0");
+    if (!validation.isValid) {
+      setFormErrors(validation.errors);
+      setError("Please fix the highlighted fields");
       return;
     }
 
     setSaving(true);
     setError("");
     setSuccess("");
+    setFormErrors({});
+
+    const values = validation.values;
 
     const createPayload = {
-      projectId: formData.projectId,
-      amount: Number(formData.amount),
-      paymentDate: formData.paymentDate || undefined,
-      paymentMethod: formData.paymentMethod,
-      description: formData.description,
-      notes: formData.notes,
+      projectId: values.projectId,
+      amount: Number(values.amount),
+      paymentDate: values.paymentDate || undefined,
+      paymentMethod: values.paymentMethod,
+      description: values.description,
+      notes: values.notes,
     };
 
     const updatePayload = {
-      amount: Number(formData.amount),
-      paymentDate: formData.paymentDate || undefined,
-      paymentMethod: formData.paymentMethod,
-      description: formData.description,
-      notes: formData.notes,
+      amount: Number(values.amount),
+      paymentDate: values.paymentDate || undefined,
+      paymentMethod: values.paymentMethod,
+      description: values.description,
+      notes: values.notes,
     };
 
     try {
@@ -494,6 +647,8 @@ export default function RevenuePage() {
                 fullWidth
                 disabled={Boolean(editingRevenue)}
                 value={formData.projectId}
+                error={Boolean(formErrors.projectId)}
+                helperText={formErrors.projectId}
                 onChange={(event) =>
                   updateFormField("projectId", event.target.value)
                 }
@@ -511,9 +666,17 @@ export default function RevenuePage() {
                 required
                 fullWidth
                 value={formData.amount}
+                error={Boolean(formErrors.amount)}
+                helperText={formErrors.amount}
                 onChange={(event) =>
                   updateFormField("amount", event.target.value)
                 }
+                slotProps={{
+                  htmlInput: {
+                    step: "0.01",
+                    min: "0.01",
+                  },
+                }}
               />
 
               <TextField
@@ -521,6 +684,8 @@ export default function RevenuePage() {
                 label="Payment Method"
                 fullWidth
                 value={formData.paymentMethod}
+                error={Boolean(formErrors.paymentMethod)}
+                helperText={formErrors.paymentMethod}
                 onChange={(event) =>
                   updateFormField(
                     "paymentMethod",
@@ -540,12 +705,17 @@ export default function RevenuePage() {
                 type="date"
                 fullWidth
                 value={formData.paymentDate}
+                error={Boolean(formErrors.paymentDate)}
+                helperText={formErrors.paymentDate}
                 onChange={(event) =>
                   updateFormField("paymentDate", event.target.value)
                 }
                 slotProps={{
                   inputLabel: {
                     shrink: true,
+                  },
+                  htmlInput: {
+                    max: getTodayInputValue(),
                   },
                 }}
               />
@@ -556,6 +726,8 @@ export default function RevenuePage() {
                 multiline
                 minRows={3}
                 value={formData.description}
+                error={Boolean(formErrors.description)}
+                helperText={formErrors.description}
                 onChange={(event) =>
                   updateFormField("description", event.target.value)
                 }
@@ -567,6 +739,8 @@ export default function RevenuePage() {
                 multiline
                 minRows={3}
                 value={formData.notes}
+                error={Boolean(formErrors.notes)}
+                helperText={formErrors.notes}
                 onChange={(event) =>
                   updateFormField("notes", event.target.value)
                 }
