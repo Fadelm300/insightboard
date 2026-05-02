@@ -69,10 +69,10 @@ type ApiObjectResponse<T> = {
 };
 
 const icons = [
-  <PeopleIcon color="primary" key="clients" />,
-  <HandshakeIcon color="primary" key="deals" />,
-  <PaymentsIcon color="primary" key="revenue" />,
-  <TrendingUpIcon color="primary" key="profit" />,
+  <PeopleIcon key="clients" />,
+  <HandshakeIcon key="deals" />,
+  <PaymentsIcon key="revenue" />,
+  <TrendingUpIcon key="profit" />,
 ];
 
 const emptySummary: FinanceSummary = {
@@ -189,21 +189,29 @@ export default function DashboardPage() {
       title: "Total Clients",
       value: String(clients.length),
       helperText: "Active CRM clients",
+      icon: icons[0],
+      tone: "primary" as const,
     },
     {
       title: "Active Deals",
       value: String(activeDealsCount),
       helperText: "Open sales opportunities",
+      icon: icons[1],
+      tone: "info" as const,
     },
     {
       title: "Monthly Revenue",
       value: formatMoney(latestMonthRevenue),
       helperText: "Latest recorded month",
+      icon: icons[2],
+      tone: "success" as const,
     },
     {
       title: "Total Profit",
       value: formatMoney(summary.netProfit),
       helperText: `${pendingPaymentsCount} pending payments`,
+      icon: icons[3],
+      tone: summary.netProfit >= 0 ? ("success" as const) : ("error" as const),
     },
   ];
 
@@ -215,6 +223,7 @@ export default function DashboardPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          color: "text.primary",
         }}
       >
         <CircularProgress />
@@ -224,13 +233,13 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-        Dashboard
-      </Typography>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4">Dashboard</Typography>
 
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        Overview of your web design business performance.
-      </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+          Overview of your web design business performance.
+        </Typography>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError("")}>
@@ -239,13 +248,14 @@ export default function DashboardPage() {
       )}
 
       <Grid container spacing={3}>
-        {dashboardStats.map((stat, index) => (
+        {dashboardStats.map((stat) => (
           <Grid key={stat.title} size={{ xs: 12, sm: 6, md: 3 }}>
             <KPIBox
               title={stat.title}
               value={stat.value}
-              icon={icons[index]}
+              icon={stat.icon}
               helperText={stat.helperText}
+              tone={stat.tone}
             />
           </Grid>
         ))}
@@ -257,23 +267,19 @@ export default function DashboardPage() {
         <Grid size={{ xs: 12, md: 4 }}>
           <RevenueSummary />
         </Grid>
-      </Grid>
 
-      <Box sx={{ mt: 4 }}>
-        <Grid container spacing={3}>
-          <Grid size={{ xs: 12, lg: 8 }}>
-            <RevenueChart />
-          </Grid>
-
-          <Grid size={{ xs: 12, lg: 4 }}>
-            <ProjectStatusChart />
-          </Grid>
-
-          <Grid size={{ xs: 12 }}>
-            <DealsPipelineChart />
-          </Grid>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <RevenueChart />
         </Grid>
-      </Box>
+
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <ProjectStatusChart />
+        </Grid>
+
+        <Grid size={{ xs: 12 }}>
+          <DealsPipelineChart />
+        </Grid>
+      </Grid>
     </Box>
   );
 }

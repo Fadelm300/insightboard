@@ -10,6 +10,7 @@ import {
   Divider,
   Typography,
 } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 
 import { apiFetch } from "@/lib/apiClient";
 
@@ -52,6 +53,8 @@ function formatCurrency(value?: number) {
 }
 
 export default function RevenueSummary() {
+  const theme = useTheme();
+
   const [summary, setSummary] = useState<FinanceSummary>({
     totalRevenue: 0,
     totalExpenses: 0,
@@ -86,6 +89,10 @@ export default function RevenueSummary() {
     fetchSummary();
   }, []);
 
+  const netProfit = Number(summary.netProfit ?? 0);
+  const profitColor =
+    netProfit >= 0 ? theme.palette.success.main : theme.palette.error.main;
+
   const summaryItems = [
     {
       label: "Total Revenue",
@@ -98,6 +105,7 @@ export default function RevenueSummary() {
     {
       label: "Net Profit",
       value: formatCurrency(summary.netProfit),
+      highlight: true,
     },
     {
       label: "Revenue Records",
@@ -110,17 +118,14 @@ export default function RevenueSummary() {
   ];
 
   return (
-    <Card
-      sx={{
-        borderRadius: 3,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
-        height: "100%",
-      }}
-    >
-      <CardContent>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-          Revenue Summary
-        </Typography>
+    <Card sx={{ height: "100%" }}>
+      <CardContent sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h6">Revenue Summary</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+            Financial snapshot across revenue and expenses.
+          </Typography>
+        </Box>
 
         {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
@@ -142,16 +147,28 @@ export default function RevenueSummary() {
                 sx={{
                   display: "flex",
                   justifyContent: "space-between",
-                  py: 1.5,
+                  alignItems: "center",
+                  py: 1.55,
+                  px: item.highlight ? 1.2 : 0,
                   gap: 2,
+                  borderRadius: 2,
+                  bgcolor: item.highlight
+                    ? alpha(profitColor, theme.palette.mode === "dark" ? 0.14 : 0.08)
+                    : "transparent",
                 }}
               >
-                <Typography color="text.secondary">{item.label}</Typography>
+                <Typography
+                  color="text.secondary"
+                  sx={{ fontWeight: item.highlight ? 800 : 650 }}
+                >
+                  {item.label}
+                </Typography>
 
                 <Typography
                   sx={{
-                    fontWeight: 700,
+                    fontWeight: 900,
                     textAlign: "right",
+                    color: item.highlight ? profitColor : "text.primary",
                   }}
                 >
                   {item.value}

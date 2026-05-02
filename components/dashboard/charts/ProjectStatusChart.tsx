@@ -9,16 +9,17 @@ import {
   CircularProgress,
   Typography,
 } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import {
   Cell,
   Legend,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
 } from "recharts";
 
 import { apiFetch } from "@/lib/apiClient";
+import MeasuredChartBox from "@/components/dashboard/charts/MeasuredChartBox";
 
 type Project = {
   _id: string;
@@ -40,15 +41,6 @@ type ProjectsResponse = {
   items?: Project[];
   records?: Project[];
 };
-
-const STATUS_COLORS = [
-  "#7ea6cd",
-  "#eda202",
-  "#20c4e5",
-  "#27b052",
-  "#d32f2f",
-  "#6b7280",
-];
 
 const STATUS_ORDER = [
   "Not Started",
@@ -73,7 +65,18 @@ function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   return [];
 }
 
+function getStatusColor(status: string) {
+  if (status === "Completed") return "#10B981";
+  if (status === "In Progress") return "#0EA5E9";
+  if (status === "Review") return "#F59E0B";
+  if (status === "Cancelled") return "#EF4444";
+  if (status === "Not Started") return "#64748B";
+  return "#8B5CF6";
+}
+
 export default function ProjectStatusChart() {
+  const theme = useTheme();
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -108,22 +111,20 @@ export default function ProjectStatusChart() {
     return STATUS_ORDER.map((status) => ({
       name: status,
       value: counts[status] || 0,
+      color: getStatusColor(status),
     })).filter((item) => item.value > 0);
   }, [projects]);
 
   return (
-    <Card
-      sx={{
-        borderRadius: 3,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
-        height: "100%",
-        minWidth: 0,
-      }}
-    >
-      <CardContent sx={{ minWidth: 0 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-          Project Status
-        </Typography>
+    <Card sx={{ height: "100%", minWidth: 0 }}>
+      <CardContent sx={{ p: 2.5, minWidth: 0 }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h6">Project Status</Typography>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+            Project distribution by current delivery state.
+          </Typography>
+        </Box>
 
         {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
@@ -142,36 +143,85 @@ export default function ProjectStatusChart() {
         )}
 
         {!loading && !error && chartData.length > 0 && (
-          <Box
-            sx={{
-              width: "100%",
-              height: 300,
-              minWidth: 0,
-              minHeight: 300,
-            }}
-          >
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  dataKey="value"
-                  nameKey="name"
-                  outerRadius={95}
-                  label
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell
-                      key={entry.name}
-                      fill={STATUS_COLORS[index % STATUS_COLORS.length]}
-                    />
-                  ))}
-                </Pie>
+          <MeasuredChartBox height={330}>
+            {({ width, height }) => (
+              <Box
+                sx={{
+                  position: "relative",
+                  width,
+                  height,
+                }}
+              >
+                <PieChart width={width} height={height}>
+                  <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={62}
+                    outerRadius={104}
+                    paddingAngle={4}
+                    labelLine={false}
+                    label={({ value }) => value}
+                  >
+                    {chartData.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={entry.color}
+                        stroke={theme.palette.background.paper}
+                        strokeWidth={3}
+                      />
+                    ))}
+                  </Pie>
 
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Box>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: theme.palette.background.paper,
+                      border: `1px solid ${theme.palette.divider}`,
+                      borderRadius: 14,
+                      boxShadow:
+                        theme.palette.mode === "dark"
+                          ? "0 16px 38px rgba(0,0,0,0.36)"
+                          : "0 16px 38px rgba(15,23,42,0.12)",
+                    }}
+                    labelStyle={{
+                      color: theme.palette.text.primary,
+                      fontWeight: 800,
+                    }}
+                    itemStyle={{
+                      color: theme.palette.text.primary,
+                    }}
+                  />
+
+                  <Legend
+                    wrapperStyle={{
+                      color: theme.palette.text.secondary,
+                      fontWeight: 700,
+                    }}
+                  />
+                </PieChart>
+
+                <Box
+                  sx={{
+                    pointerEvents: "none",
+                    position: "absolute",
+                    top: "50%",
+                    left: "50%",
+                    width: 112,
+                    height: 112,
+                    transform: "translate(-50%, -50%)",
+                    borderRadius: "50%",
+                    boxShadow:
+                      theme.palette.mode === "dark"
+                        ? `0 0 42px ${alpha(
+                            theme.palette.primary.main,
+                            0.22
+                          )}`
+                        : "none",
+                  }}
+                />
+              </Box>
+            )}
+          </MeasuredChartBox>
         )}
       </CardContent>
     </Card>

@@ -11,10 +11,10 @@ import {
   CircularProgress,
   Divider,
   MenuItem,
-  Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 
 import { apiFetch, removeToken } from "@/lib/apiClient";
 
@@ -35,18 +35,70 @@ type MeResponse = {
   user?: User;
 };
 
+type ThemeMode = "Light" | "Dark" | "System";
+
 const BUSINESS_NAME_KEY = "insightboard_business_name";
 const CURRENCY_KEY = "insightboard_currency";
 const THEME_MODE_KEY = "insightboard_theme_mode";
 
 const DEFAULT_BUSINESS_NAME = "InsightBoard CRM";
 const DEFAULT_CURRENCY = "BHD";
-const DEFAULT_THEME_MODE = "Light";
+const DEFAULT_THEME_MODE: ThemeMode = "Light";
 
 function getUserFromResponse(response: MeResponse): User | null {
   if (response.data?.user) return response.data.user;
   if (response.user) return response.user;
   return null;
+}
+
+function isThemeMode(value: string | null): value is ThemeMode {
+  return value === "Light" || value === "Dark" || value === "System";
+}
+
+function notifyThemeChanged() {
+  window.dispatchEvent(new Event("insightboard-theme-changed"));
+}
+
+function cleanSingleLineText(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function hasUnsafeCharacters(value: string) {
+  return /[<>{}\[\]`$|\\]/.test(value);
+}
+
+function hasUnsafePattern(value: string) {
+  return /(javascript:|data:|on\w+\s*=|<\s*script)/i.test(value);
+}
+
+function validateBusinessName(value: string) {
+  const cleanedValue = cleanSingleLineText(value);
+
+  if (!cleanedValue) {
+    return {
+      value: DEFAULT_BUSINESS_NAME,
+      error: "",
+    };
+  }
+
+  if (cleanedValue.length > 80) {
+    return {
+      value: cleanedValue,
+      error: "Business name must be 80 characters or less",
+    };
+  }
+
+  if (hasUnsafeCharacters(cleanedValue) || hasUnsafePattern(cleanedValue)) {
+    return {
+      value: cleanedValue,
+      error: "Business name contains invalid characters",
+    };
+  }
+
+  return {
+    value: cleanedValue,
+    error: "",
+  };
 }
 
 export default function SettingsPage() {
@@ -55,7 +107,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [businessName, setBusinessName] = useState(DEFAULT_BUSINESS_NAME);
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
-  const [themeMode, setThemeMode] = useState(DEFAULT_THEME_MODE);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(DEFAULT_THEME_MODE);
 
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -89,7 +141,7 @@ export default function SettingsPage() {
 
     if (savedBusinessName) setBusinessName(savedBusinessName);
     if (savedCurrency) setCurrency(savedCurrency);
-    if (savedThemeMode) setThemeMode(savedThemeMode);
+    if (isThemeMode(savedThemeMode)) setThemeMode(savedThemeMode);
   }
 
   function handleSavePreferences() {
@@ -98,12 +150,20 @@ export default function SettingsPage() {
     setSuccess("");
 
     try {
-      localStorage.setItem(
-        BUSINESS_NAME_KEY,
-        businessName.trim() || DEFAULT_BUSINESS_NAME
-      );
+      const businessNameValidation = validateBusinessName(businessName);
+
+      if (businessNameValidation.error) {
+        setError(businessNameValidation.error);
+        setSavingPreferences(false);
+        return;
+      }
+
+      localStorage.setItem(BUSINESS_NAME_KEY, businessNameValidation.value);
       localStorage.setItem(CURRENCY_KEY, currency);
       localStorage.setItem(THEME_MODE_KEY, themeMode);
+
+      setBusinessName(businessNameValidation.value);
+      notifyThemeChanged();
 
       setSuccess("Settings saved successfully");
     } catch {
@@ -121,6 +181,9 @@ export default function SettingsPage() {
     setBusinessName(DEFAULT_BUSINESS_NAME);
     setCurrency(DEFAULT_CURRENCY);
     setThemeMode(DEFAULT_THEME_MODE);
+
+    notifyThemeChanged();
+
     setSuccess("Settings reset successfully");
     setError("");
   }
@@ -163,7 +226,13 @@ export default function SettingsPage() {
   return (
     <Box>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700 }}>
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: 800,
+            letterSpacing: "-0.04em",
+          }}
+        >
           Settings
         </Typography>
 
@@ -195,13 +264,43 @@ export default function SettingsPage() {
           gap: 3,
         }}
       >
-        <Card sx={{ borderRadius: 3 }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        <Card
+          sx={{
+            borderRadius: 4,
+            border: (theme) => `1px solid ${theme.palette.divider}`,
+            bgcolor: "background.paper",
+            overflow: "hidden",
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Box
+              sx={{
+                width: 52,
+                height: 52,
+                borderRadius: 3,
+                display: "grid",
+                placeItems: "center",
+                mb: 2,
+                fontWeight: 900,
+                fontSize: 22,
+                color: "primary.main",
+                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                border: (theme) =>
+                  `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+              }}
+            >
+              {(user?.name || "A").charAt(0).toUpperCase()}
+            </Box>
+
+            <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 900 }}>
               Account
             </Typography>
 
-            <Stack spacing={2}>
+            <Typography color="text.secondary" sx={{ mb: 3 }}>
+              Current authenticated dashboard user.
+            </Typography>
+
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <TextField
                 label="Name"
                 value={user?.name || "Admin User"}
@@ -222,7 +321,7 @@ export default function SettingsPage() {
                 fullWidth
                 disabled
               />
-            </Stack>
+            </Box>
 
             <Divider sx={{ my: 3 }} />
 
@@ -231,24 +330,60 @@ export default function SettingsPage() {
               color="error"
               onClick={handleLogout}
               disabled={loggingOut}
+              sx={{
+                height: 44,
+                borderRadius: 2,
+                fontWeight: 800,
+              }}
             >
               {loggingOut ? "Logging out..." : "Logout"}
             </Button>
           </CardContent>
         </Card>
 
-        <Card sx={{ borderRadius: 3 }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        <Card
+          sx={{
+            borderRadius: 4,
+            border: (theme) => `1px solid ${theme.palette.divider}`,
+            bgcolor: "background.paper",
+            overflow: "hidden",
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Box
+              sx={{
+                width: 52,
+                height: 52,
+                borderRadius: 3,
+                display: "grid",
+                placeItems: "center",
+                mb: 2,
+                fontWeight: 900,
+                fontSize: 22,
+                color: "success.main",
+                bgcolor: (theme) => alpha(theme.palette.success.main, 0.12),
+                border: (theme) =>
+                  `1px solid ${alpha(theme.palette.success.main, 0.18)}`,
+              }}
+            >
+              ⚙
+            </Box>
+
+            <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 900 }}>
               Dashboard Preferences
             </Typography>
 
-            <Stack spacing={2}>
+            <Typography color="text.secondary" sx={{ mb: 3 }}>
+              Customize local dashboard preferences and theme mode.
+            </Typography>
+
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <TextField
                 label="Business Name"
                 value={businessName}
                 onChange={(event) => setBusinessName(event.target.value)}
                 fullWidth
+                helperText="Used as the local dashboard business label."
               />
 
               <TextField
@@ -268,7 +403,9 @@ export default function SettingsPage() {
                 select
                 label="Theme Mode"
                 value={themeMode}
-                onChange={(event) => setThemeMode(event.target.value)}
+                onChange={(event) =>
+                  setThemeMode(event.target.value as ThemeMode)
+                }
                 fullWidth
               >
                 <MenuItem value="Light">Light</MenuItem>
@@ -286,15 +423,28 @@ export default function SettingsPage() {
                   variant="contained"
                   onClick={handleSavePreferences}
                   disabled={savingPreferences}
+                  sx={{
+                    height: 44,
+                    borderRadius: 2,
+                    fontWeight: 800,
+                  }}
                 >
                   {savingPreferences ? "Saving..." : "Save Settings"}
                 </Button>
 
-                <Button variant="outlined" onClick={handleResetPreferences}>
+                <Button
+                  variant="outlined"
+                  onClick={handleResetPreferences}
+                  sx={{
+                    height: 44,
+                    borderRadius: 2,
+                    fontWeight: 800,
+                  }}
+                >
                   Reset
                 </Button>
               </Box>
-            </Stack>
+            </Box>
           </CardContent>
         </Card>
       </Box>

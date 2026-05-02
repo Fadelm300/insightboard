@@ -12,7 +12,14 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGuard>
-      <Box sx={{ display: "flex" }}>
+      <Box
+        sx={{
+          display: "flex",
+          minHeight: "100vh",
+          bgcolor: "background.default",
+          color: "text.primary",
+        }}
+      >
         <Sidebar />
         <Topbar />
 
@@ -20,9 +27,11 @@ export default function DashboardLayout({
           component="main"
           sx={{
             flexGrow: 1,
-            p: 3,
             minHeight: "100vh",
-            bgcolor: "#f9fafb",
+            p: { xs: 2, md: 3 },
+            bgcolor: "background.default",
+            color: "text.primary",
+            transition: "background-color 200ms ease, color 200ms ease",
           }}
         >
           <Toolbar />

@@ -9,17 +9,19 @@ import {
   CircularProgress,
   Typography,
 } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  ResponsiveContainer,
+  Cell,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 
 import { apiFetch } from "@/lib/apiClient";
+import MeasuredChartBox from "@/components/dashboard/charts/MeasuredChartBox";
 
 type Deal = {
   _id: string;
@@ -73,7 +75,18 @@ function getShortStatusLabel(status: string) {
   return status;
 }
 
+function getStatusColor(status: string) {
+  if (status === "Closed Won") return "#10B981";
+  if (status === "Closed Lost") return "#EF4444";
+  if (status === "Negotiation") return "#F59E0B";
+  if (status === "Proposal Sent") return "#8B5CF6";
+  if (status === "Contacted") return "#0EA5E9";
+  return "#64748B";
+}
+
 export default function DealsPipelineChart() {
+  const theme = useTheme();
+
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -109,22 +122,22 @@ export default function DealsPipelineChart() {
       status: getShortStatusLabel(status),
       fullStatus: status,
       deals: counts[status] || 0,
+      color: getStatusColor(status),
     }));
   }, [deals]);
 
+  const gridColor = alpha(theme.palette.text.secondary, 0.16);
+
   return (
-    <Card
-      sx={{
-        borderRadius: 3,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
-        height: "100%",
-        minWidth: 0,
-      }}
-    >
-      <CardContent sx={{ minWidth: 0 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-          Deals Pipeline
-        </Typography>
+    <Card sx={{ height: "100%", minWidth: 0 }}>
+      <CardContent sx={{ p: 2.5, minWidth: 0 }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h6">Deals Pipeline</Typography>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+            Count of deals across each sales stage.
+          </Typography>
+        </Box>
 
         {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
@@ -139,30 +152,62 @@ export default function DealsPipelineChart() {
         )}
 
         {!loading && !error && (
-          <Box
-            sx={{
-              width: "100%",
-              height: 300,
-              minWidth: 0,
-              minHeight: 300,
-            }}
-          >
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="status" />
-                <YAxis allowDecimals={false} />
+          <MeasuredChartBox height={330}>
+            {({ width, height }) => (
+              <BarChart
+                width={width}
+                height={height}
+                data={chartData}
+                margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+
+                <XAxis
+                  dataKey="status"
+                  tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
+                  axisLine={{ stroke: gridColor }}
+                  tickLine={{ stroke: gridColor }}
+                />
+
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
+                  axisLine={{ stroke: gridColor }}
+                  tickLine={{ stroke: gridColor }}
+                />
+
                 <Tooltip
                   formatter={(value) => [value, "Deals"]}
                   labelFormatter={(_, payload) => {
                     const item = payload?.[0]?.payload;
                     return item?.fullStatus || "Status";
                   }}
+                  contentStyle={{
+                    backgroundColor: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 14,
+                    boxShadow:
+                      theme.palette.mode === "dark"
+                        ? "0 16px 38px rgba(0,0,0,0.36)"
+                        : "0 16px 38px rgba(15,23,42,0.12)",
+                  }}
+                  labelStyle={{
+                    color: theme.palette.text.primary,
+                    fontWeight: 800,
+                  }}
+                  itemStyle={{
+                    color: theme.palette.text.primary,
+                  }}
                 />
-                <Bar dataKey="deals" fill="#2e7d32" radius={[6, 6, 0, 0]} />
+
+                <Bar dataKey="deals" radius={[10, 10, 0, 0]}>
+                  {chartData.map((entry) => (
+                    <Cell key={entry.fullStatus} fill={entry.color} />
+                  ))}
+                </Bar>
               </BarChart>
-            </ResponsiveContainer>
-          </Box>
+            )}
+          </MeasuredChartBox>
         )}
       </CardContent>
     </Card>

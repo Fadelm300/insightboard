@@ -17,11 +17,14 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import type { SxProps, Theme } from "@mui/material/styles";
 
 import { apiFetch } from "@/lib/apiClient";
 
@@ -284,7 +287,10 @@ function validateLongText(label: string, value: string, maxLength: number) {
     return `${label} must be ${maxLength} characters or less`;
   }
 
-  if (cleanValue && (hasUnsafeCharacters(cleanValue) || hasUnsafePattern(cleanValue))) {
+  if (
+    cleanValue &&
+    (hasUnsafeCharacters(cleanValue) || hasUnsafePattern(cleanValue))
+  ) {
     return `${label} contains invalid characters`;
   }
 
@@ -385,6 +391,40 @@ function validateDealForm(data: DealFormData) {
   return { values, payload, errors };
 }
 
+function getStatusChipSx(status: DealStatus): SxProps<Theme> {
+  const statusColors: Record<DealStatus, string> = {
+    Lead: "#64748B",
+    Contacted: "#0EA5E9",
+    "Proposal Sent": "#6366F1",
+    Negotiation: "#F59E0B",
+    "Closed Won": "#10B981",
+    "Closed Lost": "#EF4444",
+  };
+
+  const color = statusColors[status];
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
+
+function getDealInitial(title: string) {
+  return title.trim().charAt(0).toUpperCase() || "D";
+}
+
+function formatBHD(value?: number) {
+  return `${Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} BHD`;
+}
+
 export default function DealsPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -479,6 +519,8 @@ export default function DealsPage() {
   }
 
   function handleFormClose() {
+    if (saving) return;
+
     setOpenForm(false);
     setEditingDeal(null);
     setFormData(emptyForm);
@@ -603,7 +645,13 @@ export default function DealsPage() {
         }}
       >
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+            }}
+          >
             Deals
           </Typography>
 
@@ -612,7 +660,17 @@ export default function DealsPage() {
           </Typography>
         </Box>
 
-        <Button variant="contained" onClick={handleCreateOpen}>
+        <Button
+          variant="contained"
+          onClick={handleCreateOpen}
+          sx={{
+            px: 2.5,
+            height: 44,
+            borderRadius: 2,
+            fontWeight: 800,
+            alignSelf: { xs: "stretch", sm: "center" },
+          }}
+        >
           Add Deal
         </Button>
       </Box>
@@ -633,116 +691,278 @@ export default function DealsPage() {
         </Alert>
       )}
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
+      <Card
+        sx={{
+          borderRadius: 4,
+          overflow: "hidden",
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+          bgcolor: "background.paper",
+        }}
+      >
+        <CardContent sx={{ p: 0 }}>
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
               <CircularProgress />
             </Box>
           ) : deals.length === 0 ? (
-            <Box sx={{ textAlign: "center", py: 6 }}>
-              <Typography variant="h6">No deals yet</Typography>
+            <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                No deals yet
+              </Typography>
+
               <Typography color="text.secondary" sx={{ mt: 1 }}>
                 Add your first deal to start tracking your sales pipeline.
               </Typography>
+
+              <Button
+                variant="contained"
+                onClick={handleCreateOpen}
+                sx={{ mt: 3, borderRadius: 2, fontWeight: 800 }}
+              >
+                Add Deal
+              </Button>
             </Box>
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Deal</TableCell>
-                  <TableCell>Client</TableCell>
-                  <TableCell>Budget</TableCell>
-                  <TableCell>Final Price</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Probability</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow
+                    sx={{
+                      bgcolor: (theme) =>
+                        theme.palette.mode === "dark"
+                          ? alpha(theme.palette.primary.main, 0.08)
+                          : alpha(theme.palette.primary.main, 0.04),
+                    }}
+                  >
+                    <TableCell>Deal</TableCell>
+                    <TableCell>Client</TableCell>
+                    <TableCell>Budget</TableCell>
+                    <TableCell>Final Price</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Probability</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
 
-              <TableBody>
-                {deals.map((deal) => {
-                  const isConverted = convertedDealIds.has(deal._id);
+                <TableBody>
+                  {deals.map((deal) => {
+                    const isConverted = convertedDealIds.has(deal._id);
 
-                  return (
-                    <TableRow key={deal._id} hover>
-                      <TableCell>
-                        <Typography sx={{ fontWeight: 600 }}>
-                          {deal.title}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {deal.description || "No description"}
-                        </Typography>
-                      </TableCell>
+                    return (
+                      <TableRow
+                        key={deal._id}
+                        hover
+                        sx={{
+                          "&:last-child td": {
+                            borderBottom: 0,
+                          },
+                        }}
+                      >
+                        <TableCell sx={{ minWidth: 260 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1.5,
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 2.5,
+                                display: "grid",
+                                placeItems: "center",
+                                fontWeight: 900,
+                                color: "primary.main",
+                                bgcolor: (theme) =>
+                                  alpha(theme.palette.primary.main, 0.12),
+                                border: (theme) =>
+                                  `1px solid ${alpha(
+                                    theme.palette.primary.main,
+                                    0.18
+                                  )}`,
+                              }}
+                            >
+                              {getDealInitial(deal.title)}
+                            </Box>
 
-                      <TableCell>{getClientName(deal.clientId)}</TableCell>
+                            <Box>
+                              <Typography sx={{ fontWeight: 800 }}>
+                                {deal.title}
+                              </Typography>
 
-                      <TableCell>{deal.estimatedBudget} BHD</TableCell>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  mt: 0.25,
+                                  maxWidth: 280,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {deal.description || "No description"}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
 
-                      <TableCell>{deal.finalPrice || 0} BHD</TableCell>
+                        <TableCell>{getClientName(deal.clientId)}</TableCell>
 
-                      <TableCell>
-                        <Chip label={deal.status} size="small" />
-                      </TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>
+                          {formatBHD(deal.estimatedBudget)}
+                        </TableCell>
 
-                      <TableCell>{deal.probability || 0}%</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>
+                          {formatBHD(deal.finalPrice)}
+                        </TableCell>
 
-                      <TableCell align="right">
-                        <Box
-                          sx={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            gap: 1,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          {deal.status === "Closed Won" && !isConverted && (
+                        <TableCell>
+                          <Chip
+                            label={deal.status}
+                            size="small"
+                            sx={getStatusChipSx(deal.status)}
+                          />
+                        </TableCell>
+
+                        <TableCell>
+                          <Box
+                            sx={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <Typography sx={{ fontWeight: 800 }}>
+                              {deal.probability || 0}%
+                            </Typography>
+
+                            <Box
+                              sx={{
+                                width: 54,
+                                height: 6,
+                                borderRadius: 999,
+                                bgcolor: (theme) =>
+                                  alpha(theme.palette.text.primary, 0.1),
+                                overflow: "hidden",
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  width: `${Math.min(
+                                    Math.max(deal.probability || 0, 0),
+                                    100
+                                  )}%`,
+                                  height: "100%",
+                                  borderRadius: 999,
+                                  bgcolor: (theme) =>
+                                    deal.status === "Closed Won"
+                                      ? theme.palette.success.main
+                                      : deal.status === "Closed Lost"
+                                      ? theme.palette.error.main
+                                      : theme.palette.primary.main,
+                                }}
+                              />
+                            </Box>
+                          </Box>
+                        </TableCell>
+
+                        <TableCell align="right">
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "flex-end",
+                              gap: 1,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {deal.status === "Closed Won" && !isConverted && (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => handleConvertToProject(deal)}
+                                disabled={saving}
+                                sx={{
+                                  borderRadius: 2,
+                                  fontWeight: 800,
+                                }}
+                              >
+                                Convert
+                              </Button>
+                            )}
+
+                            {deal.status === "Closed Won" && isConverted && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                disabled
+                                sx={{
+                                  borderRadius: 2,
+                                  fontWeight: 800,
+                                }}
+                              >
+                                Converted
+                              </Button>
+                            )}
+
                             <Button
                               size="small"
-                              variant="contained"
-                              onClick={() => handleConvertToProject(deal)}
-                              disabled={saving}
+                              variant="outlined"
+                              onClick={() => handleEditOpen(deal)}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 800,
+                              }}
                             >
-                              Convert
+                              Edit
                             </Button>
-                          )}
 
-                          {deal.status === "Closed Won" && isConverted && (
-                            <Button size="small" variant="outlined" disabled>
-                              Converted
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              onClick={() => setDeleteDeal(deal)}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 800,
+                              }}
+                            >
+                              Delete
                             </Button>
-                          )}
-
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleEditOpen(deal)}
-                          >
-                            Edit
-                          </Button>
-
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            onClick={() => setDeleteDeal(deal)}
-                          >
-                            Delete
-                          </Button>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </CardContent>
       </Card>
 
-      <Dialog open={openForm} onClose={handleFormClose} maxWidth="md" fullWidth>
+      <Dialog
+        open={openForm}
+        onClose={handleFormClose}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
         <Box component="form" onSubmit={handleSubmit} noValidate>
-          <DialogTitle>{editingDeal ? "Edit Deal" : "Add Deal"}</DialogTitle>
+          <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+            {editingDeal ? "Edit Deal" : "Add Deal"}
+          </DialogTitle>
 
           <DialogContent>
             <Box
@@ -936,13 +1156,33 @@ export default function DealsPage() {
         </Box>
       </Dialog>
 
-      <Dialog open={Boolean(deleteDeal)} onClose={() => setDeleteDeal(null)}>
-        <DialogTitle>Delete Deal</DialogTitle>
+      <Dialog
+        open={Boolean(deleteDeal)}
+        onClose={() => {
+          if (!saving) setDeleteDeal(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Delete Deal</DialogTitle>
 
         <DialogContent>
-          <Typography>
+          <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <strong>{deleteDeal?.title}</strong>?
+            <Box component="span" sx={{ color: "text.primary", fontWeight: 900 }}>
+              {deleteDeal?.title}
+            </Box>
+            ?
           </Typography>
         </DialogContent>
 

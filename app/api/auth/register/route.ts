@@ -18,6 +18,17 @@ export async function POST(req: NextRequest) {
   try {
     await connectDB();
 
+    // CRM is single-admin only.
+    // If any user already exists, block registration completely.
+    const existingAnyUser = await User.findOne({});
+
+    if (existingAnyUser) {
+      return errorResponse(
+        "Registration is closed. Admin account already exists.",
+        403
+      );
+    }
+
     const body = await req.json().catch(() => null);
 
     if (!body) {
