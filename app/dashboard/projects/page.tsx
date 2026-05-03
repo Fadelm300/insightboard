@@ -14,6 +14,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Menu,
   MenuItem,
   Table,
   TableBody,
@@ -80,6 +82,7 @@ type Project = {
   description?: string;
   notes?: string;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 type ProjectFormData = {
@@ -178,6 +181,19 @@ const emptyForm: ProjectFormData = {
   notes: "",
 };
 
+const readonlyTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+  },
+};
+
+const readonlyMultilineTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+    whiteSpace: "pre-wrap",
+  },
+};
+
 function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   if (Array.isArray(response.data)) return response.data;
   if (Array.isArray(response.projects)) return response.projects;
@@ -255,6 +271,38 @@ function getTodayInputValue() {
   const today = new Date();
   const timezoneOffset = today.getTimezoneOffset() * 60_000;
   return new Date(today.getTime() - timezoneOffset).toISOString().slice(0, 10);
+}
+
+function formatDate(date?: string) {
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getDeadlineTime(deadline?: string) {
+  if (!deadline) return Number.POSITIVE_INFINITY;
+
+  const time = new Date(deadline).getTime();
+
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+}
+
+function getCreatedAtTime(createdAt?: string) {
+  if (!createdAt) return 0;
+
+  const time = new Date(createdAt).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function cleanSingleLineText(value: string) {
@@ -364,7 +412,10 @@ function validateProjectForm(formData: ProjectFormData):
 
   if (cleanedValues.description.length > 1000) {
     errors.description = "Description cannot exceed 1000 characters";
-  } else if (cleanedValues.description && hasUnsafeText(cleanedValues.description)) {
+  } else if (
+    cleanedValues.description &&
+    hasUnsafeText(cleanedValues.description)
+  ) {
     errors.description = "Description contains invalid characters";
   }
 
@@ -456,6 +507,11 @@ export default function ProjectsPage() {
   const [formErrors, setFormErrors] = useState<ProjectFormErrors>({});
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
+  const [viewProject, setViewProject] = useState<Project | null>(null);
+  const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const [actionProject, setActionProject] = useState<Project | null>(null);
 
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -466,13 +522,32 @@ export default function ProjectsPage() {
 
   const todayInputValue = getTodayInputValue();
 
+  const sortedProjects = useMemo(() => {
+    return [...projects].sort((firstProject, secondProject) => {
+      const deadlineDifference =
+        getDeadlineTime(firstProject.deadline) -
+        getDeadlineTime(secondProject.deadline);
+
+      if (deadlineDifference !== 0) {
+        return deadlineDifference;
+      }
+
+      return (
+        getCreatedAtTime(secondProject.createdAt) -
+        getCreatedAtTime(firstProject.createdAt)
+      );
+    });
+  }, [projects]);
+
   const availableDeals = useMemo(() => {
     return deals.filter((deal) => {
       const isClosedWon = deal.status === "Closed Won";
       const isSelectedDeal = deal._id === formData.dealId;
       const dealClientId = getId(deal.clientId);
       const belongsToSelectedClient =
-        !formData.clientId || !dealClientId || dealClientId === formData.clientId;
+        !formData.clientId ||
+        !dealClientId ||
+        dealClientId === formData.clientId;
 
       return (isClosedWon || isSelectedDeal) && belongsToSelectedClient;
     });
@@ -549,7 +624,7 @@ export default function ProjectsPage() {
 
   function updateFormField<K extends keyof ProjectFormData>(
     field: K,
-    value: ProjectFormData[K]
+    value: ProjectFormData[K],
   ) {
     setFormData((current) => ({
       ...current,
@@ -606,6 +681,35 @@ export default function ProjectsPage() {
       name: undefined,
       price: undefined,
     }));
+  }
+
+  function handleActionMenuOpen(
+    event: React.MouseEvent<HTMLElement>,
+    project: Project,
+  ) {
+    setActionAnchorEl(event.currentTarget);
+    setActionProject(project);
+  }
+
+  function handleActionMenuClose() {
+    setActionAnchorEl(null);
+    setActionProject(null);
+  }
+
+  function handleMenuEdit() {
+    if (!actionProject) return;
+
+    const selectedProject = actionProject;
+    handleActionMenuClose();
+    handleEditOpen(selectedProject);
+  }
+
+  function handleMenuDelete() {
+    if (!actionProject) return;
+
+    const selectedProject = actionProject;
+    handleActionMenuClose();
+    setDeleteProject(selectedProject);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -794,20 +898,21 @@ export default function ProjectsPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
-                    <TableCell>Project</TableCell>
+                    <TableCell align="center">Project</TableCell>
                     <TableCell>Client</TableCell>
                     <TableCell>Deal</TableCell>
+                    <TableCell>Deadline</TableCell>
                     <TableCell>Price</TableCell>
                     <TableCell>Cost</TableCell>
                     <TableCell>Profit</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Payment</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
 
                 <TableBody>
-                  {projects.map((project) => (
+                  {sortedProjects.map((project) => (
                     <TableRow
                       key={project._id}
                       hover
@@ -839,7 +944,7 @@ export default function ProjectsPage() {
                               border: (theme) =>
                                 `1px solid ${alpha(
                                   theme.palette.primary.main,
-                                  0.18
+                                  0.18,
                                 )}`,
                             }}
                           >
@@ -864,6 +969,10 @@ export default function ProjectsPage() {
 
                       <TableCell>{getClientName(project.clientId)}</TableCell>
                       <TableCell>{getDealName(project.dealId)}</TableCell>
+
+                      <TableCell sx={{ minWidth: 140, fontWeight: 800 }}>
+                        {formatDate(project.deadline)}
+                      </TableCell>
 
                       <TableCell sx={{ fontWeight: 700 }}>
                         {formatBHD(project.price)}
@@ -905,27 +1014,34 @@ export default function ProjectsPage() {
                           <Button
                             size="small"
                             variant="outlined"
-                            onClick={() => handleEditOpen(project)}
+                            onClick={() => setViewProject(project)}
                             sx={{
                               borderRadius: 2,
                               fontWeight: 800,
                             }}
                           >
-                            Edit
+                            View
                           </Button>
 
-                          <Button
+                          <IconButton
                             size="small"
-                            variant="outlined"
-                            color="error"
-                            onClick={() => setDeleteProject(project)}
+                            onClick={(event) =>
+                              handleActionMenuOpen(event, project)
+                            }
+                            aria-label={`Open actions for ${project.name}`}
                             sx={{
+                              width: 34,
+                              height: 34,
                               borderRadius: 2,
-                              fontWeight: 800,
+                              border: (theme) =>
+                                `1px solid ${theme.palette.divider}`,
+                              fontWeight: 900,
+                              fontSize: 18,
+                              lineHeight: 1,
                             }}
                           >
-                            Delete
-                          </Button>
+                            ⋮
+                          </IconButton>
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -936,6 +1052,215 @@ export default function ProjectsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={Boolean(actionAnchorEl)}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleMenuEdit}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ✎
+          </Box>
+          Edit
+        </MenuItem>
+
+        <MenuItem onClick={handleMenuDelete} sx={{ color: "error.main" }}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ×
+          </Box>
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={Boolean(viewProject)}
+        onClose={() => setViewProject(null)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+          Project Details
+        </DialogTitle>
+
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Project Name"
+                fullWidth
+                value={viewProject?.name || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Project Type"
+                fullWidth
+                value={viewProject?.type || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Client"
+                fullWidth
+                value={viewProject ? getClientName(viewProject.clientId) : "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Deal"
+                fullWidth
+                value={viewProject ? getDealName(viewProject.dealId) : "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Price"
+                fullWidth
+                value={formatBHD(viewProject?.price)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Cost"
+                fullWidth
+                value={formatBHD(viewProject?.cost)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Profit"
+                fullWidth
+                value={formatBHD(viewProject?.profit)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Deadline"
+                fullWidth
+                value={formatDate(viewProject?.deadline)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Status"
+                fullWidth
+                value={viewProject?.status || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Payment Status"
+                fullWidth
+                value={viewProject?.paymentStatus || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewProject?.description || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewProject?.notes || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Created At"
+                fullWidth
+                value={formatDate(viewProject?.createdAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Updated At"
+                fullWidth
+                value={formatDate(viewProject?.updatedAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewProject(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={openForm}
@@ -1092,7 +1417,7 @@ export default function ProjectsPage() {
                   onChange={(event) =>
                     updateFormField(
                       "status",
-                      event.target.value as ProjectStatus
+                      event.target.value as ProjectStatus,
                     )
                   }
                 >
@@ -1113,7 +1438,7 @@ export default function ProjectsPage() {
                   onChange={(event) =>
                     updateFormField(
                       "paymentStatus",
-                      event.target.value as PaymentStatus
+                      event.target.value as PaymentStatus,
                     )
                   }
                 >
@@ -1131,7 +1456,9 @@ export default function ProjectsPage() {
                 fullWidth
                 value={formData.deadline}
                 error={Boolean(formErrors.deadline)}
-                helperText={formErrors.deadline || "Choose today or a future date"}
+                helperText={
+                  formErrors.deadline || "Choose today or a future date"
+                }
                 onChange={(event) =>
                   updateFormField("deadline", event.target.value)
                 }
@@ -1208,7 +1535,10 @@ export default function ProjectsPage() {
         <DialogContent>
           <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <Box component="span" sx={{ color: "text.primary", fontWeight: 900 }}>
+            <Box
+              component="span"
+              sx={{ color: "text.primary", fontWeight: 900 }}
+            >
               {deleteProject?.name}
             </Box>
             ?

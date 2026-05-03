@@ -12,6 +12,57 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_DEADLINE_DAYS = 7;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getString(value: unknown) {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+}
+
+function parseDateInput(value: string) {
+  if (!DATE_PATTERN.test(value)) return null;
+
+  const [year, month, day] = value.split("-").map(Number);
+
+  if (!year || !month || !day) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  const isValidDate =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+
+  return isValidDate ? date : null;
+}
+
+function isPastDate(value: string) {
+  const inputDate = parseDateInput(value);
+
+  if (!inputDate) return true;
+
+  const today = new Date();
+  const todayDateOnly = new Date(
+    Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
+  );
+
+  return inputDate < todayDateOnly;
+}
+
+function getDefaultDeadlineDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + DEFAULT_DEADLINE_DAYS);
+
+  return new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  );
+}
+
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const authUser = getAuthUser(req);
@@ -26,6 +77,26 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     if (!Types.ObjectId.isValid(id)) {
       return errorResponse("Invalid deal id", 400);
+    }
+
+    const body = await req.json().catch(() => null);
+
+    const deadlineInput = isPlainObject(body) ? getString(body.deadline) : "";
+
+    if (deadlineInput && !parseDateInput(deadlineInput)) {
+      return errorResponse("Invalid deadline format. Use YYYY-MM-DD", 400);
+    }
+
+    if (deadlineInput && isPastDate(deadlineInput)) {
+      return errorResponse("Deadline cannot be in the past", 400);
+    }
+
+    const deadline = deadlineInput
+      ? parseDateInput(deadlineInput)
+      : getDefaultDeadlineDate();
+
+    if (!deadline) {
+      return errorResponse("Invalid deadline", 400);
     }
 
     const deal = await Deal.findOne({
@@ -75,6 +146,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       type: "Business Website",
       price: projectPrice,
       cost: 0,
+      deadline,
       status: "Not Started",
       paymentStatus: "Unpaid",
       notes: "Project created from deal conversion",

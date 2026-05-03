@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type React from "react";
 import {
   Alert,
   Box,
@@ -13,6 +14,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Menu,
   MenuItem,
   Stack,
   Table,
@@ -49,6 +52,7 @@ type Client = {
   notes?: string;
   status: ClientStatus;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 type ClientFormData = {
@@ -92,6 +96,19 @@ const emptyForm: ClientFormData = {
   description: "",
   notes: "",
   status: "New Lead",
+};
+
+const readonlyTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+  },
+};
+
+const readonlyMultilineTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+    whiteSpace: "pre-wrap",
+  },
 };
 
 function getClientsFromResponse(response: ClientsResponse): Client[] {
@@ -163,7 +180,7 @@ function validateSafeText(
   label: string,
   value: string,
   maxLength: number,
-  required = false
+  required = false,
 ) {
   const cleanValue = cleanSingleLineText(value);
 
@@ -202,7 +219,7 @@ function validateClientForm(data: ClientFormData) {
     "Company name",
     values.companyName,
     120,
-    true
+    true,
   );
 
   if (companyNameError) errors.companyName = companyNameError;
@@ -210,7 +227,7 @@ function validateClientForm(data: ClientFormData) {
   const businessTypeError = validateSafeText(
     "Business type",
     values.businessType,
-    80
+    80,
   );
 
   if (businessTypeError) errors.businessType = businessTypeError;
@@ -218,7 +235,7 @@ function validateClientForm(data: ClientFormData) {
   const contactPersonError = validateSafeText(
     "Contact person",
     values.contactPerson,
-    80
+    80,
   );
 
   if (contactPersonError) errors.contactPerson = contactPersonError;
@@ -295,12 +312,41 @@ function getClientInitial(companyName: string) {
   return companyName.trim().charAt(0).toUpperCase() || "C";
 }
 
+function formatDate(date?: string) {
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getCreatedAtTime(createdAt?: string) {
+  if (!createdAt) return 0;
+
+  const time = new Date(createdAt).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
+}
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [formData, setFormData] = useState<ClientFormData>(emptyForm);
   const [formErrors, setFormErrors] = useState<ClientFormErrors>({});
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
+  const [viewClient, setViewClient] = useState<Client | null>(null);
+  const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const [actionClient, setActionClient] = useState<Client | null>(null);
 
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -308,6 +354,14 @@ export default function ClientsPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const sortedClients = useMemo(() => {
+    return [...clients].sort(
+      (firstClient, secondClient) =>
+        getCreatedAtTime(secondClient.createdAt) -
+        getCreatedAtTime(firstClient.createdAt),
+    );
+  }, [clients]);
 
   async function fetchClients() {
     setLoading(true);
@@ -369,7 +423,7 @@ export default function ClientsPage() {
 
   function updateFormField<K extends keyof ClientFormData>(
     field: K,
-    value: ClientFormData[K]
+    value: ClientFormData[K],
   ) {
     setFormData((current) => ({
       ...current,
@@ -380,6 +434,35 @@ export default function ClientsPage() {
       ...current,
       [field]: "",
     }));
+  }
+
+  function handleActionMenuOpen(
+    event: React.MouseEvent<HTMLElement>,
+    client: Client,
+  ) {
+    setActionAnchorEl(event.currentTarget);
+    setActionClient(client);
+  }
+
+  function handleActionMenuClose() {
+    setActionAnchorEl(null);
+    setActionClient(null);
+  }
+
+  function handleMenuEdit() {
+    if (!actionClient) return;
+
+    const selectedClient = actionClient;
+    handleActionMenuClose();
+    handleEditOpen(selectedClient);
+  }
+
+  function handleMenuDelete() {
+    if (!actionClient) return;
+
+    const selectedClient = actionClient;
+    handleActionMenuClose();
+    setDeleteClient(selectedClient);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -552,17 +635,18 @@ export default function ClientsPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
-                    <TableCell>Company</TableCell>
+                    <TableCell align="center">Company</TableCell>
                     <TableCell>Contact</TableCell>
                     <TableCell>Email</TableCell>
                     <TableCell>Phone</TableCell>
+                    <TableCell>Created Date</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
 
                 <TableBody>
-                  {clients.map((client) => (
+                  {sortedClients.map((client) => (
                     <TableRow
                       key={client._id}
                       hover
@@ -573,7 +657,11 @@ export default function ClientsPage() {
                       }}
                     >
                       <TableCell sx={{ minWidth: 240 }}>
-                      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>  
+                        <Stack
+                          direction="row"
+                          spacing={1.5}
+                          sx={{ alignItems: "center" }}
+                        >
                           <Box
                             sx={{
                               width: 40,
@@ -588,7 +676,7 @@ export default function ClientsPage() {
                               border: (theme) =>
                                 `1px solid ${alpha(
                                   theme.palette.primary.main,
-                                  0.18
+                                  0.18,
                                 )}`,
                             }}
                           >
@@ -615,6 +703,10 @@ export default function ClientsPage() {
                       <TableCell>{client.email || "-"}</TableCell>
                       <TableCell>{client.phone || "-"}</TableCell>
 
+                      <TableCell sx={{ minWidth: 140, fontWeight: 700 }}>
+                        {formatDate(client.createdAt)}
+                      </TableCell>
+
                       <TableCell>
                         <Chip
                           label={client.status}
@@ -623,36 +715,44 @@ export default function ClientsPage() {
                         />
                       </TableCell>
 
+
                       <TableCell align="right">
                         <Stack
                           direction="row"
                           spacing={1}
-                          sx={{ justifyContent: "flex-end" }}
+                          
                         >
                           <Button
                             size="small"
                             variant="outlined"
-                            onClick={() => handleEditOpen(client)}
+                            onClick={() => setViewClient(client)}
                             sx={{
                               borderRadius: 2,
                               fontWeight: 700,
                             }}
                           >
-                            Edit
+                            View
                           </Button>
 
-                          <Button
+                          <IconButton
                             size="small"
-                            variant="outlined"
-                            color="error"
-                            onClick={() => setDeleteClient(client)}
+                            onClick={(event) =>
+                              handleActionMenuOpen(event, client)
+                            }
+                            aria-label={`Open actions for ${client.companyName}`}
                             sx={{
+                              width: 34,
+                              height: 34,
                               borderRadius: 2,
-                              fontWeight: 700,
+                              border: (theme) =>
+                                `1px solid ${theme.palette.divider}`,
+                              fontWeight: 900,
+                              fontSize: 18,
+                              lineHeight: 1,
                             }}
                           >
-                            Delete
-                          </Button>
+                            ⋮
+                          </IconButton>
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -663,6 +763,167 @@ export default function ClientsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={Boolean(actionAnchorEl)}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleMenuEdit}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ✎
+          </Box>
+          Edit
+        </MenuItem>
+
+        <MenuItem onClick={handleMenuDelete} sx={{ color: "error.main" }}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ×
+          </Box>
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={Boolean(viewClient)}
+        onClose={() => setViewClient(null)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
+          Client Details
+        </DialogTitle>
+
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Company Name"
+              fullWidth
+              value={viewClient?.companyName || "-"}
+              sx={readonlyTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Business Type"
+                fullWidth
+                value={viewClient?.businessType || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Status"
+                fullWidth
+                value={viewClient?.status || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Stack>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Contact Person"
+                fullWidth
+                value={viewClient?.contactPerson || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Phone"
+                fullWidth
+                value={viewClient?.phone || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Stack>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Email"
+                fullWidth
+                value={viewClient?.email || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Website"
+                fullWidth
+                value={viewClient?.website || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Stack>
+
+            <TextField
+              label="Location"
+              fullWidth
+              value={viewClient?.location || "-"}
+              sx={readonlyTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewClient?.description || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewClient?.notes || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Created At"
+                fullWidth
+                value={formatDate(viewClient?.createdAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Updated At"
+                fullWidth
+                value={formatDate(viewClient?.updatedAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Stack>
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewClient(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={openForm}
@@ -851,7 +1112,10 @@ export default function ClientsPage() {
         <DialogContent>
           <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <Box component="span" sx={{ color: "text.primary", fontWeight: 800 }}>
+            <Box
+              component="span"
+              sx={{ color: "text.primary", fontWeight: 800 }}
+            >
               {deleteClient?.companyName}
             </Box>
             ?

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import {
   Alert,
@@ -14,6 +14,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Menu,
   MenuItem,
   Table,
   TableBody,
@@ -29,12 +31,7 @@ import type { SxProps, Theme } from "@mui/material/styles";
 
 import { apiFetch } from "@/lib/apiClient";
 
-type PaymentMethod =
-  | "Cash"
-  | "BenefitPay"
-  | "Bank Transfer"
-  | "Card"
-  | "Other";
+type PaymentMethod = "Cash" | "BenefitPay" | "Bank Transfer" | "Card" | "Other";
 
 type Client = {
   _id: string;
@@ -66,6 +63,7 @@ type Revenue = {
   description?: string;
   notes?: string;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 type RevenueFormData = {
@@ -128,6 +126,19 @@ const emptyForm: RevenueFormData = {
   paymentMethod: "BenefitPay",
   description: "",
   notes: "",
+};
+
+const readonlyTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+  },
+};
+
+const readonlyMultilineTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+    whiteSpace: "pre-wrap",
+  },
 };
 
 function getTodayInputValue() {
@@ -211,8 +222,35 @@ function formatDateToInputValue(date?: string) {
 }
 
 function formatDate(date?: string) {
-  const formattedDate = formatDateToInputValue(date);
-  return formattedDate || "-";
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getPaymentDateTime(paymentDate?: string) {
+  if (!paymentDate) return Number.NEGATIVE_INFINITY;
+
+  const time = new Date(paymentDate).getTime();
+
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+}
+
+function getCreatedAtTime(createdAt?: string) {
+  if (!createdAt) return 0;
+
+  const time = new Date(createdAt).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function cleanSingleLineText(value: string) {
@@ -384,6 +422,11 @@ export default function RevenuePage() {
   const [formErrors, setFormErrors] = useState<RevenueFormErrors>({});
   const [editingRevenue, setEditingRevenue] = useState<Revenue | null>(null);
   const [deleteRevenue, setDeleteRevenue] = useState<Revenue | null>(null);
+  const [viewRevenue, setViewRevenue] = useState<Revenue | null>(null);
+  const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const [actionRevenue, setActionRevenue] = useState<Revenue | null>(null);
 
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -391,6 +434,23 @@ export default function RevenuePage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const sortedRevenue = useMemo(() => {
+    return [...revenue].sort((firstItem, secondItem) => {
+      const paymentDateDifference =
+        getPaymentDateTime(secondItem.paymentDate) -
+        getPaymentDateTime(firstItem.paymentDate);
+
+      if (paymentDateDifference !== 0) {
+        return paymentDateDifference;
+      }
+
+      return (
+        getCreatedAtTime(secondItem.createdAt) -
+        getCreatedAtTime(firstItem.createdAt)
+      );
+    });
+  }, [revenue]);
 
   async function fetchData() {
     setLoading(true);
@@ -462,7 +522,7 @@ export default function RevenuePage() {
 
   function updateFormField<K extends keyof RevenueFormData>(
     field: K,
-    value: RevenueFormData[K]
+    value: RevenueFormData[K],
   ) {
     setFormData((current) => ({
       ...current,
@@ -473,6 +533,35 @@ export default function RevenuePage() {
       ...current,
       [field]: undefined,
     }));
+  }
+
+  function handleActionMenuOpen(
+    event: React.MouseEvent<HTMLElement>,
+    item: Revenue,
+  ) {
+    setActionAnchorEl(event.currentTarget);
+    setActionRevenue(item);
+  }
+
+  function handleActionMenuClose() {
+    setActionAnchorEl(null);
+    setActionRevenue(null);
+  }
+
+  function handleMenuEdit() {
+    if (!actionRevenue) return;
+
+    const selectedRevenue = actionRevenue;
+    handleActionMenuClose();
+    handleEditOpen(selectedRevenue);
+  }
+
+  function handleMenuDelete() {
+    if (!actionRevenue) return;
+
+    const selectedRevenue = actionRevenue;
+    handleActionMenuClose();
+    setDeleteRevenue(selectedRevenue);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -612,11 +701,7 @@ export default function RevenuePage() {
       )}
 
       {success && (
-        <Alert
-          severity="success"
-          sx={{ mb: 2 }}
-          onClose={() => setSuccess("")}
-        >
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>
           {success}
         </Alert>
       )}
@@ -670,12 +755,17 @@ export default function RevenuePage() {
                     <TableCell>Method</TableCell>
                     <TableCell>Payment Date</TableCell>
                     <TableCell>Description</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell
+                      align="center"
+                      sx={{ width: 120, whiteSpace: "nowrap", pr: 2 }}
+                    >
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHead>
 
                 <TableBody>
-                  {revenue.map((item) => {
+                  {sortedRevenue.map((item) => {
                     const projectName = getProjectName(item.projectId);
 
                     return (
@@ -710,7 +800,7 @@ export default function RevenuePage() {
                                 border: (theme) =>
                                   `1px solid ${alpha(
                                     theme.palette.success.main,
-                                    0.18
+                                    0.18,
                                   )}`,
                               }}
                             >
@@ -749,6 +839,8 @@ export default function RevenuePage() {
 
                         <TableCell>{formatDate(item.paymentDate)}</TableCell>
 
+
+
                         <TableCell
                           sx={{
                             maxWidth: 260,
@@ -761,39 +853,49 @@ export default function RevenuePage() {
                           {item.description || "-"}
                         </TableCell>
 
-                        <TableCell align="right">
+                        <TableCell
+                          align="right"
+                          sx={{ width: 120, whiteSpace: "nowrap", pr: 2 }}
+                        >
                           <Box
                             sx={{
                               display: "flex",
                               justifyContent: "flex-end",
-                              gap: 1,
-                              flexWrap: "wrap",
+                              alignItems: "center",
+                              gap: 0.5,
                             }}
                           >
                             <Button
                               size="small"
                               variant="outlined"
-                              onClick={() => handleEditOpen(item)}
+                              onClick={() => setViewRevenue(item)}
                               sx={{
                                 borderRadius: 2,
                                 fontWeight: 800,
                               }}
                             >
-                              Edit
+                              View
                             </Button>
 
-                            <Button
+                            <IconButton
                               size="small"
-                              variant="outlined"
-                              color="error"
-                              onClick={() => setDeleteRevenue(item)}
+                              onClick={(event) =>
+                                handleActionMenuOpen(event, item)
+                              }
+                              aria-label={`Open actions for ${projectName}`}
                               sx={{
+                                width: 34,
+                                height: 34,
                                 borderRadius: 2,
-                                fontWeight: 800,
+                                border: (theme) =>
+                                  `1px solid ${theme.palette.divider}`,
+                                fontWeight: 900,
+                                fontSize: 18,
+                                lineHeight: 1,
                               }}
                             >
-                              Delete
-                            </Button>
+                              ⋮
+                            </IconButton>
                           </Box>
                         </TableCell>
                       </TableRow>
@@ -805,6 +907,161 @@ export default function RevenuePage() {
           )}
         </CardContent>
       </Card>
+
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={Boolean(actionAnchorEl)}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleMenuEdit}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ✎
+          </Box>
+          Edit
+        </MenuItem>
+
+        <MenuItem onClick={handleMenuDelete} sx={{ color: "error.main" }}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ×
+          </Box>
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={Boolean(viewRevenue)}
+        onClose={() => setViewRevenue(null)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+          Revenue Details
+        </DialogTitle>
+
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Project"
+                fullWidth
+                value={
+                  viewRevenue ? getProjectName(viewRevenue.projectId) : "-"
+                }
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Client"
+                fullWidth
+                value={viewRevenue ? getClientName(viewRevenue.clientId) : "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Amount"
+                fullWidth
+                value={formatBHD(viewRevenue?.amount)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Payment Method"
+                fullWidth
+                value={viewRevenue?.paymentMethod || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Payment Date"
+                fullWidth
+                value={formatDate(viewRevenue?.paymentDate)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewRevenue?.description || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewRevenue?.notes || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Created At"
+                fullWidth
+                value={formatDate(viewRevenue?.createdAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Updated At"
+                fullWidth
+                value={formatDate(viewRevenue?.updatedAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewRevenue(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={openForm}
@@ -885,7 +1142,7 @@ export default function RevenuePage() {
                 onChange={(event) =>
                   updateFormField(
                     "paymentMethod",
-                    event.target.value as PaymentMethod
+                    event.target.value as PaymentMethod,
                   )
                 }
               >
@@ -903,7 +1160,8 @@ export default function RevenuePage() {
                 value={formData.paymentDate}
                 error={Boolean(formErrors.paymentDate)}
                 helperText={
-                  formErrors.paymentDate || "Payment date cannot be in the future"
+                  formErrors.paymentDate ||
+                  "Payment date cannot be in the future"
                 }
                 onChange={(event) =>
                   updateFormField("paymentDate", event.target.value)

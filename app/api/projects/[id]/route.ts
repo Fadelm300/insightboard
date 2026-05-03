@@ -84,27 +84,51 @@ function parseMoney(value: unknown) {
   return Number(getString(value));
 }
 
-function isValidDateInput(value: string) {
-  if (!DATE_PATTERN.test(value)) return false;
+function parseDateInput(value: string) {
+  if (!DATE_PATTERN.test(value)) return null;
 
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return false;
+  const [year, month, day] = value.split("-").map(Number);
 
-  return date.toISOString().slice(0, 10) === value;
+  if (!year || !month || !day) return null;
+
+  const date = new Date(year, month - 1, day);
+
+  const isValidDate =
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day;
+
+  return isValidDate ? date : null;
+}
+
+function getDateInputValue(value?: Date | string | null) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function isPastDate(value: string) {
-  if (!isValidDateInput(value)) return true;
+  const inputDate = parseDateInput(value);
 
-  const inputDate = new Date(`${value}T00:00:00`);
+  if (!inputDate) {
+    return true;
+  }
+
   const today = new Date();
 
-  today.setHours(0, 0, 0, 0);
   inputDate.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
 
   return inputDate < today;
 }
-
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
     const authUser = getAuthUser(req);
@@ -216,11 +240,13 @@ export async function PUT(req: NextRequest, context: RouteContext) {
         ? cleanText(existingProject.notes || "")
         : cleanText(body.notes);
 
-    const deadline = hasDeadlineField
-      ? getString(body.deadline)
-      : existingProject.deadline
-        ? new Date(existingProject.deadline).toISOString().slice(0, 10)
-        : "";
+   const existingDeadlineInput = getDateInputValue(existingProject.deadline);
+
+const deadline = hasDeadlineField
+  ? getString(body.deadline)
+  : existingDeadlineInput;
+
+const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
 
     if (!clientId) {
       return errorResponse("Client is required", 400);
@@ -286,9 +312,9 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Cost cannot be negative", 400);
     }
 
-    if (deadline && isPastDate(deadline)) {
-      return errorResponse("Deadline cannot be in the past", 400);
-    }
+    if (deadline && deadlineChanged && isPastDate(deadline)) {
+  return errorResponse("Deadline cannot be in the past", 400);
+}
 
     if (!PROJECT_STATUSES.includes(status)) {
       return errorResponse("Invalid project status", 400);
