@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import {
   Alert,
@@ -14,6 +14,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Menu,
   MenuItem,
   Table,
   TableBody,
@@ -65,6 +67,7 @@ type Expense = {
   description?: string;
   notes?: string;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 type ExpenseFormData = {
@@ -133,14 +136,26 @@ const emptyForm: ExpenseFormData = {
   notes: "",
 };
 
+const readonlyTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+  },
+};
+
+const readonlyMultilineTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+    whiteSpace: "pre-wrap",
+  },
+};
+
 function getTodayInputValue() {
   const today = new Date();
+  const timezoneOffset = today.getTimezoneOffset() * 60_000;
 
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+  return new Date(today.getTime() - timezoneOffset)
+    .toISOString()
+    .slice(0, 10);
 }
 
 function getExpensesFromResponse(response: ExpensesResponse): Expense[] {
@@ -176,7 +191,7 @@ function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   return [];
 }
 
-function getId(value?: { _id: string } | string) {
+function getId(value?: { _id: string } | string | null) {
   if (!value) return "";
   return typeof value === "object" ? value._id : value;
 }
@@ -184,6 +199,26 @@ function getId(value?: { _id: string } | string) {
 function getProjectName(projectId: ExpenseProject) {
   if (typeof projectId === "object" && projectId?.name) {
     return projectId.name;
+  }
+
+  return "-";
+}
+
+function getProjectType(projectId: ExpenseProject) {
+  if (typeof projectId === "object" && projectId?.type) {
+    return projectId.type;
+  }
+
+  return "-";
+}
+
+function getProjectClientName(projectId: ExpenseProject) {
+  if (
+    typeof projectId === "object" &&
+    typeof projectId.clientId === "object" &&
+    projectId.clientId?.companyName
+  ) {
+    return projectId.clientId.companyName;
   }
 
   return "-";
@@ -198,15 +233,43 @@ function formatDateToInputValue(date?: string) {
     return "";
   }
 
-  const year = parsedDate.getFullYear();
-  const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
-  const day = String(parsedDate.getDate()).padStart(2, "0");
+  const timezoneOffset = parsedDate.getTimezoneOffset() * 60_000;
 
-  return `${year}-${month}-${day}`;
+  return new Date(parsedDate.getTime() - timezoneOffset)
+    .toISOString()
+    .slice(0, 10);
 }
 
 function formatDate(date?: string) {
-  return formatDateToInputValue(date) || "-";
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getExpenseDateTime(date?: string) {
+  if (!date) return null;
+
+  const time = new Date(date).getTime();
+
+  return Number.isNaN(time) ? null : time;
+}
+
+function getCreatedAtTime(createdAt?: string) {
+  if (!createdAt) return 0;
+
+  const time = new Date(createdAt).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function cleanSingleLineText(value: string) {
@@ -254,7 +317,7 @@ function isFutureDate(value: string) {
 
 function validateExpenseForm(
   formData: ExpenseFormData,
-  isEditing: boolean
+  isEditing: boolean,
 ):
   | {
       isValid: true;
@@ -387,6 +450,11 @@ export default function ExpensesPage() {
   const [formErrors, setFormErrors] = useState<ExpenseFormErrors>({});
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
+  const [viewExpense, setViewExpense] = useState<Expense | null>(null);
+  const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const [actionExpense, setActionExpense] = useState<Expense | null>(null);
 
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -394,6 +462,36 @@ export default function ExpensesPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const todayInputValue = getTodayInputValue();
+
+  const sortedExpenses = useMemo(() => {
+    return [...expenses].sort((firstExpense, secondExpense) => {
+      const firstExpenseDateTime = getExpenseDateTime(firstExpense.date);
+      const secondExpenseDateTime = getExpenseDateTime(secondExpense.date);
+
+      if (firstExpenseDateTime === null && secondExpenseDateTime !== null) {
+        return 1;
+      }
+
+      if (firstExpenseDateTime !== null && secondExpenseDateTime === null) {
+        return -1;
+      }
+
+      if (
+        firstExpenseDateTime !== null &&
+        secondExpenseDateTime !== null &&
+        firstExpenseDateTime !== secondExpenseDateTime
+      ) {
+        return secondExpenseDateTime - firstExpenseDateTime;
+      }
+
+      return (
+        getCreatedAtTime(secondExpense.createdAt) -
+        getCreatedAtTime(firstExpense.createdAt)
+      );
+    });
+  }, [expenses]);
 
   async function fetchData() {
     setLoading(true);
@@ -424,7 +522,7 @@ export default function ExpensesPage() {
     setEditingExpense(null);
     setFormData({
       ...emptyForm,
-      date: getTodayInputValue(),
+      date: todayInputValue,
     });
     setFormErrors({});
     setOpenForm(true);
@@ -440,7 +538,7 @@ export default function ExpensesPage() {
       title: item.title || "",
       amount: String(item.amount || ""),
       category: item.category || "Hosting",
-      date: formatDateToInputValue(item.date) || getTodayInputValue(),
+      date: formatDateToInputValue(item.date) || todayInputValue,
       description: item.description || "",
       notes: item.notes || "",
     });
@@ -458,14 +556,14 @@ export default function ExpensesPage() {
     setEditingExpense(null);
     setFormData({
       ...emptyForm,
-      date: getTodayInputValue(),
+      date: todayInputValue,
     });
     setFormErrors({});
   }
 
   function updateFormField<K extends keyof ExpenseFormData>(
     field: K,
-    value: ExpenseFormData[K]
+    value: ExpenseFormData[K],
   ) {
     setFormData((current) => ({
       ...current,
@@ -476,6 +574,35 @@ export default function ExpensesPage() {
       ...current,
       [field]: undefined,
     }));
+  }
+
+  function handleActionMenuOpen(
+    event: React.MouseEvent<HTMLElement>,
+    expense: Expense,
+  ) {
+    setActionAnchorEl(event.currentTarget);
+    setActionExpense(expense);
+  }
+
+  function handleActionMenuClose() {
+    setActionAnchorEl(null);
+    setActionExpense(null);
+  }
+
+  function handleMenuEdit() {
+    if (!actionExpense) return;
+
+    const selectedExpense = actionExpense;
+    handleActionMenuClose();
+    handleEditOpen(selectedExpense);
+  }
+
+  function handleMenuDelete() {
+    if (!actionExpense) return;
+
+    const selectedExpense = actionExpense;
+    handleActionMenuClose();
+    setDeleteExpense(selectedExpense);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -675,12 +802,12 @@ export default function ExpensesPage() {
                     <TableCell>Category</TableCell>
                     <TableCell>Date</TableCell>
                     <TableCell>Description</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
 
                 <TableBody>
-                  {expenses.map((item) => (
+                  {sortedExpenses.map((item) => (
                     <TableRow
                       key={item._id}
                       hover
@@ -712,7 +839,7 @@ export default function ExpensesPage() {
                               border: (theme) =>
                                 `1px solid ${alpha(
                                   theme.palette.error.main,
-                                  0.18
+                                  0.18,
                                 )}`,
                             }}
                           >
@@ -749,7 +876,9 @@ export default function ExpensesPage() {
                         />
                       </TableCell>
 
-                      <TableCell>{formatDate(item.date)}</TableCell>
+                      <TableCell sx={{ minWidth: 130, fontWeight: 800 }}>
+                        {formatDate(item.date)}
+                      </TableCell>
 
                       <TableCell
                         sx={{
@@ -763,6 +892,8 @@ export default function ExpensesPage() {
                         {item.description || "-"}
                       </TableCell>
 
+                 
+
                       <TableCell align="right">
                         <Box
                           sx={{
@@ -775,27 +906,34 @@ export default function ExpensesPage() {
                           <Button
                             size="small"
                             variant="outlined"
-                            onClick={() => handleEditOpen(item)}
+                            onClick={() => setViewExpense(item)}
                             sx={{
                               borderRadius: 2,
                               fontWeight: 800,
                             }}
                           >
-                            Edit
+                            View
                           </Button>
 
-                          <Button
+                          <IconButton
                             size="small"
-                            variant="outlined"
-                            color="error"
-                            onClick={() => setDeleteExpense(item)}
+                            onClick={(event) =>
+                              handleActionMenuOpen(event, item)
+                            }
+                            aria-label={`Open actions for ${item.title}`}
                             sx={{
+                              width: 34,
+                              height: 34,
                               borderRadius: 2,
-                              fontWeight: 800,
+                              border: (theme) =>
+                                `1px solid ${theme.palette.divider}`,
+                              fontWeight: 900,
+                              fontSize: 18,
+                              lineHeight: 1,
                             }}
                           >
-                            Delete
-                          </Button>
+                            ⋮
+                          </IconButton>
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -806,6 +944,191 @@ export default function ExpensesPage() {
           )}
         </CardContent>
       </Card>
+
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={Boolean(actionAnchorEl)}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleMenuEdit}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ✎
+          </Box>
+          Edit
+        </MenuItem>
+
+        <MenuItem onClick={handleMenuDelete} sx={{ color: "error.main" }}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ×
+          </Box>
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={Boolean(viewExpense)}
+        onClose={() => setViewExpense(null)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+          Expense Details
+        </DialogTitle>
+
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Title"
+                fullWidth
+                value={viewExpense?.title || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Project"
+                fullWidth
+                value={
+                  viewExpense ? getProjectName(viewExpense.projectId) : "-"
+                }
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Amount"
+                fullWidth
+                value={formatBHD(viewExpense?.amount)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Category"
+                fullWidth
+                value={viewExpense?.category || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Expense Date"
+                fullWidth
+                value={formatDate(viewExpense?.date)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Project Type"
+                fullWidth
+                value={
+                  viewExpense ? getProjectType(viewExpense.projectId) : "-"
+                }
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Client"
+                fullWidth
+                value={
+                  viewExpense
+                    ? getProjectClientName(viewExpense.projectId)
+                    : "-"
+                }
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewExpense?.description || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewExpense?.notes || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Created At"
+                fullWidth
+                value={formatDate(viewExpense?.createdAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Updated At"
+                fullWidth
+                value={formatDate(viewExpense?.updatedAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewExpense(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={openForm}
@@ -898,7 +1221,7 @@ export default function ExpensesPage() {
                 onChange={(event) =>
                   updateFormField(
                     "category",
-                    event.target.value as ExpenseCategory
+                    event.target.value as ExpenseCategory,
                   )
                 }
               >
@@ -926,7 +1249,7 @@ export default function ExpensesPage() {
                     shrink: true,
                   },
                   htmlInput: {
-                    max: getTodayInputValue(),
+                    max: todayInputValue,
                   },
                 }}
               />
@@ -994,7 +1317,10 @@ export default function ExpensesPage() {
         <DialogContent>
           <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <Box component="span" sx={{ color: "text.primary", fontWeight: 900 }}>
+            <Box
+              component="span"
+              sx={{ color: "text.primary", fontWeight: 900 }}
+            >
               {deleteExpense?.title}
             </Box>
             ?
