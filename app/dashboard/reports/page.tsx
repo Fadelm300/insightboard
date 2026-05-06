@@ -1344,7 +1344,7 @@ export default function ReportsPage() {
               <TableCell>Expenses</TableCell>
               <TableCell>Net Profit</TableCell>
               <TableCell>Remaining</TableCell>
-              <TableCell>Payment</TableCell>
+              <TableCell>Payment Status</TableCell>
             </TableRow>
           </TableHead>
 

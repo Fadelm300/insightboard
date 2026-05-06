@@ -175,6 +175,35 @@ const readonlyMultilineTextFieldSx: SxProps<Theme> = {
   },
 };
 
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+};
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+};
+
+const hideFromTabletSx = {
+  display: { xs: "none", lg: "table-cell" },
+};
+
+const hideUntilWideSx = {
+  display: { xs: "none", xl: "table-cell" },
+};
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+};
+
 function getDealsFromResponse(response: DealsResponse): Deal[] {
   if (Array.isArray(response.data)) return response.data;
   if (Array.isArray(response.deals)) return response.deals;
@@ -439,7 +468,7 @@ function validateDealForm(data: DealFormData) {
   return { values, payload, errors };
 }
 
-function getStatusChipSx(status: DealStatus): SxProps<Theme> {
+function getStatusChipSx(status: DealStatus) {
   const statusColors: Record<DealStatus, string> = {
     Lead: "#64748B",
     Contacted: "#0EA5E9",
@@ -819,8 +848,19 @@ export default function DealsPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
-              <Table>
+            <TableContainer
+              sx={{
+                width: "100%",
+                maxWidth: "100%",
+                overflowX: "hidden",
+              }}
+            >
+              <Table
+                sx={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                }}
+              >
                 <TableHead>
                   <TableRow
                     sx={{
@@ -830,16 +870,81 @@ export default function DealsPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
-                    <TableCell align="center">Deal</TableCell>
-                    <TableCell>Client</TableCell>
-                    <TableCell>Expected Close</TableCell>
-                    <TableCell>Budget</TableCell>
-                    <TableCell>Final Price</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Probability</TableCell>
+                    <TableCell
+                      align="left"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "48%", sm: "34%", md: "28%" },
+                      }}
+                    >
+                      Deal
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "13%", lg: "12%" },
+                      }}
+                    >
+                      Client
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromTabletSx,
+                        width: { lg: "11%" },
+                      }}
+                    >
+                      Expected Close
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "24%", sm: "18%", md: "11%" },
+                      }}
+                    >
+                      Budget
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilWideSx,
+                        width: { xl: "10%" },
+                      }}
+                    >
+                      Final Price
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideOnPhoneSx,
+                        width: { sm: "18%", md: "14%", lg: "13%" },
+                      }}
+                    >
+                      Status
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromTabletSx,
+                        width: { lg: "11%" },
+                      }}
+                    >
+                      Probability
+                    </TableCell>
+
                     <TableCell
                       align="center"
-                      sx={{ width: 290, whiteSpace: "nowrap", pr: 2 }}
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "28%", sm: "30%", md: "22%", lg: "21%" },
+                      }}
                     >
                       Actions
                     </TableCell>
@@ -860,22 +965,30 @@ export default function DealsPage() {
                           },
                         }}
                       >
-                        <TableCell sx={{ minWidth: 260 }}>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "48%", sm: "34%", md: "28%" },
+                          }}
+                        >
                           <Box
                             sx={{
                               display: "flex",
                               alignItems: "center",
-                              gap: 1.5,
+                              gap: { xs: 0.75, md: 1.5 },
+                              minWidth: 0,
                             }}
                           >
                             <Box
                               sx={{
-                                width: 40,
-                                height: 40,
+                                width: { xs: 32, md: 40 },
+                                height: { xs: 32, md: 40 },
                                 borderRadius: 2.5,
                                 display: "grid",
                                 placeItems: "center",
+                                flexShrink: 0,
                                 fontWeight: 900,
+                                fontSize: { xs: 12, md: 14 },
                                 color: "primary.main",
                                 bgcolor: (theme) =>
                                   alpha(theme.palette.primary.main, 0.12),
@@ -889,8 +1002,16 @@ export default function DealsPage() {
                               {getDealInitial(deal.title)}
                             </Box>
 
-                            <Box>
-                              <Typography sx={{ fontWeight: 800 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: { xs: 13, md: 14 },
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
                                 {deal.title}
                               </Typography>
 
@@ -900,6 +1021,7 @@ export default function DealsPage() {
                                 sx={{
                                   mt: 0.25,
                                   maxWidth: 280,
+                                  display: { xs: "none", md: "block" },
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
                                   whiteSpace: "nowrap",
@@ -907,27 +1029,84 @@ export default function DealsPage() {
                               >
                                 {deal.description || "No description"}
                               </Typography>
+
+                              <Chip
+                                label={deal.status}
+                                size="small"
+                                sx={{
+                                  ...getStatusChipSx(deal.status),
+                                  display: { xs: "inline-flex", sm: "none" },
+                                  mt: 0.75,
+                                  maxWidth: "100%",
+                                  "& .MuiChip-label": {
+                                    px: 0.75,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  },
+                                }}
+                              />
                             </Box>
                           </Box>
                         </TableCell>
 
-                        <TableCell>{getClientName(deal.clientId)}</TableCell>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              fontWeight: 700,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {getClientName(deal.clientId)}
+                          </Typography>
+                        </TableCell>
 
-                        <TableCell sx={{ minWidth: 140, fontWeight: 700 }}>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {formatDate(deal.expectedCloseDate)}
                         </TableCell>
 
-                        
-
-                        <TableCell sx={{ fontWeight: 700 }}>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            fontWeight: 700,
+                            width: { xs: "24%", sm: "18%", md: "11%" },
+                            whiteSpace: "nowrap",
+                            fontSize: { xs: 12, md: 14 },
+                          }}
+                        >
                           {formatBHD(deal.estimatedBudget)}
                         </TableCell>
 
-                        <TableCell sx={{ fontWeight: 700 }}>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideUntilWideSx,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {formatBHD(deal.finalPrice)}
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideOnPhoneSx,
+                          }}
+                        >
                           <Chip
                             label={deal.status}
                             size="small"
@@ -935,7 +1114,12 @@ export default function DealsPage() {
                           />
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                          }}
+                        >
                           <Box
                             sx={{
                               display: "inline-flex",
@@ -979,15 +1163,18 @@ export default function DealsPage() {
 
                         <TableCell
                           align="right"
-                          sx={{ width: 180, whiteSpace: "nowrap", pr: 2 }}
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "28%", sm: "30%", md: "22%", lg: "21%" },
+                          }}
                         >
                           <Box
                             sx={{
                               display: "flex",
                               justifyContent: "flex-end",
                               alignItems: "center",
-                              gap: 0.5,
-                              flexWrap: "wrap",
+                              gap: { xs: 0.5, md: 0.5 },
+                              flexWrap: "nowrap",
                             }}
                           >
                             {deal.status === "Closed Won" && !isConverted && (
@@ -997,8 +1184,11 @@ export default function DealsPage() {
                                 onClick={() => handleConvertToProject(deal)}
                                 disabled={saving}
                                 sx={{
+                                  display: { xs: "none", md: "inline-flex" },
                                   borderRadius: 2,
                                   fontWeight: 800,
+                                  minWidth: { md: 78 },
+                                  px: { md: 1.25 },
                                 }}
                               >
                                 Convert
@@ -1011,8 +1201,11 @@ export default function DealsPage() {
                                 variant="outlined"
                                 disabled
                                 sx={{
+                                  display: { xs: "none", md: "inline-flex" },
                                   borderRadius: 2,
                                   fontWeight: 800,
+                                  minWidth: { md: 88 },
+                                  px: { md: 1.25 },
                                 }}
                               >
                                 Converted
@@ -1026,6 +1219,10 @@ export default function DealsPage() {
                               sx={{
                                 borderRadius: 2,
                                 fontWeight: 800,
+                                minWidth: { xs: 44, md: 64 },
+                                height: { xs: 30, md: 34 },
+                                px: { xs: 0.75, md: 1.5 },
+                                fontSize: { xs: 11, md: 13 },
                               }}
                             >
                               View
@@ -1038,8 +1235,10 @@ export default function DealsPage() {
                               }
                               aria-label={`Open actions for ${deal.title}`}
                               sx={{
+                                display: { xs: "none", md: "inline-flex" },
                                 width: 34,
                                 height: 34,
+                                flexShrink: 0,
                                 borderRadius: 2,
                                 border: (theme) =>
                                   `1px solid ${theme.palette.divider}`,
@@ -1102,7 +1301,7 @@ export default function DealsPage() {
       >
         <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>Deal Details</DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
             <Box
               sx={{
@@ -1250,7 +1449,7 @@ export default function DealsPage() {
             {editingDeal ? "Edit Deal" : "Add Deal"}
           </DialogTitle>
 
-          <DialogContent>
+          <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
             <Box
               sx={{
                 display: "flex",
@@ -1463,7 +1662,7 @@ export default function DealsPage() {
       >
         <DialogTitle sx={{ fontWeight: 900 }}>Delete Deal</DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Typography color="text.secondary">
             Are you sure you want to delete{" "}
             <Box

@@ -141,6 +141,31 @@ const readonlyMultilineTextFieldSx: SxProps<Theme> = {
   },
 };
 
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+};
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+};
+
+const hideFromTabletSx = {
+  display: { xs: "none", xl: "table-cell" },
+};
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+};
+
 function getTodayInputValue() {
   const today = new Date();
 
@@ -404,11 +429,11 @@ function formatBHD(value?: number) {
   })} BHD`;
 }
 
-function getAmountSx(): SxProps<Theme> {
+function getAmountSx() {
   return {
     fontWeight: 900,
     color: "success.main",
-  };
+  } satisfies SxProps<Theme>;
 }
 
 export default function RevenuePage() {
@@ -738,8 +763,20 @@ export default function RevenuePage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
-              <Table>
+            <TableContainer
+              sx={{
+                width: "100%",
+                maxWidth: "100%",
+                overflowX: "hidden",
+              }}
+            >
+              <Table
+                sx={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                  minWidth: { xs: "100%", md: "100%" },
+                }}
+              >
                 <TableHead>
                   <TableRow
                     sx={{
@@ -749,15 +786,70 @@ export default function RevenuePage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
-                    <TableCell>Project</TableCell>
-                    <TableCell>Client</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>Method</TableCell>
-                    <TableCell>Payment Date</TableCell>
-                    <TableCell>Description</TableCell>
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "48%", sm: "40%", md: "26%", xl: "22%" },
+                      }}
+                    >
+                      Project
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "16%", xl: "14%" },
+                      }}
+                    >
+                      Client
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "24%", sm: "20%", md: "12%" },
+                      }}
+                    >
+                      Amount
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideOnPhoneSx,
+                        width: { sm: "22%", md: "14%", xl: "12%" },
+                      }}
+                    >
+                      Method
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "16%", xl: "14%" },
+                      }}
+                    >
+                      Payment Date
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromTabletSx,
+                        width: { xl: "18%" },
+                      }}
+                    >
+                      Description
+                    </TableCell>
+
                     <TableCell
                       align="center"
-                      sx={{ width: 120, whiteSpace: "nowrap", pr: 2 }}
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "28%", sm: "18%", md: "16%", xl: "14%" },
+                      }}
                     >
                       Actions
                     </TableCell>
@@ -778,22 +870,31 @@ export default function RevenuePage() {
                           },
                         }}
                       >
-                        <TableCell sx={{ minWidth: 260 }}>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "48%", sm: "40%", md: "26%", xl: "22%" },
+                            minWidth: { md: 220 },
+                          }}
+                        >
                           <Box
                             sx={{
                               display: "flex",
                               alignItems: "center",
-                              gap: 1.5,
+                              gap: { xs: 0.75, md: 1.5 },
+                              minWidth: 0,
                             }}
                           >
                             <Box
                               sx={{
-                                width: 40,
-                                height: 40,
+                                width: { xs: 32, md: 40 },
+                                height: { xs: 32, md: 40 },
                                 borderRadius: 2.5,
                                 display: "grid",
                                 placeItems: "center",
+                                flexShrink: 0,
                                 fontWeight: 900,
+                                fontSize: { xs: 12, md: 14 },
                                 color: "success.main",
                                 bgcolor: (theme) =>
                                   alpha(theme.palette.success.main, 0.12),
@@ -807,29 +908,78 @@ export default function RevenuePage() {
                               {getProjectInitial(projectName)}
                             </Box>
 
-                            <Box>
-                              <Typography sx={{ fontWeight: 800 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: { xs: 13, md: 14 },
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
                                 {projectName}
                               </Typography>
 
                               <Typography
                                 variant="body2"
                                 color="text.secondary"
-                                sx={{ mt: 0.25 }}
+                                sx={{
+                                  mt: 0.25,
+                                  display: { xs: "none", sm: "block" },
+                                }}
                               >
                                 Revenue record
                               </Typography>
+
+                              <Chip
+                                label={item.paymentMethod}
+                                size="small"
+                                sx={{
+                                  ...getPaymentMethodChipSx(item.paymentMethod),
+                                  display: { xs: "inline-flex", sm: "none" },
+                                  mt: 0.75,
+                                  maxWidth: "100%",
+                                  "& .MuiChip-label": {
+                                    px: 0.75,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  },
+                                }}
+                              />
                             </Box>
                           </Box>
                         </TableCell>
 
-                        <TableCell>{getClientName(item.clientId)}</TableCell>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                            width: { md: "16%", xl: "14%" },
+                          }}
+                        >
+                          {getClientName(item.clientId)}
+                        </TableCell>
 
-                        <TableCell sx={getAmountSx()}>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...getAmountSx(),
+                            width: { xs: "24%", sm: "20%", md: "12%" },
+                            whiteSpace: "nowrap",
+                            fontSize: { xs: 12, md: 14 },
+                          }}
+                        >
                           {formatBHD(item.amount)}
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideOnPhoneSx,
+                            width: { sm: "22%", md: "14%", xl: "12%" },
+                          }}
+                        >
                           <Chip
                             label={item.paymentMethod}
                             size="small"
@@ -837,13 +987,22 @@ export default function RevenuePage() {
                           />
                         </TableCell>
 
-                        <TableCell>{formatDate(item.paymentDate)}</TableCell>
-
-
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                            width: { md: "16%", xl: "14%" },
+                            fontWeight: 800,
+                          }}
+                        >
+                          {formatDate(item.paymentDate)}
+                        </TableCell>
 
                         <TableCell
                           sx={{
-                            maxWidth: 260,
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                            width: { xl: "18%" },
                             color: "text.secondary",
                             overflow: "hidden",
                             textOverflow: "ellipsis",
@@ -855,14 +1014,18 @@ export default function RevenuePage() {
 
                         <TableCell
                           align="right"
-                          sx={{ width: 120, whiteSpace: "nowrap", pr: 2 }}
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "28%", sm: "18%", md: "16%", xl: "14%" },
+                          }}
                         >
                           <Box
                             sx={{
                               display: "flex",
                               justifyContent: "flex-end",
                               alignItems: "center",
-                              gap: 0.5,
+                              gap: { xs: 0.5, md: 1 },
+                              flexWrap: "nowrap",
                             }}
                           >
                             <Button
@@ -872,6 +1035,10 @@ export default function RevenuePage() {
                               sx={{
                                 borderRadius: 2,
                                 fontWeight: 800,
+                                minWidth: { xs: 44, md: 64 },
+                                height: { xs: 30, md: 34 },
+                                px: { xs: 0.75, md: 1.5 },
+                                fontSize: { xs: 11, md: 13 },
                               }}
                             >
                               View
@@ -884,8 +1051,10 @@ export default function RevenuePage() {
                               }
                               aria-label={`Open actions for ${projectName}`}
                               sx={{
+                                display: { xs: "none", md: "inline-flex" },
                                 width: 34,
                                 height: 34,
+                                flexShrink: 0,
                                 borderRadius: 2,
                                 border: (theme) =>
                                   `1px solid ${theme.palette.divider}`,
@@ -950,7 +1119,7 @@ export default function RevenuePage() {
           Revenue Details
         </DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
             <Box
               sx={{
@@ -1084,7 +1253,7 @@ export default function RevenuePage() {
             {editingRevenue ? "Edit Revenue" : "Add Revenue"}
           </DialogTitle>
 
-          <DialogContent>
+          <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
             <Box
               sx={{
                 display: "flex",
@@ -1236,7 +1405,7 @@ export default function RevenuePage() {
       >
         <DialogTitle sx={{ fontWeight: 900 }}>Delete Revenue</DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Typography color="text.secondary">
             Are you sure you want to delete this revenue record?
           </Typography>

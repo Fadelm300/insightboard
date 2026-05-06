@@ -149,6 +149,32 @@ const readonlyMultilineTextFieldSx: SxProps<Theme> = {
   },
 };
 
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 1.25, xl: 2 },
+  py: { xs: 1.25, md: 1.75, xl: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 1.25, xl: 2 },
+  py: { xs: 1.25, md: 1.75, xl: 2 },
+};
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+};
+
+const hideFromTabletSx = {
+  display: { xs: "none", xl: "table-cell" },
+};
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+};
+
+
 function getTodayInputValue() {
   const today = new Date();
   const timezoneOffset = today.getTimezoneOffset() * 60_000;
@@ -432,11 +458,11 @@ function formatBHD(value?: number) {
   })} BHD`;
 }
 
-function getAmountSx(): SxProps<Theme> {
+function getAmountSx() {
   return {
     fontWeight: 900,
     color: "error.main",
-  };
+  } satisfies SxProps<Theme>;
 }
 
 export default function ExpensesPage() {
@@ -785,8 +811,19 @@ export default function ExpensesPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
-              <Table>
+            <TableContainer
+              sx={{
+                width: "100%",
+                maxWidth: "100%",
+                overflowX: "hidden",
+              }}
+            >
+              <Table
+                sx={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                }}
+              >
                 <TableHead>
                   <TableRow
                     sx={{
@@ -796,13 +833,72 @@ export default function ExpensesPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
-                    <TableCell>Expense</TableCell>
-                    <TableCell>Project</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>Category</TableCell>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Description</TableCell>
-                    <TableCell align="center">Actions</TableCell>
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "52%", sm: "42%", md: "28%", xl: "24%" },
+                      }}
+                    >
+                      Expense
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "17%", xl: "16%" },
+                      }}
+                    >
+                      Project
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "25%", sm: "20%", md: "12%", xl: "10%" },
+                      }}
+                    >
+                      Amount
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideOnPhoneSx,
+                        width: { sm: "20%", md: "13%", xl: "12%" },
+                      }}
+                    >
+                      Category
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                      }}
+                    >
+                      Date
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromTabletSx,
+                        width: { xl: "18%" },
+                      }}
+                    >
+                      Description
+                    </TableCell>
+
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "23%", sm: "18%", md: "14%", xl: "8%" },
+                      }}
+                    >
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHead>
 
@@ -817,22 +913,31 @@ export default function ExpensesPage() {
                         },
                       }}
                     >
-                      <TableCell sx={{ minWidth: 240 }}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: { xs: "52%", sm: "42%", md: "28%", xl: "24%" },
+                          minWidth: 0,
+                        }}
+                      >
                         <Box
                           sx={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 1.5,
+                            gap: { xs: 0.75, md: 1.5 },
+                            minWidth: 0,
                           }}
                         >
                           <Box
                             sx={{
-                              width: 40,
-                              height: 40,
+                              width: { xs: 32, md: 40 },
+                              height: { xs: 32, md: 40 },
                               borderRadius: 2.5,
                               display: "grid",
                               placeItems: "center",
+                              flexShrink: 0,
                               fontWeight: 900,
+                              fontSize: { xs: 12, md: 14 },
                               color: "error.main",
                               bgcolor: (theme) =>
                                 alpha(theme.palette.error.main, 0.12),
@@ -846,29 +951,81 @@ export default function ExpensesPage() {
                             {getExpenseInitial(item.title)}
                           </Box>
 
-                          <Box>
-                            <Typography sx={{ fontWeight: 800 }}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography
+                              sx={{
+                                fontWeight: 800,
+                                fontSize: { xs: 13, md: 14 },
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
                               {item.title}
                             </Typography>
 
                             <Typography
                               variant="body2"
                               color="text.secondary"
-                              sx={{ mt: 0.25 }}
+                              sx={{
+                                mt: 0.25,
+                                display: { xs: "none", sm: "block" },
+                              }}
                             >
                               Expense record
                             </Typography>
+
+                            <Chip
+                              label={item.category}
+                              size="small"
+                              sx={{
+                                ...getExpenseCategoryChipSx(item.category),
+                                display: { xs: "inline-flex", sm: "none" },
+                                mt: 0.75,
+                                maxWidth: "100%",
+                                "& .MuiChip-label": {
+                                  px: 0.75,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                },
+                              }}
+                            />
                           </Box>
                         </Box>
                       </TableCell>
 
-                      <TableCell>{getProjectName(item.projectId)}</TableCell>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "17%", xl: "16%" },
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {getProjectName(item.projectId)}
+                      </TableCell>
 
-                      <TableCell sx={getAmountSx()}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...getAmountSx(),
+                          width: { xs: "25%", sm: "20%", md: "12%", xl: "10%" },
+                          whiteSpace: "nowrap",
+                          fontSize: { xs: 11, sm: 12, md: 14 },
+                        }}
+                      >
                         {formatBHD(item.amount)}
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideOnPhoneSx,
+                          width: { sm: "20%", md: "13%", xl: "12%" },
+                          minWidth: 0,
+                        }}
+                      >
                         <Chip
                           label={item.category}
                           size="small"
@@ -876,13 +1033,24 @@ export default function ExpensesPage() {
                         />
                       </TableCell>
 
-                      <TableCell sx={{ minWidth: 130, fontWeight: 800 }}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "13%", xl: "12%" },
+                          minWidth: 0,
+                          fontWeight: 800,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {formatDate(item.date)}
                       </TableCell>
 
                       <TableCell
                         sx={{
-                          maxWidth: 260,
+                          ...tableBodyCellSx,
+                          ...hideFromTabletSx,
+                          width: { xl: "18%" },
                           color: "text.secondary",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
@@ -892,15 +1060,21 @@ export default function ExpensesPage() {
                         {item.description || "-"}
                       </TableCell>
 
-                 
-
-                      <TableCell align="right">
+                      <TableCell
+                        align="right"
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: { xs: "23%", sm: "18%", md: "14%", xl: "8%" },
+                          minWidth: 0,
+                        }}
+                      >
                         <Box
                           sx={{
                             display: "flex",
                             justifyContent: "flex-end",
-                            gap: 1,
-                            flexWrap: "wrap",
+                            alignItems: "center",
+                            gap: { xs: 0.5, md: 1 },
+                            flexWrap: "nowrap",
                           }}
                         >
                           <Button
@@ -910,6 +1084,10 @@ export default function ExpensesPage() {
                             sx={{
                               borderRadius: 2,
                               fontWeight: 800,
+                              minWidth: { xs: 52, sm: 56, md: 64 },
+                              height: { xs: 30, md: 34 },
+                              px: { xs: 0.75, md: 1.5 },
+                              fontSize: { xs: 11, md: 13 },
                             }}
                           >
                             View
@@ -922,8 +1100,10 @@ export default function ExpensesPage() {
                             }
                             aria-label={`Open actions for ${item.title}`}
                             sx={{
+                              display: { xs: "none", md: "inline-flex" },
                               width: 34,
                               height: 34,
+                              flexShrink: 0,
                               borderRadius: 2,
                               border: (theme) =>
                                 `1px solid ${theme.palette.divider}`,
@@ -987,7 +1167,7 @@ export default function ExpensesPage() {
           Expense Details
         </DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
             <Box
               sx={{
@@ -1151,7 +1331,7 @@ export default function ExpensesPage() {
             {editingExpense ? "Edit Expense" : "Add Expense"}
           </DialogTitle>
 
-          <DialogContent>
+          <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
             <Box
               sx={{
                 display: "flex",
@@ -1314,7 +1494,7 @@ export default function ExpensesPage() {
       >
         <DialogTitle sx={{ fontWeight: 900 }}>Delete Expense</DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Typography color="text.secondary">
             Are you sure you want to delete{" "}
             <Box

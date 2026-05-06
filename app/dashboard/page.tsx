@@ -232,9 +232,24 @@ export default function DashboardPage() {
   }
 
   return (
-    <Box>
+    <Box
+      sx={{
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        overflowX: "hidden",
+      }}
+    >
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4">Dashboard</Typography>
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: 800,
+            letterSpacing: "-0.04em",
+          }}
+        >
+          Dashboard
+        </Typography>
 
         <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
           Overview of your web design business performance.
@@ -247,9 +262,9 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      <Grid container spacing={{ xs: 2, md: 3 }}>
         {dashboardStats.map((stat) => (
-          <Grid key={stat.title} size={{ xs: 12, sm: 6, md: 3 }}>
+          <Grid key={stat.title} size={{ xs: 12, sm: 6, lg: 3 }}>
             <KPIBox
               title={stat.title}
               value={stat.value}
@@ -260,11 +275,11 @@ export default function DashboardPage() {
           </Grid>
         ))}
 
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           <RecentDeals />
         </Grid>
 
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <RevenueSummary />
         </Grid>
 

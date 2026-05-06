@@ -194,6 +194,35 @@ const readonlyMultilineTextFieldSx: SxProps<Theme> = {
   },
 };
 
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 1.25, xl: 2 },
+  py: { xs: 1.25, md: 1.75, xl: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 1.25, xl: 2 },
+  py: { xs: 1.25, md: 1.75, xl: 2 },
+};
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+};
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+};
+
+const hideUntilLargeSx = {
+  display: { xs: "none", lg: "table-cell" },
+};
+
+const hideUntilExtraLargeSx = {
+  display: { xs: "none", xl: "table-cell" },
+};
+
 function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   if (Array.isArray(response.data)) return response.data;
   if (Array.isArray(response.projects)) return response.projects;
@@ -491,11 +520,11 @@ function formatBHD(value?: number) {
   })} BHD`;
 }
 
-function getProfitSx(profit: number): SxProps<Theme> {
+function getProfitSx(profit: number) {
   return {
     fontWeight: 900,
     color: profit >= 0 ? "success.main" : "error.main",
-  };
+  } satisfies SxProps<Theme>;
 }
 
 export default function ProjectsPage() {
@@ -887,8 +916,19 @@ export default function ProjectsPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
-              <Table>
+            <TableContainer
+              sx={{
+                width: "100%",
+                maxWidth: "100%",
+                overflowX: "hidden",
+              }}
+            >
+              <Table
+                sx={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                }}
+              >
                 <TableHead>
                   <TableRow
                     sx={{
@@ -898,16 +938,122 @@ export default function ProjectsPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
-                    <TableCell align="center">Project</TableCell>
-                    <TableCell>Client</TableCell>
-                    <TableCell>Deal</TableCell>
-                    <TableCell>Deadline</TableCell>
-                    <TableCell>Price</TableCell>
-                    <TableCell>Cost</TableCell>
-                    <TableCell>Profit</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Payment</TableCell>
-                    <TableCell align="center">Actions</TableCell>
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: {
+                          xs: "52%",
+                          sm: "38%",
+                          md: "28%",
+                          lg: "24%",
+                          xl: "22%",
+                        },
+                      }}
+                    >
+                      Project
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "16%", lg: "13%", xl: "11%" },
+                      }}
+                    >
+                      Client
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilExtraLargeSx,
+                        width: { xl: "9%" },
+                      }}
+                    >
+                      Deal
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "14%", lg: "10%", xl: "9%" },
+                      }}
+                    >
+                      Deadline
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilLargeSx,
+                        width: { lg: "8%" },
+                      }}
+                    >
+                      Price
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilExtraLargeSx,
+                        width: { xl: "7%" },
+                      }}
+                    >
+                      Cost
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: {
+                          xs: "23%",
+                          sm: "20%",
+                          md: "12%",
+                          lg: "8%",
+                          xl: "8%",
+                        },
+                      }}
+                    >
+                      Profit
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideOnPhoneSx,
+                        width: { sm: "22%", md: "14%", lg: "10%", xl: "10%" },
+                      }}
+                    >
+                      Status
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilLargeSx,
+                        width: { lg: "12%", xl: "10%" },
+                      }}
+                    >
+                      Payment
+                    </TableCell>
+
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: {
+                          xs: "25%",
+                          sm: "20%",
+                          md: "14%",
+                          lg: "10%",
+                          xl: "8%",
+                        },
+                      }}
+                    >
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHead>
 
@@ -922,22 +1068,37 @@ export default function ProjectsPage() {
                         },
                       }}
                     >
-                      <TableCell sx={{ minWidth: 260 }}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: {
+                            xs: "52%",
+                            sm: "38%",
+                            md: "28%",
+                            lg: "24%",
+                            xl: "22%",
+                          },
+                          minWidth: 0,
+                        }}
+                      >
                         <Box
                           sx={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 1.5,
+                            gap: { xs: 0.75, md: 1.5 },
+                            minWidth: 0,
                           }}
                         >
                           <Box
                             sx={{
-                              width: 40,
-                              height: 40,
+                              width: { xs: 32, md: 40 },
+                              height: { xs: 32, md: 40 },
                               borderRadius: 2.5,
                               display: "grid",
                               placeItems: "center",
+                              flexShrink: 0,
                               fontWeight: 900,
+                              fontSize: { xs: 12, md: 14 },
                               color: "primary.main",
                               bgcolor: (theme) =>
                                 alpha(theme.palette.primary.main, 0.12),
@@ -951,15 +1112,29 @@ export default function ProjectsPage() {
                             {getProjectInitial(project.name)}
                           </Box>
 
-                          <Box>
-                            <Typography sx={{ fontWeight: 800 }}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography
+                              sx={{
+                                fontWeight: 800,
+                                fontSize: { xs: 13, md: 14 },
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
                               {project.name}
                             </Typography>
 
                             <Typography
                               variant="body2"
                               color="text.secondary"
-                              sx={{ mt: 0.25 }}
+                              sx={{
+                                mt: 0.25,
+                                display: { xs: "none", sm: "block" },
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
                             >
                               {project.type}
                             </Typography>
@@ -967,26 +1142,93 @@ export default function ProjectsPage() {
                         </Box>
                       </TableCell>
 
-                      <TableCell>{getClientName(project.clientId)}</TableCell>
-                      <TableCell>{getDealName(project.dealId)}</TableCell>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "16%", lg: "13%", xl: "11%" },
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {getClientName(project.clientId)}
+                      </TableCell>
 
-                      <TableCell sx={{ minWidth: 140, fontWeight: 800 }}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilExtraLargeSx,
+                          width: { xl: "9%" },
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {getDealName(project.dealId)}
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "14%", lg: "10%", xl: "9%" },
+                          fontWeight: 800,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {formatDate(project.deadline)}
                       </TableCell>
 
-                      <TableCell sx={{ fontWeight: 700 }}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilLargeSx,
+                          width: { lg: "8%" },
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {formatBHD(project.price)}
                       </TableCell>
 
-                      <TableCell sx={{ fontWeight: 700 }}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilExtraLargeSx,
+                          width: { xl: "7%" },
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {formatBHD(project.cost)}
                       </TableCell>
 
-                      <TableCell sx={getProfitSx(project.profit)}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...getProfitSx(project.profit),
+                          width: {
+                            xs: "23%",
+                            sm: "20%",
+                            md: "12%",
+                            lg: "8%",
+                            xl: "8%",
+                          },
+                          whiteSpace: "nowrap",
+                          fontSize: { xs: 11, sm: 12, md: 14 },
+                        }}
+                      >
                         {formatBHD(project.profit)}
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideOnPhoneSx,
+                          width: { sm: "22%", md: "14%", lg: "10%", xl: "10%" },
+                        }}
+                      >
                         <Chip
                           label={project.status}
                           size="small"
@@ -994,7 +1236,13 @@ export default function ProjectsPage() {
                         />
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilLargeSx,
+                          width: { lg: "12%", xl: "10%" },
+                        }}
+                      >
                         <Chip
                           label={project.paymentStatus}
                           size="small"
@@ -1002,13 +1250,26 @@ export default function ProjectsPage() {
                         />
                       </TableCell>
 
-                      <TableCell align="right">
+                      <TableCell
+                        align="right"
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: {
+                            xs: "25%",
+                            sm: "20%",
+                            md: "14%",
+                            lg: "10%",
+                            xl: "8%",
+                          },
+                        }}
+                      >
                         <Box
                           sx={{
                             display: "flex",
                             justifyContent: "flex-end",
-                            gap: 1,
-                            flexWrap: "wrap",
+                            alignItems: "center",
+                            gap: { xs: 0.5, md: 1 },
+                            flexWrap: "nowrap",
                           }}
                         >
                           <Button
@@ -1018,6 +1279,10 @@ export default function ProjectsPage() {
                             sx={{
                               borderRadius: 2,
                               fontWeight: 800,
+                              minWidth: { xs: 44, md: 64 },
+                              height: { xs: 30, md: 34 },
+                              px: { xs: 0.75, md: 1.5 },
+                              fontSize: { xs: 11, md: 13 },
                             }}
                           >
                             View
@@ -1030,8 +1295,10 @@ export default function ProjectsPage() {
                             }
                             aria-label={`Open actions for ${project.name}`}
                             sx={{
+                              display: { xs: "none", md: "inline-flex" },
                               width: 34,
                               height: 34,
+                              flexShrink: 0,
                               borderRadius: 2,
                               border: (theme) =>
                                 `1px solid ${theme.palette.divider}`,

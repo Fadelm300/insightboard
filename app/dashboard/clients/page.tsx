@@ -111,6 +111,35 @@ const readonlyMultilineTextFieldSx: SxProps<Theme> = {
   },
 };
 
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+} as const;
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+} as const;
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+} as const;
+
+const hideFromTabletSx = {
+  display: { xs: "none", lg: "table-cell" },
+} as const;
+
+const hideUntilWideSx = {
+  display: { xs: "none", xl: "table-cell" },
+} as const;
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+} as const;
+
 function getClientsFromResponse(response: ClientsResponse): Client[] {
   if (Array.isArray(response.data)) return response.data;
 
@@ -624,8 +653,19 @@ export default function ClientsPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
-              <Table>
+            <TableContainer
+              sx={{
+                width: "100%",
+                maxWidth: "100%",
+                overflowX: "hidden",
+              }}
+            >
+              <Table
+                sx={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                }}
+              >
                 <TableHead>
                   <TableRow
                     sx={{
@@ -635,13 +675,75 @@ export default function ClientsPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
-                    <TableCell align="center">Company</TableCell>
-                    <TableCell>Contact</TableCell>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Phone</TableCell>
-                    <TableCell>Created Date</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="center">Actions</TableCell>
+                    <TableCell
+                      align="left"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "72%", sm: "54%", md: "34%", lg: "30%" },
+                      }}
+                    >
+                      Company
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "18%", lg: "16%" },
+                      }}
+                    >
+                      Contact
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilWideSx,
+                        width: { xl: "20%" },
+                      }}
+                    >
+                      Email
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilWideSx,
+                        width: { xl: "14%" },
+                      }}
+                    >
+                      Phone
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromTabletSx,
+                        width: { lg: "14%" },
+                      }}
+                    >
+                      Created Date
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideOnPhoneSx,
+                        width: { sm: "24%", md: "16%", lg: "14%" },
+                      }}
+                    >
+                      Status
+                    </TableCell>
+
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "28%", sm: "22%", md: 120 },
+                      }}
+                    >
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHead>
 
@@ -656,20 +758,28 @@ export default function ClientsPage() {
                         },
                       }}
                     >
-                      <TableCell sx={{ minWidth: 240 }}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: { xs: "72%", sm: "54%", md: "34%", lg: "30%" },
+                          minWidth: 0,
+                        }}
+                      >
                         <Stack
                           direction="row"
-                          spacing={1.5}
-                          sx={{ alignItems: "center" }}
+                          spacing={{ xs: 0.75, md: 1.5 }}
+                          sx={{ alignItems: "center", minWidth: 0 }}
                         >
                           <Box
                             sx={{
-                              width: 40,
-                              height: 40,
+                              width: { xs: 32, md: 40 },
+                              height: { xs: 32, md: 40 },
                               borderRadius: 2.5,
                               display: "grid",
                               placeItems: "center",
+                              flexShrink: 0,
                               fontWeight: 800,
+                              fontSize: { xs: 12, md: 14 },
                               color: "primary.main",
                               bgcolor: (theme) =>
                                 alpha(theme.palette.primary.main, 0.12),
@@ -683,31 +793,119 @@ export default function ClientsPage() {
                             {getClientInitial(client.companyName)}
                           </Box>
 
-                          <Box>
-                            <Typography sx={{ fontWeight: 800 }}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography
+                              sx={{
+                                fontWeight: 800,
+                                fontSize: { xs: 13, md: 14 },
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
                               {client.companyName}
                             </Typography>
 
                             <Typography
                               variant="body2"
                               color="text.secondary"
-                              sx={{ mt: 0.25 }}
+                              sx={{
+                                mt: 0.25,
+                                display: { xs: "none", sm: "block" },
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
                             >
                               {client.businessType || "No business type"}
                             </Typography>
+
+                            <Chip
+                              label={client.status}
+                              size="small"
+                              sx={{
+                                ...getStatusChipSx(client.status),
+                                display: { xs: "inline-flex", sm: "none" },
+                                mt: 0.75,
+                                maxWidth: "100%",
+                                "& .MuiChip-label": {
+                                  px: 0.75,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                },
+                              }}
+                            />
                           </Box>
                         </Stack>
                       </TableCell>
 
-                      <TableCell>{client.contactPerson || "-"}</TableCell>
-                      <TableCell>{client.email || "-"}</TableCell>
-                      <TableCell>{client.phone || "-"}</TableCell>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideFromMobileSx,
+                        }}
+                      >
+                        <Typography
+                          sx={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {client.contactPerson || "-"}
+                        </Typography>
+                      </TableCell>
 
-                      <TableCell sx={{ minWidth: 140, fontWeight: 700 }}>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilWideSx,
+                        }}
+                      >
+                        <Typography
+                          sx={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {client.email || "-"}
+                        </Typography>
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilWideSx,
+                        }}
+                      >
+                        <Typography
+                          sx={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {client.phone || "-"}
+                        </Typography>
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideFromTabletSx,
+                          fontWeight: 700,
+                        }}
+                      >
                         {formatDate(client.createdAt)}
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideOnPhoneSx,
+                        }}
+                      >
                         <Chip
                           label={client.status}
                           size="small"
@@ -715,12 +913,21 @@ export default function ClientsPage() {
                         />
                       </TableCell>
 
-
-                      <TableCell align="right">
+                      <TableCell
+                        align="right"
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: { xs: "28%", sm: "22%", md: 120 },
+                        }}
+                      >
                         <Stack
                           direction="row"
-                          spacing={1}
-                          
+                          spacing={{ xs: 0.5, md: 1 }}
+                          sx={{
+                            justifyContent: "flex-end",
+                            alignItems: "center",
+                            flexWrap: "nowrap",
+                          }}
                         >
                           <Button
                             size="small"
@@ -729,6 +936,10 @@ export default function ClientsPage() {
                             sx={{
                               borderRadius: 2,
                               fontWeight: 700,
+                              minWidth: { xs: 44, md: 64 },
+                              height: { xs: 30, md: 34 },
+                              px: { xs: 0.75, md: 1.5 },
+                              fontSize: { xs: 11, md: 13 },
                             }}
                           >
                             View
@@ -741,6 +952,7 @@ export default function ClientsPage() {
                             }
                             aria-label={`Open actions for ${client.companyName}`}
                             sx={{
+                              display: { xs: "none", md: "inline-flex" },
                               width: 34,
                               height: 34,
                               borderRadius: 2,

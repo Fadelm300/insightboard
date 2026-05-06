@@ -15,7 +15,10 @@ export default function DashboardLayout({
       <Box
         sx={{
           display: "flex",
-          minHeight: "100vh",
+          minHeight: "100dvh",
+          width: "100%",
+          maxWidth: "100vw",
+          overflowX: "hidden",
           bgcolor: "background.default",
           color: "text.primary",
         }}
@@ -27,14 +30,18 @@ export default function DashboardLayout({
           component="main"
           sx={{
             flexGrow: 1,
-            minHeight: "100vh",
-            p: { xs: 2, md: 3 },
+            minWidth: 0,
+            width: "100%",
+            maxWidth: "100vw",
+            minHeight: "100dvh",
+            overflowX: "hidden",
+            p: { xs: 1.5, sm: 2, xl: 3 },
             bgcolor: "background.default",
             color: "text.primary",
             transition: "background-color 200ms ease, color 200ms ease",
           }}
         >
-          <Toolbar />
+          <Toolbar sx={{ minHeight: { xs: 64, xl: 72 } }} />
           {children}
         </Box>
       </Box>
