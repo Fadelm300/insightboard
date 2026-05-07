@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type React from "react";
 import {
   Alert,
   Box,
@@ -16,6 +17,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -105,10 +107,18 @@ type DealsResponse = {
         deals?: Deal[];
         items?: Deal[];
         records?: Deal[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
       };
   deals?: Deal[];
   items?: Deal[];
   records?: Deal[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
 type ClientsResponse = {
@@ -161,6 +171,8 @@ const emptyForm: DealFormData = {
   description: "",
   notes: "",
 };
+
+const DEALS_PER_PAGE = 7;
 
 const readonlyTextFieldSx: SxProps<Theme> = {
   "& .MuiInputBase-input": {
@@ -217,6 +229,24 @@ function getDealsFromResponse(response: DealsResponse): Deal[] {
   }
 
   return [];
+}
+
+function getDealsPaginationFromResponse(response: DealsResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || DEALS_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || DEALS_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
 }
 
 function getClientsFromResponse(response: ClientsResponse): Client[] {
@@ -520,6 +550,10 @@ export default function DealsPage() {
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalDeals, setTotalDeals] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -549,19 +583,34 @@ export default function DealsPage() {
     );
   }, [projects]);
 
-  async function fetchData() {
+  async function fetchData(pageNumber = page, search = searchQuery) {
     setLoading(true);
     setError("");
+
+    const queryParams = new URLSearchParams({
+      page: String(pageNumber),
+      limit: String(DEALS_PER_PAGE),
+    });
+
+    const cleanSearch = search.trim();
+
+    if (cleanSearch) {
+      queryParams.set("search", cleanSearch);
+    }
 
     try {
       const [dealsResponse, clientsResponse, projectsResponse] =
         await Promise.all([
-          apiFetch<DealsResponse>("/api/deals"),
-          apiFetch<ClientsResponse>("/api/clients"),
-          apiFetch<ProjectsResponse>("/api/projects"),
+          apiFetch<DealsResponse>(`/api/deals?${queryParams.toString()}`),
+          apiFetch<ClientsResponse>("/api/clients?limit=50"),
+          apiFetch<ProjectsResponse>("/api/projects?limit=50"),
         ]);
 
+      const pagination = getDealsPaginationFromResponse(dealsResponse);
+
       setDeals(getDealsFromResponse(dealsResponse));
+      setTotalDeals(pagination.total);
+      setTotalPages(Math.max(pagination.totalPages, 1));
       setClients(getClientsFromResponse(clientsResponse));
       setProjects(getProjectsFromResponse(projectsResponse));
     } catch (err) {
@@ -574,8 +623,12 @@ export default function DealsPage() {
   }
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      fetchData(page, searchQuery);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingDeal(null);
@@ -706,7 +759,8 @@ export default function DealsPage() {
       }
 
       handleFormClose();
-      await fetchData();
+      setPage(1);
+      await fetchData(1, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save deal";
@@ -730,7 +784,7 @@ export default function DealsPage() {
 
       setSuccess("Deal deleted successfully");
       setDeleteDeal(null);
-      await fetchData();
+      await fetchData(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to delete deal";
@@ -751,7 +805,7 @@ export default function DealsPage() {
       });
 
       setSuccess("Deal converted to project successfully");
-      await fetchData();
+      await fetchData(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to convert deal";
@@ -804,6 +858,31 @@ export default function DealsPage() {
         </Button>
       </Box>
 
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by deal, client, status, budget, or expected close date..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
           {error}
@@ -848,7 +927,8 @@ export default function DealsPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer
+            <>
+              <TableContainer
               sx={{
                 width: "100%",
                 maxWidth: "100%",
@@ -870,6 +950,16 @@ export default function DealsPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: 56,
+                      }}
+                    >
+                      #
+                    </TableCell>
+
                     <TableCell
                       align="left"
                       sx={{
@@ -952,7 +1042,7 @@ export default function DealsPage() {
                 </TableHead>
 
                 <TableBody>
-                  {sortedDeals.map((deal) => {
+                  {sortedDeals.map((deal, index) => {
                     const isConverted = convertedDealIds.has(deal._id);
 
                     return (
@@ -965,6 +1055,18 @@ export default function DealsPage() {
                           },
                         }}
                       >
+                        <TableCell
+                          align="center"
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: 56,
+                            fontWeight: 800,
+                            color: "text.secondary",
+                          }}
+                        >
+                          {(page - 1) * DEALS_PER_PAGE + index + 1}
+                        </TableCell>
+
                         <TableCell
                           sx={{
                             ...tableBodyCellSx,
@@ -1256,7 +1358,33 @@ export default function DealsPage() {
                   })}
                 </TableBody>
               </Table>
-            </TableContainer>
+              </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalDeals} deals
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
           )}
         </CardContent>
       </Card>

@@ -17,6 +17,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -87,11 +88,19 @@ type RevenueResponse = {
         revenues?: Revenue[];
         items?: Revenue[];
         records?: Revenue[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
       };
   revenue?: Revenue[];
   revenues?: Revenue[];
   items?: Revenue[];
   records?: Revenue[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
 type ProjectsResponse = {
@@ -127,6 +136,8 @@ const emptyForm: RevenueFormData = {
   description: "",
   notes: "",
 };
+
+const REVENUE_PER_PAGE = 7;
 
 const readonlyTextFieldSx: SxProps<Theme> = {
   "& .MuiInputBase-input": {
@@ -192,6 +203,24 @@ function getRevenueFromResponse(response: RevenueResponse): Revenue[] {
   if (Array.isArray(response.records)) return response.records;
 
   return [];
+}
+
+function getPaginationFromResponse(response: RevenueResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || REVENUE_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || REVENUE_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
 }
 
 function getProjectsFromResponse(response: ProjectsResponse): Project[] {
@@ -459,6 +488,10 @@ export default function RevenuePage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const sortedRevenue = useMemo(() => {
     return [...revenue].sort((firstItem, secondItem) => {
@@ -477,18 +510,33 @@ export default function RevenuePage() {
     });
   }, [revenue]);
 
-  async function fetchData() {
+  async function fetchData(pageNumber = page, search = searchQuery) {
     setLoading(true);
     setError("");
 
+    const queryParams = new URLSearchParams({
+      page: String(pageNumber),
+      limit: String(REVENUE_PER_PAGE),
+    });
+
+    const cleanSearch = search.trim();
+
+    if (cleanSearch) {
+      queryParams.set("search", cleanSearch);
+    }
+
     try {
       const [revenueResponse, projectsResponse] = await Promise.all([
-        apiFetch<RevenueResponse>("/api/revenue"),
-        apiFetch<ProjectsResponse>("/api/projects"),
+        apiFetch<RevenueResponse>(`/api/revenue?${queryParams.toString()}`),
+        apiFetch<ProjectsResponse>("/api/projects?limit=50"),
       ]);
+
+      const pagination = getPaginationFromResponse(revenueResponse);
 
       setRevenue(getRevenueFromResponse(revenueResponse));
       setProjects(getProjectsFromResponse(projectsResponse));
+      setTotalRevenue(pagination.total);
+      setTotalPages(Math.max(pagination.totalPages, 1));
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load revenue";
@@ -499,8 +547,12 @@ export default function RevenuePage() {
   }
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      fetchData(page, searchQuery);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingRevenue(null);
@@ -642,7 +694,8 @@ export default function RevenuePage() {
       }
 
       handleFormClose();
-      await fetchData();
+      setPage(1);
+      await fetchData(1, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save revenue";
@@ -666,7 +719,7 @@ export default function RevenuePage() {
 
       setSuccess("Revenue deleted successfully");
       setDeleteRevenue(null);
-      await fetchData();
+      await fetchData(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to delete revenue";
@@ -719,6 +772,31 @@ export default function RevenuePage() {
         </Button>
       </Box>
 
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by project, client, amount, method, or description..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
           {error}
@@ -763,7 +841,8 @@ export default function RevenuePage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer
+            <>
+              <TableContainer
               sx={{
                 width: "100%",
                 maxWidth: "100%",
@@ -786,6 +865,16 @@ export default function RevenuePage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: 56,
+                      }}
+                    >
+                      #
+                    </TableCell>
+
                     <TableCell
                       sx={{
                         ...tableHeaderCellSx,
@@ -857,7 +946,7 @@ export default function RevenuePage() {
                 </TableHead>
 
                 <TableBody>
-                  {sortedRevenue.map((item) => {
+                  {sortedRevenue.map((item, index) => {
                     const projectName = getProjectName(item.projectId);
 
                     return (
@@ -870,6 +959,18 @@ export default function RevenuePage() {
                           },
                         }}
                       >
+                        <TableCell
+                          align="center"
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: 56,
+                            fontWeight: 800,
+                            color: "text.secondary",
+                          }}
+                        >
+                          {(page - 1) * REVENUE_PER_PAGE + index + 1}
+                        </TableCell>
+
                         <TableCell
                           sx={{
                             ...tableBodyCellSx,
@@ -1072,7 +1173,33 @@ export default function RevenuePage() {
                   })}
                 </TableBody>
               </Table>
-            </TableContainer>
+              </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalRevenue} revenue records
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
           )}
         </CardContent>
       </Card>

@@ -86,18 +86,80 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const expenses = await Expense.find()
-      .populate("projectId", "name type price cost profit status paymentStatus")
-      .sort({ date: -1 });
+    const { searchParams } = new URL(req.url);
+
+    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(searchParams.get("limit")) || 10, 1),
+      50
+    );
+
+    const search = searchParams.get("search")?.trim() || "";
+    const skip = (page - 1) * limit;
+
+    const filter: Record<string, unknown> = {};
+
+    if (search) {
+      const matchingProjects = await Project.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { type: { $regex: search, $options: "i" } },
+          { status: { $regex: search, $options: "i" } },
+          { paymentStatus: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const matchingProjectIds = matchingProjects.map((project) => project._id);
+
+      const searchConditions: Record<string, unknown>[] = [
+        { title: { $regex: search, $options: "i" } },
+        { category: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { notes: { $regex: search, $options: "i" } },
+      ];
+
+      const amount = Number(search);
+
+      if (Number.isFinite(amount)) {
+        searchConditions.push({ amount });
+      }
+
+      if (matchingProjectIds.length > 0) {
+        searchConditions.push({
+          projectId: { $in: matchingProjectIds },
+        });
+      }
+
+      filter.$or = searchConditions;
+    }
+
+    const [expenses, total] = await Promise.all([
+      Expense.find(filter)
+        .populate("projectId", "name type price cost profit status paymentStatus")
+        .sort({ date: -1 })
+        .skip(skip)
+        .limit(limit),
+      Expense.countDocuments(filter),
+    ]);
 
     return successResponse(
-      { expenses },
+      {
+        expenses,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
       "Expense records fetched successfully"
     );
   } catch {
     return errorResponse("Server error", 500);
   }
 }
+
+
 
 export async function POST(req: NextRequest) {
   try {

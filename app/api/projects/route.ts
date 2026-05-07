@@ -244,7 +244,6 @@ function validateProjectPayload(body: unknown):
     },
   };
 }
-
 export async function GET(req: NextRequest) {
   try {
     const authUser = getAuthUser(req);
@@ -255,12 +254,95 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const projects = await Project.find({ isDeleted: { $ne: true } })
-      .populate("clientId", "companyName contactPerson email")
-      .populate("dealId", "title status finalPrice estimatedBudget")
-      .sort({ createdAt: -1 });
+    const { searchParams } = new URL(req.url);
 
-    return successResponse({ projects }, "Projects fetched successfully");
+    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(searchParams.get("limit")) || 10, 1),
+      50
+    );
+
+    const search = searchParams.get("search")?.trim() || "";
+    const skip = (page - 1) * limit;
+
+    const filter: Record<string, unknown> = {
+      isDeleted: { $ne: true },
+    };
+
+    if (search) {
+      const matchingClients = await Client.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { companyName: { $regex: search, $options: "i" } },
+          { contactPerson: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const matchingDeals = await Deal.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { title: { $regex: search, $options: "i" } },
+          { status: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const matchingClientIds = matchingClients.map((client) => client._id);
+      const matchingDealIds = matchingDeals.map((deal) => deal._id);
+
+      const searchConditions: Record<string, unknown>[] = [
+        { name: { $regex: search, $options: "i" } },
+        { type: { $regex: search, $options: "i" } },
+        { status: { $regex: search, $options: "i" } },
+        { paymentStatus: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { notes: { $regex: search, $options: "i" } },
+      ];
+
+      const amount = Number(search);
+
+      if (Number.isFinite(amount)) {
+        searchConditions.push({ price: amount });
+        searchConditions.push({ cost: amount });
+        searchConditions.push({ profit: amount });
+      }
+
+      if (matchingClientIds.length > 0) {
+        searchConditions.push({
+          clientId: { $in: matchingClientIds },
+        });
+      }
+
+      if (matchingDealIds.length > 0) {
+        searchConditions.push({
+          dealId: { $in: matchingDealIds },
+        });
+      }
+
+      filter.$or = searchConditions;
+    }
+
+    const [projects, total] = await Promise.all([
+      Project.find(filter)
+        .populate("clientId", "companyName contactPerson email")
+        .populate("dealId", "title status finalPrice estimatedBudget")
+        .sort({ deadline: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Project.countDocuments(filter),
+    ]);
+
+    return successResponse(
+      {
+        projects,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+      "Projects fetched successfully"
+    );
   } catch {
     return errorResponse("Server error", 500);
   }

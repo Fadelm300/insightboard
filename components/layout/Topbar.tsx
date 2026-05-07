@@ -66,7 +66,7 @@ export default function Topbar() {
     }
 
     removeToken();
-    router.replace("/login");
+    router.replace("/");
   }
 
   function handleMobileDrawerClose() {

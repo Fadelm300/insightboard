@@ -17,6 +17,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -92,11 +93,19 @@ type ExpensesResponse = {
         expenses?: Expense[];
         items?: Expense[];
         records?: Expense[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
       };
   expense?: Expense[];
   expenses?: Expense[];
   items?: Expense[];
   records?: Expense[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
 type ProjectsResponse = {
@@ -135,6 +144,8 @@ const emptyForm: ExpenseFormData = {
   description: "",
   notes: "",
 };
+
+const EXPENSES_PER_PAGE = 7;
 
 const readonlyTextFieldSx: SxProps<Theme> = {
   "& .MuiInputBase-input": {
@@ -179,9 +190,7 @@ function getTodayInputValue() {
   const today = new Date();
   const timezoneOffset = today.getTimezoneOffset() * 60_000;
 
-  return new Date(today.getTime() - timezoneOffset)
-    .toISOString()
-    .slice(0, 10);
+  return new Date(today.getTime() - timezoneOffset).toISOString().slice(0, 10);
 }
 
 function getExpensesFromResponse(response: ExpensesResponse): Expense[] {
@@ -200,6 +209,24 @@ function getExpensesFromResponse(response: ExpensesResponse): Expense[] {
   if (Array.isArray(response.records)) return response.records;
 
   return [];
+}
+
+function getPaginationFromResponse(response: ExpensesResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || EXPENSES_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || EXPENSES_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
 }
 
 function getProjectsFromResponse(response: ProjectsResponse): Project[] {
@@ -485,6 +512,10 @@ export default function ExpensesPage() {
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -519,17 +550,32 @@ export default function ExpensesPage() {
     });
   }, [expenses]);
 
-  async function fetchData() {
+  async function fetchData(pageNumber = page, search = searchQuery) {
     setLoading(true);
     setError("");
 
+    const queryParams = new URLSearchParams({
+      page: String(pageNumber),
+      limit: String(EXPENSES_PER_PAGE),
+    });
+
+    const cleanSearch = search.trim();
+
+    if (cleanSearch) {
+      queryParams.set("search", cleanSearch);
+    }
+
     try {
       const [expensesResponse, projectsResponse] = await Promise.all([
-        apiFetch<ExpensesResponse>("/api/expenses"),
+        apiFetch<ExpensesResponse>(`/api/expenses?${queryParams.toString()}`),
         apiFetch<ProjectsResponse>("/api/projects"),
       ]);
 
+      const pagination = getPaginationFromResponse(expensesResponse);
+
       setExpenses(getExpensesFromResponse(expensesResponse));
+      setTotalExpenses(pagination.total);
+      setTotalPages(Math.max(pagination.totalPages, 1));
       setProjects(getProjectsFromResponse(projectsResponse));
     } catch (err) {
       const message =
@@ -541,8 +587,12 @@ export default function ExpensesPage() {
   }
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      fetchData(page, searchQuery);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingExpense(null);
@@ -686,7 +736,8 @@ export default function ExpensesPage() {
       }
 
       handleFormClose();
-      await fetchData();
+      setPage(1);
+      await fetchData(1, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save expense";
@@ -710,7 +761,7 @@ export default function ExpensesPage() {
 
       setSuccess("Expense deleted successfully");
       setDeleteExpense(null);
-      await fetchData();
+      await fetchData(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to delete expense";
@@ -763,6 +814,31 @@ export default function ExpensesPage() {
         </Button>
       </Box>
 
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by expense, project, category, description, or notes..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
           {error}
@@ -770,11 +846,7 @@ export default function ExpensesPage() {
       )}
 
       {success && (
-        <Alert
-          severity="success"
-          sx={{ mb: 2 }}
-          onClose={() => setSuccess("")}
-        >
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>
           {success}
         </Alert>
       )}
@@ -811,316 +883,365 @@ export default function ExpensesPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer
-              sx={{
-                width: "100%",
-                maxWidth: "100%",
-                overflowX: "hidden",
-              }}
-            >
-              <Table
+            <>
+              <TableContainer
                 sx={{
                   width: "100%",
-                  tableLayout: "fixed",
+                  maxWidth: "100%",
+                  overflowX: "hidden",
                 }}
               >
-                <TableHead>
-                  <TableRow
-                    sx={{
-                      bgcolor: (theme) =>
-                        theme.palette.mode === "dark"
-                          ? alpha(theme.palette.primary.main, 0.08)
-                          : alpha(theme.palette.primary.main, 0.04),
-                    }}
-                  >
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        width: { xs: "52%", sm: "42%", md: "28%", xl: "24%" },
-                      }}
-                    >
-                      Expense
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideFromMobileSx,
-                        width: { md: "17%", xl: "16%" },
-                      }}
-                    >
-                      Project
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        width: { xs: "25%", sm: "20%", md: "12%", xl: "10%" },
-                      }}
-                    >
-                      Amount
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideOnPhoneSx,
-                        width: { sm: "20%", md: "13%", xl: "12%" },
-                      }}
-                    >
-                      Category
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideFromMobileSx,
-                      }}
-                    >
-                      Date
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideFromTabletSx,
-                        width: { xl: "18%" },
-                      }}
-                    >
-                      Description
-                    </TableCell>
-
-                    <TableCell
-                      align="center"
-                      sx={{
-                        ...tableHeaderCellSx,
-                        width: { xs: "23%", sm: "18%", md: "14%", xl: "8%" },
-                      }}
-                    >
-                      Actions
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-
-                <TableBody>
-                  {sortedExpenses.map((item) => (
+                <Table
+                  sx={{
+                    width: "100%",
+                    tableLayout: "fixed",
+                  }}
+                >
+                  <TableHead>
                     <TableRow
-                      key={item._id}
-                      hover
                       sx={{
-                        "&:last-child td": {
-                          borderBottom: 0,
-                        },
+                        bgcolor: (theme) =>
+                          theme.palette.mode === "dark"
+                            ? alpha(theme.palette.primary.main, 0.08)
+                            : alpha(theme.palette.primary.main, 0.04),
                       }}
                     >
                       <TableCell
+                        align="center"
                         sx={{
-                          ...tableBodyCellSx,
-                          width: { xs: "52%", sm: "42%", md: "28%", xl: "24%" },
-                          minWidth: 0,
+                          ...tableHeaderCellSx,
+                          width: 56,
                         }}
                       >
-                        <Box
+                        #
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: { xs: "52%", sm: "42%", md: "28%", xl: "24%" },
+                        }}
+                      >
+                        Expense
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "17%", xl: "16%" },
+                        }}
+                      >
+                        Project
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: { xs: "25%", sm: "20%", md: "12%", xl: "10%" },
+                        }}
+                      >
+                        Amount
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideOnPhoneSx,
+                          width: { sm: "20%", md: "13%", xl: "12%" },
+                        }}
+                      >
+                        Category
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideFromMobileSx,
+                        }}
+                      >
+                        Date
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideFromTabletSx,
+                          width: { xl: "18%" },
+                        }}
+                      >
+                        Description
+                      </TableCell>
+
+                      <TableCell
+                        align="center"
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: { xs: "23%", sm: "18%", md: "14%", xl: "8%" },
+                        }}
+                      >
+                        Actions
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+
+                  <TableBody>
+                    {sortedExpenses.map((item, index) => (
+                      <TableRow
+                        key={item._id}
+                        hover
+                        sx={{
+                          "&:last-child td": {
+                            borderBottom: 0,
+                          },
+                        }}
+                      >
+                        <TableCell
+                          align="center"
                           sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: { xs: 0.75, md: 1.5 },
+                            ...tableBodyCellSx,
+                            width: 56,
+                            fontWeight: 800,
+                            color: "text.secondary",
+                          }}
+                        >
+                          {(page - 1) * EXPENSES_PER_PAGE + index + 1}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                          width: { xs: "52%", sm: "42%", md: "28%", xl: "24%" },
                             minWidth: 0,
                           }}
                         >
                           <Box
                             sx={{
-                              width: { xs: 32, md: 40 },
-                              height: { xs: 32, md: 40 },
-                              borderRadius: 2.5,
-                              display: "grid",
-                              placeItems: "center",
-                              flexShrink: 0,
-                              fontWeight: 900,
-                              fontSize: { xs: 12, md: 14 },
-                              color: "error.main",
-                              bgcolor: (theme) =>
-                                alpha(theme.palette.error.main, 0.12),
-                              border: (theme) =>
-                                `1px solid ${alpha(
-                                  theme.palette.error.main,
-                                  0.18,
-                                )}`,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: { xs: 0.75, md: 1.5 },
+                              minWidth: 0,
                             }}
                           >
-                            {getExpenseInitial(item.title)}
-                          </Box>
-
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography
+                            <Box
                               sx={{
-                                fontWeight: 800,
-                                fontSize: { xs: 13, md: 14 },
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
+                                width: { xs: 32, md: 40 },
+                                height: { xs: 32, md: 40 },
+                                borderRadius: 2.5,
+                                display: "grid",
+                                placeItems: "center",
+                                flexShrink: 0,
+                                fontWeight: 900,
+                                fontSize: { xs: 12, md: 14 },
+                                color: "error.main",
+                                bgcolor: (theme) =>
+                                  alpha(theme.palette.error.main, 0.12),
+                                border: (theme) =>
+                                  `1px solid ${alpha(
+                                    theme.palette.error.main,
+                                    0.18,
+                                  )}`,
                               }}
                             >
-                              {item.title}
-                            </Typography>
+                              {getExpenseInitial(item.title)}
+                            </Box>
 
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{
-                                mt: 0.25,
-                                display: { xs: "none", sm: "block" },
-                              }}
-                            >
-                              Expense record
-                            </Typography>
-
-                            <Chip
-                              label={item.category}
-                              size="small"
-                              sx={{
-                                ...getExpenseCategoryChipSx(item.category),
-                                display: { xs: "inline-flex", sm: "none" },
-                                mt: 0.75,
-                                maxWidth: "100%",
-                                "& .MuiChip-label": {
-                                  px: 0.75,
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: { xs: 13, md: 14 },
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
-                                },
-                              }}
-                            />
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {item.title}
+                              </Typography>
+
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  mt: 0.25,
+                                  display: { xs: "none", sm: "block" },
+                                }}
+                              >
+                                Expense record
+                              </Typography>
+
+                              <Chip
+                                label={item.category}
+                                size="small"
+                                sx={{
+                                  ...getExpenseCategoryChipSx(item.category),
+                                  display: { xs: "inline-flex", sm: "none" },
+                                  mt: 0.75,
+                                  maxWidth: "100%",
+                                  "& .MuiChip-label": {
+                                    px: 0.75,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  },
+                                }}
+                              />
+                            </Box>
                           </Box>
-                        </Box>
-                      </TableCell>
+                        </TableCell>
 
-                      <TableCell
-                        sx={{
-                          ...tableBodyCellSx,
-                          ...hideFromMobileSx,
-                          width: { md: "17%", xl: "16%" },
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {getProjectName(item.projectId)}
-                      </TableCell>
-
-                      <TableCell
-                        sx={{
-                          ...tableBodyCellSx,
-                          ...getAmountSx(),
-                          width: { xs: "25%", sm: "20%", md: "12%", xl: "10%" },
-                          whiteSpace: "nowrap",
-                          fontSize: { xs: 11, sm: 12, md: 14 },
-                        }}
-                      >
-                        {formatBHD(item.amount)}
-                      </TableCell>
-
-                      <TableCell
-                        sx={{
-                          ...tableBodyCellSx,
-                          ...hideOnPhoneSx,
-                          width: { sm: "20%", md: "13%", xl: "12%" },
-                          minWidth: 0,
-                        }}
-                      >
-                        <Chip
-                          label={item.category}
-                          size="small"
-                          sx={getExpenseCategoryChipSx(item.category)}
-                        />
-                      </TableCell>
-
-                      <TableCell
-                        sx={{
-                          ...tableBodyCellSx,
-                          ...hideFromMobileSx,
-                          width: { md: "13%", xl: "12%" },
-                          minWidth: 0,
-                          fontWeight: 800,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {formatDate(item.date)}
-                      </TableCell>
-
-                      <TableCell
-                        sx={{
-                          ...tableBodyCellSx,
-                          ...hideFromTabletSx,
-                          width: { xl: "18%" },
-                          color: "text.secondary",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {item.description || "-"}
-                      </TableCell>
-
-                      <TableCell
-                        align="right"
-                        sx={{
-                          ...tableBodyCellSx,
-                          width: { xs: "23%", sm: "18%", md: "14%", xl: "8%" },
-                          minWidth: 0,
-                        }}
-                      >
-                        <Box
+                        <TableCell
                           sx={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            alignItems: "center",
-                            gap: { xs: 0.5, md: 1 },
-                            flexWrap: "nowrap",
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                            width: { md: "17%", xl: "16%" },
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
                           }}
                         >
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => setViewExpense(item)}
-                            sx={{
-                              borderRadius: 2,
-                              fontWeight: 800,
-                              minWidth: { xs: 52, sm: 56, md: 64 },
-                              height: { xs: 30, md: 34 },
-                              px: { xs: 0.75, md: 1.5 },
-                              fontSize: { xs: 11, md: 13 },
-                            }}
-                          >
-                            View
-                          </Button>
+                          {getProjectName(item.projectId)}
+                        </TableCell>
 
-                          <IconButton
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...getAmountSx(),
+                          width: { xs: "25%", sm: "20%", md: "12%", xl: "10%" },
+                            whiteSpace: "nowrap",
+                            fontSize: { xs: 11, sm: 12, md: 14 },
+                          }}
+                        >
+                          {formatBHD(item.amount)}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideOnPhoneSx,
+                            width: { sm: "20%", md: "13%", xl: "12%" },
+                            minWidth: 0,
+                          }}
+                        >
+                          <Chip
+                            label={item.category}
                             size="small"
-                            onClick={(event) =>
-                              handleActionMenuOpen(event, item)
-                            }
-                            aria-label={`Open actions for ${item.title}`}
+                            sx={getExpenseCategoryChipSx(item.category)}
+                          />
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                            width: { md: "13%", xl: "12%" },
+                            minWidth: 0,
+                            fontWeight: 800,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatDate(item.date)}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                            width: { xl: "18%" },
+                            color: "text.secondary",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {item.description || "-"}
+                        </TableCell>
+
+                        <TableCell
+                          align="right"
+                          sx={{
+                            ...tableBodyCellSx,
+                          width: { xs: "23%", sm: "18%", md: "14%", xl: "8%" },
+                            minWidth: 0,
+                          }}
+                        >
+                          <Box
                             sx={{
-                              display: { xs: "none", md: "inline-flex" },
-                              width: 34,
-                              height: 34,
-                              flexShrink: 0,
-                              borderRadius: 2,
-                              border: (theme) =>
-                                `1px solid ${theme.palette.divider}`,
-                              fontWeight: 900,
-                              fontSize: 18,
-                              lineHeight: 1,
+                              display: "flex",
+                              justifyContent: "flex-end",
+                              alignItems: "center",
+                              gap: { xs: 0.5, md: 1 },
+                              flexWrap: "nowrap",
                             }}
                           >
-                            ⋮
-                          </IconButton>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => setViewExpense(item)}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 800,
+                                minWidth: { xs: 52, sm: 56, md: 64 },
+                                height: { xs: 30, md: 34 },
+                                px: { xs: 0.75, md: 1.5 },
+                                fontSize: { xs: 11, md: 13 },
+                              }}
+                            >
+                              View
+                            </Button>
+
+                            <IconButton
+                              size="small"
+                              onClick={(event) =>
+                                handleActionMenuOpen(event, item)
+                              }
+                              aria-label={`Open actions for ${item.title}`}
+                              sx={{
+                                display: { xs: "none", md: "inline-flex" },
+                                width: 34,
+                                height: 34,
+                                flexShrink: 0,
+                                borderRadius: 2,
+                                border: (theme) =>
+                                  `1px solid ${theme.palette.divider}`,
+                                fontWeight: 900,
+                                fontSize: 18,
+                                lineHeight: 1,
+                              }}
+                            >
+                              ⋮
+                            </IconButton>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalExpenses} expenses
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
           )}
         </CardContent>
       </Card>

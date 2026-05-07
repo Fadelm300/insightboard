@@ -263,11 +263,67 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const deals = await Deal.find({ isDeleted: { $ne: true } })
-      .populate("clientId", "companyName contactPerson email status")
-      .sort({ createdAt: -1 });
+    const { searchParams } = new URL(req.url);
 
-    return successResponse({ deals }, "Deals fetched successfully");
+    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(searchParams.get("limit")) || 10, 1),
+      50
+    );
+
+    const search = searchParams.get("search")?.trim() || "";
+    const skip = (page - 1) * limit;
+
+    const filter: any = {
+      isDeleted: { $ne: true },
+    };
+
+    if (search) {
+      const matchingClients = await Client.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { companyName: { $regex: search, $options: "i" } },
+          { contactPerson: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const matchingClientIds = matchingClients.map((client) => client._id);
+
+      filter.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { status: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { notes: { $regex: search, $options: "i" } },
+      ];
+
+      if (matchingClientIds.length > 0) {
+        filter.$or.push({
+          clientId: { $in: matchingClientIds },
+        });
+      }
+    }
+
+    const [deals, total] = await Promise.all([
+      Deal.find(filter)
+        .populate("clientId", "companyName contactPerson email status")
+        .sort({ expectedCloseDate: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Deal.countDocuments(filter),
+    ]);
+
+    return successResponse(
+      {
+        deals,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+      "Deals fetched successfully"
+    );
   } catch {
     return errorResponse("Server error", 500);
   }

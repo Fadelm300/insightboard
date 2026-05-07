@@ -17,6 +17,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -110,10 +111,18 @@ type ProjectsResponse = {
         projects?: Project[];
         items?: Project[];
         records?: Project[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
       };
   projects?: Project[];
   items?: Project[];
   records?: Project[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
 type ClientsResponse = {
@@ -166,6 +175,8 @@ const PROJECT_STATUSES: ProjectStatus[] = [
 const PAYMENT_STATUSES: PaymentStatus[] = ["Unpaid", "Partially Paid", "Paid"];
 
 const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
+
+const PROJECTS_PER_PAGE = 7;
 
 const emptyForm: ProjectFormData = {
   clientId: "",
@@ -236,6 +247,24 @@ function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   }
 
   return [];
+}
+
+function getPaginationFromResponse(response: ProjectsResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || PROJECTS_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || PROJECTS_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
 }
 
 function getClientsFromResponse(response: ClientsResponse): Client[] {
@@ -545,6 +574,10 @@ export default function ProjectsPage() {
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalProjects, setTotalProjects] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -582,21 +615,38 @@ export default function ProjectsPage() {
     });
   }, [deals, formData.clientId, formData.dealId]);
 
-  async function fetchData() {
+  async function fetchData(pageNumber = page, search = searchQuery) {
     setLoading(true);
     setError("");
+
+    const queryParams = new URLSearchParams({
+      page: String(pageNumber),
+      limit: String(PROJECTS_PER_PAGE),
+    });
+
+    const cleanSearch = search.trim();
+
+    if (cleanSearch) {
+      queryParams.set("search", cleanSearch);
+    }
 
     try {
       const [projectsResponse, clientsResponse, dealsResponse] =
         await Promise.all([
-          apiFetch<ProjectsResponse>("/api/projects"),
-          apiFetch<ClientsResponse>("/api/clients"),
-          apiFetch<DealsResponse>("/api/deals"),
+          apiFetch<ProjectsResponse>(
+            `/api/projects?${queryParams.toString()}`,
+          ),
+          apiFetch<ClientsResponse>("/api/clients?limit=50"),
+          apiFetch<DealsResponse>("/api/deals?limit=50"),
         ]);
+
+      const pagination = getPaginationFromResponse(projectsResponse);
 
       setProjects(getProjectsFromResponse(projectsResponse));
       setClients(getClientsFromResponse(clientsResponse));
       setDeals(getDealsFromResponse(dealsResponse));
+      setTotalProjects(pagination.total);
+      setTotalPages(Math.max(pagination.totalPages, 1));
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load projects";
@@ -607,8 +657,12 @@ export default function ProjectsPage() {
   }
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      fetchData(page, searchQuery);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingProject(null);
@@ -791,7 +845,8 @@ export default function ProjectsPage() {
       }
 
       handleFormClose();
-      await fetchData();
+      setPage(1);
+      await fetchData(1, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save project";
@@ -815,7 +870,7 @@ export default function ProjectsPage() {
 
       setSuccess("Project deleted successfully");
       setDeleteProject(null);
-      await fetchData();
+      await fetchData(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to delete project";
@@ -868,6 +923,31 @@ export default function ProjectsPage() {
         </Button>
       </Box>
 
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by project, client, deal, type, status, or payment..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
           {error}
@@ -916,7 +996,8 @@ export default function ProjectsPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer
+            <>
+              <TableContainer
               sx={{
                 width: "100%",
                 maxWidth: "100%",
@@ -938,6 +1019,16 @@ export default function ProjectsPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: 56,
+                      }}
+                    >
+                      #
+                    </TableCell>
+
                     <TableCell
                       align="center"
                       sx={{
@@ -1058,7 +1149,7 @@ export default function ProjectsPage() {
                 </TableHead>
 
                 <TableBody>
-                  {sortedProjects.map((project) => (
+                  {sortedProjects.map((project, index) => (
                     <TableRow
                       key={project._id}
                       hover
@@ -1068,6 +1159,18 @@ export default function ProjectsPage() {
                         },
                       }}
                     >
+                      <TableCell
+                        align="center"
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: 56,
+                          fontWeight: 800,
+                          color: "text.secondary",
+                        }}
+                      >
+                        {(page - 1) * PROJECTS_PER_PAGE + index + 1}
+                      </TableCell>
+
                       <TableCell
                         sx={{
                           ...tableBodyCellSx,
@@ -1316,6 +1419,32 @@ export default function ProjectsPage() {
                 </TableBody>
               </Table>
             </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalProjects} projects
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
           )}
         </CardContent>
       </Card>

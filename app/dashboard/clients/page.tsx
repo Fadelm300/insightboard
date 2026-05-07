@@ -17,6 +17,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Pagination,
   Stack,
   Table,
   TableBody,
@@ -73,8 +74,20 @@ type ClientFormErrors = Partial<Record<keyof ClientFormData, string>>;
 type ClientsResponse = {
   success?: boolean;
   message?: string;
-  data?: Client[] | { clients?: Client[] };
+  data?:
+    | Client[]
+    | {
+        clients?: Client[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
+      };
   clients?: Client[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
 const CLIENT_STATUSES: ClientStatus[] = [
@@ -97,6 +110,7 @@ const emptyForm: ClientFormData = {
   notes: "",
   status: "New Lead",
 };
+const CLIENTS_PER_PAGE = 7;
 
 const readonlyTextFieldSx: SxProps<Theme> = {
   "& .MuiInputBase-input": {
@@ -154,6 +168,24 @@ function getClientsFromResponse(response: ClientsResponse): Client[] {
   if (Array.isArray(response.clients)) return response.clients;
 
   return [];
+}
+
+function getPaginationFromResponse(response: ClientsResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || CLIENTS_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || CLIENTS_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
 }
 
 function cleanSingleLineText(value: string) {
@@ -380,7 +412,10 @@ export default function ClientsPage() {
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalClients, setTotalClients] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -392,13 +427,31 @@ export default function ClientsPage() {
     );
   }, [clients]);
 
-  async function fetchClients() {
+  async function fetchClients(pageNumber = page, search = searchQuery) {
     setLoading(true);
     setError("");
 
+    const queryParams = new URLSearchParams({
+      page: String(pageNumber),
+      limit: String(CLIENTS_PER_PAGE),
+    });
+
+    const cleanSearch = search.trim();
+
+    if (cleanSearch) {
+      queryParams.set("search", cleanSearch);
+    }
+
     try {
-      const response = await apiFetch<ClientsResponse>("/api/clients");
+      const response = await apiFetch<ClientsResponse>(
+        `/api/clients?${queryParams.toString()}`,
+      );
+
+      const pagination = getPaginationFromResponse(response);
+
       setClients(getClientsFromResponse(response));
+      setTotalClients(pagination.total);
+      setTotalPages(Math.max(pagination.totalPages, 1));
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load clients";
@@ -409,8 +462,12 @@ export default function ClientsPage() {
   }
 
   useEffect(() => {
-    fetchClients();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      fetchClients(page, searchQuery);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingClient(null);
@@ -529,7 +586,8 @@ export default function ClientsPage() {
       }
 
       handleFormClose();
-      await fetchClients();
+      setPage(1);
+      await fetchClients(1, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save client";
@@ -553,7 +611,7 @@ export default function ClientsPage() {
 
       setSuccess("Client deleted successfully");
       setDeleteClient(null);
-      await fetchClients();
+      await fetchClients(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to delete client";
@@ -605,6 +663,31 @@ export default function ClientsPage() {
         </Button>
       </Stack>
 
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by company, contact, email, phone, or location..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
           {error}
@@ -653,325 +736,374 @@ export default function ClientsPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer
-              sx={{
-                width: "100%",
-                maxWidth: "100%",
-                overflowX: "hidden",
-              }}
-            >
-              <Table
+            <>
+              <TableContainer
                 sx={{
                   width: "100%",
-                  tableLayout: "fixed",
+                  maxWidth: "100%",
+                  overflowX: "hidden",
                 }}
               >
-                <TableHead>
-                  <TableRow
-                    sx={{
-                      bgcolor: (theme) =>
-                        theme.palette.mode === "dark"
-                          ? alpha(theme.palette.primary.main, 0.08)
-                          : alpha(theme.palette.primary.main, 0.04),
-                    }}
-                  >
-                    <TableCell
-                      align="left"
-                      sx={{
-                        ...tableHeaderCellSx,
-                        width: { xs: "72%", sm: "54%", md: "34%", lg: "30%" },
-                      }}
-                    >
-                      Company
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideFromMobileSx,
-                        width: { md: "18%", lg: "16%" },
-                      }}
-                    >
-                      Contact
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideUntilWideSx,
-                        width: { xl: "20%" },
-                      }}
-                    >
-                      Email
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideUntilWideSx,
-                        width: { xl: "14%" },
-                      }}
-                    >
-                      Phone
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideFromTabletSx,
-                        width: { lg: "14%" },
-                      }}
-                    >
-                      Created Date
-                    </TableCell>
-
-                    <TableCell
-                      sx={{
-                        ...tableHeaderCellSx,
-                        ...hideOnPhoneSx,
-                        width: { sm: "24%", md: "16%", lg: "14%" },
-                      }}
-                    >
-                      Status
-                    </TableCell>
-
-                    <TableCell
-                      align="center"
-                      sx={{
-                        ...tableHeaderCellSx,
-                        width: { xs: "28%", sm: "22%", md: 120 },
-                      }}
-                    >
-                      Actions
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-
-                <TableBody>
-                  {sortedClients.map((client) => (
+                <Table
+                  sx={{
+                    width: "100%",
+                    tableLayout: "fixed",
+                  }}
+                >
+                  <TableHead>
                     <TableRow
-                      key={client._id}
-                      hover
                       sx={{
-                        "&:last-child td": {
-                          borderBottom: 0,
-                        },
+                        bgcolor: (theme) =>
+                          theme.palette.mode === "dark"
+                            ? alpha(theme.palette.primary.main, 0.08)
+                            : alpha(theme.palette.primary.main, 0.04),
                       }}
                     >
                       <TableCell
+                        align="center"
                         sx={{
-                          ...tableBodyCellSx,
+                          ...tableHeaderCellSx,
+                          width: 56,
+                        }}
+                      >
+                        #
+                      </TableCell>
+
+                      <TableCell
+                        align="left"
+                        sx={{
+                          ...tableHeaderCellSx,
                           width: { xs: "72%", sm: "54%", md: "34%", lg: "30%" },
-                          minWidth: 0,
                         }}
                       >
-                        <Stack
-                          direction="row"
-                          spacing={{ xs: 0.75, md: 1.5 }}
-                          sx={{ alignItems: "center", minWidth: 0 }}
-                        >
-                          <Box
-                            sx={{
-                              width: { xs: 32, md: 40 },
-                              height: { xs: 32, md: 40 },
-                              borderRadius: 2.5,
-                              display: "grid",
-                              placeItems: "center",
-                              flexShrink: 0,
-                              fontWeight: 800,
-                              fontSize: { xs: 12, md: 14 },
-                              color: "primary.main",
-                              bgcolor: (theme) =>
-                                alpha(theme.palette.primary.main, 0.12),
-                              border: (theme) =>
-                                `1px solid ${alpha(
-                                  theme.palette.primary.main,
-                                  0.18,
-                                )}`,
-                            }}
-                          >
-                            {getClientInitial(client.companyName)}
-                          </Box>
-
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography
-                              sx={{
-                                fontWeight: 800,
-                                fontSize: { xs: 13, md: 14 },
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {client.companyName}
-                            </Typography>
-
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{
-                                mt: 0.25,
-                                display: { xs: "none", sm: "block" },
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {client.businessType || "No business type"}
-                            </Typography>
-
-                            <Chip
-                              label={client.status}
-                              size="small"
-                              sx={{
-                                ...getStatusChipSx(client.status),
-                                display: { xs: "inline-flex", sm: "none" },
-                                mt: 0.75,
-                                maxWidth: "100%",
-                                "& .MuiChip-label": {
-                                  px: 0.75,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                },
-                              }}
-                            />
-                          </Box>
-                        </Stack>
+                        Company
                       </TableCell>
 
                       <TableCell
                         sx={{
-                          ...tableBodyCellSx,
+                          ...tableHeaderCellSx,
                           ...hideFromMobileSx,
+                          width: { md: "18%", lg: "16%" },
                         }}
                       >
-                        <Typography
-                          sx={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {client.contactPerson || "-"}
-                        </Typography>
+                        Contact
                       </TableCell>
 
                       <TableCell
                         sx={{
-                          ...tableBodyCellSx,
+                          ...tableHeaderCellSx,
                           ...hideUntilWideSx,
+                          width: { xl: "20%" },
                         }}
                       >
-                        <Typography
-                          sx={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {client.email || "-"}
-                        </Typography>
+                        Email
                       </TableCell>
 
                       <TableCell
                         sx={{
-                          ...tableBodyCellSx,
+                          ...tableHeaderCellSx,
                           ...hideUntilWideSx,
+                          width: { xl: "14%" },
                         }}
                       >
-                        <Typography
-                          sx={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {client.phone || "-"}
-                        </Typography>
+                        Phone
                       </TableCell>
 
                       <TableCell
                         sx={{
-                          ...tableBodyCellSx,
+                          ...tableHeaderCellSx,
                           ...hideFromTabletSx,
-                          fontWeight: 700,
+                          width: { lg: "14%" },
                         }}
                       >
-                        {formatDate(client.createdAt)}
+                        Created Date
                       </TableCell>
 
                       <TableCell
                         sx={{
-                          ...tableBodyCellSx,
+                          ...tableHeaderCellSx,
                           ...hideOnPhoneSx,
+                          width: { sm: "24%", md: "16%", lg: "14%" },
                         }}
                       >
-                        <Chip
-                          label={client.status}
-                          size="small"
-                          sx={getStatusChipSx(client.status)}
-                        />
+                        Status
                       </TableCell>
 
                       <TableCell
-                        align="right"
+                        align="center"
                         sx={{
-                          ...tableBodyCellSx,
+                          ...tableHeaderCellSx,
                           width: { xs: "28%", sm: "22%", md: 120 },
                         }}
                       >
-                        <Stack
-                          direction="row"
-                          spacing={{ xs: 0.5, md: 1 }}
-                          sx={{
-                            justifyContent: "flex-end",
-                            alignItems: "center",
-                            flexWrap: "nowrap",
-                          }}
-                        >
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => setViewClient(client)}
-                            sx={{
-                              borderRadius: 2,
-                              fontWeight: 700,
-                              minWidth: { xs: 44, md: 64 },
-                              height: { xs: 30, md: 34 },
-                              px: { xs: 0.75, md: 1.5 },
-                              fontSize: { xs: 11, md: 13 },
-                            }}
-                          >
-                            View
-                          </Button>
-
-                          <IconButton
-                            size="small"
-                            onClick={(event) =>
-                              handleActionMenuOpen(event, client)
-                            }
-                            aria-label={`Open actions for ${client.companyName}`}
-                            sx={{
-                              display: { xs: "none", md: "inline-flex" },
-                              width: 34,
-                              height: 34,
-                              borderRadius: 2,
-                              border: (theme) =>
-                                `1px solid ${theme.palette.divider}`,
-                              fontWeight: 900,
-                              fontSize: 18,
-                              lineHeight: 1,
-                            }}
-                          >
-                            ⋮
-                          </IconButton>
-                        </Stack>
+                        Actions
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+
+                  <TableBody>
+                    {sortedClients.map((client, index) => (
+                      <TableRow
+                        key={client._id}
+                        hover
+                        sx={{
+                          "&:last-child td": {
+                            borderBottom: 0,
+                          },
+                        }}
+                      >
+                        <TableCell
+                          align="center"
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: 56,
+                            fontWeight: 800,
+                            color: "text.secondary",
+                          }}
+                        >
+                          {(page - 1) * CLIENTS_PER_PAGE + index + 1}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "72%", sm: "54%", md: "34%", lg: "30%" },
+                            minWidth: 0,
+                          }}
+                        >
+                          <Stack
+                            direction="row"
+                            spacing={{ xs: 0.75, md: 1.5 }}
+                            sx={{ alignItems: "center", minWidth: 0 }}
+                          >
+                            <Box
+                              sx={{
+                                width: { xs: 32, md: 40 },
+                                height: { xs: 32, md: 40 },
+                                borderRadius: 2.5,
+                                display: "grid",
+                                placeItems: "center",
+                                flexShrink: 0,
+                                fontWeight: 800,
+                                fontSize: { xs: 12, md: 14 },
+                                color: "primary.main",
+                                bgcolor: (theme) =>
+                                  alpha(theme.palette.primary.main, 0.12),
+                                border: (theme) =>
+                                  `1px solid ${alpha(
+                                    theme.palette.primary.main,
+                                    0.18,
+                                  )}`,
+                              }}
+                            >
+                              {getClientInitial(client.companyName)}
+                            </Box>
+
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: { xs: 13, md: 14 },
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {client.companyName}
+                              </Typography>
+
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  mt: 0.25,
+                                  display: { xs: "none", sm: "block" },
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {client.businessType || "No business type"}
+                              </Typography>
+
+                              <Chip
+                                label={client.status}
+                                size="small"
+                                sx={{
+                                  ...getStatusChipSx(client.status),
+                                  display: { xs: "inline-flex", sm: "none" },
+                                  mt: 0.75,
+                                  maxWidth: "100%",
+                                  "& .MuiChip-label": {
+                                    px: 0.75,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  },
+                                }}
+                              />
+                            </Box>
+                          </Stack>
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {client.contactPerson || "-"}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideUntilWideSx,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {client.email || "-"}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideUntilWideSx,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {client.phone || "-"}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {formatDate(client.createdAt)}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideOnPhoneSx,
+                          }}
+                        >
+                          <Chip
+                            label={client.status}
+                            size="small"
+                            sx={getStatusChipSx(client.status)}
+                          />
+                        </TableCell>
+
+                        <TableCell
+                          align="right"
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "28%", sm: "22%", md: 120 },
+                          }}
+                        >
+                          <Stack
+                            direction="row"
+                            spacing={{ xs: 0.5, md: 1 }}
+                            sx={{
+                              justifyContent: "flex-end",
+                              alignItems: "center",
+                              flexWrap: "nowrap",
+                            }}
+                          >
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => setViewClient(client)}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 700,
+                                minWidth: { xs: 44, md: 64 },
+                                height: { xs: 30, md: 34 },
+                                px: { xs: 0.75, md: 1.5 },
+                                fontSize: { xs: 11, md: 13 },
+                              }}
+                            >
+                              View
+                            </Button>
+
+                            <IconButton
+                              size="small"
+                              onClick={(event) =>
+                                handleActionMenuOpen(event, client)
+                              }
+                              aria-label={`Open actions for ${client.companyName}`}
+                              sx={{
+                                display: { xs: "none", md: "inline-flex" },
+                                width: 34,
+                                height: 34,
+                                borderRadius: 2,
+                                border: (theme) =>
+                                  `1px solid ${theme.palette.divider}`,
+                                fontWeight: 900,
+                                fontSize: 18,
+                                lineHeight: 1,
+                              }}
+                            >
+                              ⋮
+                            </IconButton>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalClients} clients
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
           )}
         </CardContent>
       </Card>
