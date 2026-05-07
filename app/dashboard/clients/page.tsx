@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import {
   Alert,
@@ -427,47 +427,47 @@ export default function ClientsPage() {
     );
   }, [clients]);
 
-  async function fetchClients(pageNumber = page, search = searchQuery) {
-    setLoading(true);
-    setError("");
+const fetchClients = useCallback(async (pageNumber: number, search: string) => {
+  setLoading(true);
+  setError("");
 
-    const queryParams = new URLSearchParams({
-      page: String(pageNumber),
-      limit: String(CLIENTS_PER_PAGE),
-    });
+  const queryParams = new URLSearchParams({
+    page: String(pageNumber),
+    limit: String(CLIENTS_PER_PAGE),
+  });
 
-    const cleanSearch = search.trim();
+  const cleanSearch = search.trim();
 
-    if (cleanSearch) {
-      queryParams.set("search", cleanSearch);
-    }
-
-    try {
-      const response = await apiFetch<ClientsResponse>(
-        `/api/clients?${queryParams.toString()}`,
-      );
-
-      const pagination = getPaginationFromResponse(response);
-
-      setClients(getClientsFromResponse(response));
-      setTotalClients(pagination.total);
-      setTotalPages(Math.max(pagination.totalPages, 1));
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load clients";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+  if (cleanSearch) {
+    queryParams.set("search", cleanSearch);
   }
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      fetchClients(page, searchQuery);
-    }, 350);
+  try {
+    const response = await apiFetch<ClientsResponse>(
+      `/api/clients?${queryParams.toString()}`
+    );
 
-    return () => window.clearTimeout(timeoutId);
-  }, [page, searchQuery]);
+    const pagination = getPaginationFromResponse(response);
+
+    setClients(getClientsFromResponse(response));
+    setTotalClients(pagination.total);
+    setTotalPages(Math.max(pagination.totalPages, 1));
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to load clients";
+    setError(message);
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchClients(page, searchQuery);
+  }, 350);
+
+  return () => window.clearTimeout(timeoutId);
+}, [fetchClients, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingClient(null);

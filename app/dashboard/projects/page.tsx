@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import {
   Alert,
@@ -615,7 +615,7 @@ export default function ProjectsPage() {
     });
   }, [deals, formData.clientId, formData.dealId]);
 
-  async function fetchData(pageNumber = page, search = searchQuery) {
+  const fetchData = useCallback(async (pageNumber: number, search: string) => {
     setLoading(true);
     setError("");
 
@@ -654,15 +654,15 @@ export default function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      fetchData(page, searchQuery);
+      void fetchData(page, searchQuery);
     }, 350);
 
     return () => window.clearTimeout(timeoutId);
-  }, [page, searchQuery]);
+  }, [fetchData, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingProject(null);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import {
   Alert,
@@ -307,9 +307,7 @@ function getCreatedAtTime(createdAt?: string) {
   return Number.isNaN(time) ? 0 : time;
 }
 
-function cleanSingleLineText(value: string) {
-  return value.trim().replace(/\s+/g, " ");
-}
+
 
 function cleanMultiLineText(value: string) {
   return value.trim().replace(/[ \t]+/g, " ");
@@ -510,7 +508,7 @@ export default function RevenuePage() {
     });
   }, [revenue]);
 
-  async function fetchData(pageNumber = page, search = searchQuery) {
+  const fetchData = useCallback(async (pageNumber: number, search: string) => {
     setLoading(true);
     setError("");
 
@@ -544,15 +542,15 @@ export default function RevenuePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      fetchData(page, searchQuery);
-    }, 350);
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchData(page, searchQuery);
+  }, 350);
 
-    return () => window.clearTimeout(timeoutId);
-  }, [page, searchQuery]);
+  return () => window.clearTimeout(timeoutId);
+}, [fetchData, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingRevenue(null);

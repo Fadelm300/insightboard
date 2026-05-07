@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Alert,
@@ -114,7 +114,7 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  async function fetchUser() {
+ const fetchUser = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -128,9 +128,9 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  function loadPreferences() {
+  const loadPreferences = useCallback(() => {
     if (typeof window === "undefined") return;
 
     const savedBusinessName = localStorage.getItem(BUSINESS_NAME_KEY);
@@ -138,7 +138,7 @@ export default function SettingsPage() {
 
     if (savedBusinessName) setBusinessName(savedBusinessName);
     if (isThemeMode(savedThemeMode)) setThemeMode(savedThemeMode);
-  }
+  }, []);
 
   function handleSavePreferences() {
     setSavingPreferences(true);
@@ -198,10 +198,14 @@ export default function SettingsPage() {
   }
 }
 
-  useEffect(() => {
-    loadPreferences();
-    fetchUser();
-  }, []);
+        useEffect(() => {
+          const timeoutId = window.setTimeout(() => {
+            loadPreferences();
+            void fetchUser();
+          }, 0);
+
+          return () => window.clearTimeout(timeoutId);
+        }, [fetchUser, loadPreferences]);
 
   if (loading) {
     return (

@@ -24,7 +24,26 @@ type ClientPayload = {
   notes?: string;
   status?: ClientStatus;
 };
+type SearchRegex = {
+  $regex: string;
+  $options: "i";
+};
 
+type ClientSearchField =
+  | "companyName"
+  | "businessType"
+  | "contactPerson"
+  | "phone"
+  | "email"
+  | "location"
+  | "status";
+
+type ClientFilter = {
+  isDeleted: {
+    $ne: boolean;
+  };
+  $or?: Partial<Record<ClientSearchField, SearchRegex>>[];
+};
 const CLIENT_STATUSES: ClientStatus[] = [
   "New Lead",
   "Contacted",
@@ -262,10 +281,9 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search")?.trim() || "";
     const skip = (page - 1) * limit;
 
-    const filter: any = {
-      isDeleted: { $ne: true },
-    };
-
+   const filter: ClientFilter = {
+  isDeleted: { $ne: true },
+};
     if (search) {
       filter.$or = [
         { companyName: { $regex: search, $options: "i" } },
@@ -296,7 +314,7 @@ export async function GET(req: NextRequest) {
       },
       "Clients fetched successfully",
     );
-  } catch (error) {
+  } catch  {
     return errorResponse("Failed to fetch clients", 500);
   }
 }

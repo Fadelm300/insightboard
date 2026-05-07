@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -114,7 +114,7 @@ export default function RecentDeals() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function fetchDeals() {
+  const fetchDeals = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -130,12 +130,16 @@ export default function RecentDeals() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchDeals();
   }, []);
 
+      useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+          void fetchDeals();
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+      }, [fetchDeals]);
+      
   return (
     <Card
       sx={{

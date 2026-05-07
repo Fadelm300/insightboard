@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
   Alert,
@@ -196,7 +196,7 @@ export default function ReportsPage() {
     useState("");
   const [projectTypeFinancePage, setProjectTypeFinancePage] = useState(1);
 
-  async function fetchReportsData() {
+  const fetchReportsData = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -307,11 +307,15 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchReportsData();
   }, []);
+
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchReportsData();
+  }, 0);
+
+  return () => window.clearTimeout(timeoutId);
+}, [fetchReportsData]);
 
   const projectMap = useMemo(() => {
     return new Map(projects.map((project) => [project._id, project]));
@@ -343,7 +347,8 @@ export default function ReportsPage() {
     return labels.length > 0 ? labels.join(" | ") : "No filters selected";
   }, [clientMap, filterClientId, filterDay, filterMonth]);
 
-  function getProjectByValue(value?: ProjectRecord | string) {
+const getProjectByValue = useCallback(
+  (value?: ProjectRecord | string) => {
     const projectId = getEntityId(value);
     if (!projectId) return undefined;
 
@@ -352,28 +357,37 @@ export default function ReportsPage() {
     }
 
     return projectMap.get(projectId);
-  }
+  },
+  [projectMap],
+);
 
   function getClientIdFromProject(project?: ProjectRecord) {
     if (!project) return "";
     return getEntityId(project.clientId);
   }
 
-  function getRevenueClientId(record: RevenueRecord) {
-    const directClientId = getEntityId(record.clientId);
+    const getRevenueClientId = useCallback(
+      (record: RevenueRecord) => {
+        const directClientId = getEntityId(record.clientId);
 
-    if (directClientId) {
-      return directClientId;
-    }
+        if (directClientId) {
+          return directClientId;
+        }
 
+        return getClientIdFromProject(getProjectByValue(record.projectId));
+      },
+      [getProjectByValue],
+    );
+
+const getExpenseClientId = useCallback(
+  (record: ExpenseRecord) => {
     return getClientIdFromProject(getProjectByValue(record.projectId));
-  }
+  },
+  [getProjectByValue],
+);
 
-  function getExpenseClientId(record: ExpenseRecord) {
-    return getClientIdFromProject(getProjectByValue(record.projectId));
-  }
-
-  function matchesDateFilters(date?: string) {
+const matchesDateFilters = useCallback(
+  (date?: string) => {
     const inputDate = formatDateToInputValue(date);
 
     if (!inputDate) return false;
@@ -387,12 +401,17 @@ export default function ReportsPage() {
     }
 
     return true;
-  }
+  },
+  [filterDay, filterMonth],
+);
 
-  function matchesClientFilter(clientId: string) {
-    if (!filterClientId) return true;
-    return clientId === filterClientId;
-  }
+      const matchesClientFilter = useCallback(
+        (clientId: string) => {
+          if (!filterClientId) return true;
+          return clientId === filterClientId;
+        },
+        [filterClientId],
+      );
 
   const filteredRevenueRecords = useMemo(() => {
     return revenueRecords.filter((record) => {
@@ -401,7 +420,7 @@ export default function ReportsPage() {
         matchesClientFilter(getRevenueClientId(record))
       );
     });
-  }, [filterClientId, filterDay, filterMonth, projectMap, revenueRecords]);
+}, [getRevenueClientId, matchesClientFilter, matchesDateFilters, revenueRecords]);
 
   const filteredExpenseRecords = useMemo(() => {
     return expenseRecords.filter((record) => {
@@ -410,7 +429,7 @@ export default function ReportsPage() {
         matchesClientFilter(getExpenseClientId(record))
       );
     });
-  }, [expenseRecords, filterClientId, filterDay, filterMonth, projectMap]);
+  }, [expenseRecords, getExpenseClientId, matchesClientFilter, matchesDateFilters]);
 
   const filteredSummary = useMemo(() => {
     const totalRevenue = filteredRevenueRecords.reduce((sum, record) => {
@@ -489,12 +508,12 @@ export default function ReportsPage() {
     return result.sort((a, b) =>
       (a.project.name || "").localeCompare(b.project.name || ""),
     );
-  }, [
-    filteredExpenseRecords,
-    filteredRevenueRecords,
-    filterClientId,
-    projectMap,
-  ]);
+    }, [
+      filteredExpenseRecords,
+      filteredRevenueRecords,
+      matchesClientFilter,
+      projectMap,
+    ]);
 
   const filteredClientsFinance = useMemo(() => {
     const map = new Map<string, FilteredClientFinance>();
@@ -748,11 +767,17 @@ export default function ReportsPage() {
     );
   }, [filteredProjectFinanceRows, projectFinancePage]);
 
-  useEffect(() => {
-    if (monthlyFinancePage > monthlyFinanceTotalPages) {
+useEffect(() => {
+  if (monthlyFinancePage > monthlyFinanceTotalPages) {
+    const timeoutId = window.setTimeout(() => {
       setMonthlyFinancePage(monthlyFinanceTotalPages);
-    }
-  }, [monthlyFinancePage, monthlyFinanceTotalPages]);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }
+
+  return undefined;
+}, [monthlyFinancePage, monthlyFinanceTotalPages]);
 
   const filteredClientFinanceRows = useMemo(() => {
     const query = clientFinanceSearchQuery.trim().toLowerCase();
@@ -790,11 +815,17 @@ export default function ReportsPage() {
     );
   }, [clientFinancePage, filteredClientFinanceRows]);
 
-  useEffect(() => {
-    if (clientFinancePage > clientFinanceTotalPages) {
+useEffect(() => {
+  if (clientFinancePage > clientFinanceTotalPages) {
+    const timeoutId = window.setTimeout(() => {
       setClientFinancePage(clientFinanceTotalPages);
-    }
-  }, [clientFinancePage, clientFinanceTotalPages]);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }
+
+  return undefined;
+}, [clientFinancePage, clientFinanceTotalPages]);
 
   const filteredProjectTypeFinanceRows = useMemo(() => {
     const query = projectTypeFinanceSearchQuery.trim().toLowerCase();
@@ -836,11 +867,17 @@ export default function ReportsPage() {
     );
   }, [filteredProjectTypeFinanceRows, projectTypeFinancePage]);
 
-  useEffect(() => {
-    if (projectTypeFinancePage > projectTypeFinanceTotalPages) {
+useEffect(() => {
+  if (projectTypeFinancePage > projectTypeFinanceTotalPages) {
+    const timeoutId = window.setTimeout(() => {
       setProjectTypeFinancePage(projectTypeFinanceTotalPages);
-    }
-  }, [projectTypeFinancePage, projectTypeFinanceTotalPages]);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }
+
+  return undefined;
+}, [projectTypeFinancePage, projectTypeFinanceTotalPages]);
 
   function renderTableSearch(
     value: string,

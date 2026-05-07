@@ -27,7 +27,26 @@ type DealPayload = {
   notes: string;
   isDeleted: boolean;
 };
+type SearchRegex = {
+  $regex: string;
+  $options: "i";
+};
 
+type DealSearchField = "title" | "status" | "description" | "notes";
+
+type DealFilter = {
+  isDeleted: {
+    $ne: boolean;
+  };
+  $or?: (
+    | Partial<Record<DealSearchField, SearchRegex>>
+    | {
+        clientId: {
+          $in: Types.ObjectId[];
+        };
+      }
+  )[];
+};
 const DEAL_STATUSES: DealStatus[] = [
   "Lead",
   "Contacted",
@@ -275,9 +294,9 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search")?.trim() || "";
     const skip = (page - 1) * limit;
 
-    const filter: any = {
-      isDeleted: { $ne: true },
-    };
+    const filter: DealFilter = {
+  isDeleted: { $ne: true },
+};
 
     if (search) {
       const matchingClients = await Client.find({
@@ -289,8 +308,9 @@ export async function GET(req: NextRequest) {
         ],
       }).select("_id");
 
-      const matchingClientIds = matchingClients.map((client) => client._id);
-
+          const matchingClientIds = matchingClients.map(
+            (client) => client._id as Types.ObjectId
+          );
       filter.$or = [
         { title: { $regex: search, $options: "i" } },
         { status: { $regex: search, $options: "i" } },

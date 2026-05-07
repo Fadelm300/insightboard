@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Box, CircularProgress, Grid, Typography } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
 import HandshakeIcon from "@mui/icons-material/Handshake";
@@ -129,7 +129,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function fetchDashboardData() {
+const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -160,12 +160,15 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchDashboardData();
   }, []);
 
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchDashboardData();
+  }, 0);
+
+  return () => window.clearTimeout(timeoutId);
+}, [fetchDashboardData]);
   const activeDealsCount = useMemo(() => {
     return deals.filter(
       (deal) => deal.status !== "Closed Won" && deal.status !== "Closed Lost"

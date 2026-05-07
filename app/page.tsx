@@ -1,5 +1,5 @@
 "use client";
-
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type Language = "en" | "ar";
@@ -377,7 +377,8 @@ export default function HomePage() {
     [t.preview.items]
   );
 
-  useEffect(() => {
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
     const savedTheme = localStorage.getItem("theme") as ThemeMode | null;
     const savedLanguage = localStorage.getItem("language") as Language | null;
 
@@ -393,7 +394,10 @@ export default function HomePage() {
       document.documentElement.lang = savedLanguage;
       document.documentElement.dir = savedLanguage === "ar" ? "rtl" : "ltr";
     }
-  }, []);
+  }, 0);
+
+  return () => window.clearTimeout(timeoutId);
+}, []);
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -553,7 +557,7 @@ export default function HomePage() {
         <div className="floating-orb absolute bottom-20 left-10 h-64 w-64 rounded-full bg-indigo-500/15 blur-[110px]" />
 
         <nav className="relative z-20 mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 rounded-3xl border border-[var(--ib-border)] bg-[var(--ib-nav)] px-5 py-4 backdrop-blur-xl">
-          <a href="/" className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500 text-lg font-black text-white shadow-lg shadow-blue-500/25">
               IB
             </span>
@@ -561,7 +565,7 @@ export default function HomePage() {
               <p className="text-sm font-bold tracking-wide">InsightBoard</p>
               <p className="text-xs text-[var(--ib-muted)]">{t.nav.system}</p>
             </div>
-          </a>
+          </Link>
 
           <div className="hidden items-center gap-6 text-sm text-[var(--ib-muted)] md:flex">
             <button

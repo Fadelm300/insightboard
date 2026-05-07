@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import {
   Alert,
@@ -583,7 +583,7 @@ export default function DealsPage() {
     );
   }, [projects]);
 
-  async function fetchData(pageNumber = page, search = searchQuery) {
+  const fetchData = useCallback(async (pageNumber: number, search: string) => {
     setLoading(true);
     setError("");
 
@@ -620,15 +620,15 @@ export default function DealsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      fetchData(page, searchQuery);
-    }, 350);
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchData(page, searchQuery);
+  }, 350);
 
-    return () => window.clearTimeout(timeoutId);
-  }, [page, searchQuery]);
+  return () => window.clearTimeout(timeoutId);
+}, [fetchData, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingDeal(null);
