@@ -146,7 +146,7 @@ function Illustration() {
 
       {/* ── STICKY NOTE ── */}
       <rect x="312" y="295" width="58" height="44" rx="3" fill="#93b8f8" transform="rotate(-4 320 300)" />
-      <text x="341" y="314" textAnchor="middle" fontFamily="inherit" fontSize="8" fontWeight="700" fill="#0f2357" transform="rotate(-4 341 314)">I'M</text>
+      <text x="341" y="314" textAnchor="middle" fontFamily="inherit" fontSize="8" fontWeight="700" fill="#0f2357" transform="rotate(-4 341 314)">I&apos;M</text>
       <text x="341" y="325" textAnchor="middle" fontFamily="inherit" fontSize="8" fontWeight="700" fill="#0f2357" transform="rotate(-4 341 325)">LOST</text>
       <text x="341" y="336" textAnchor="middle" fontFamily="inherit" fontSize="8" fontWeight="700" fill="#0f2357" transform="rotate(-4 341 336)">TOO :(</text>
 
