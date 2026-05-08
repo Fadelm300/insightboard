@@ -1,6 +1,5 @@
-import { NextRequest } from "next/server";
 import { successResponse } from "@/lib/apiResponse";
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   return successResponse({}, "Logout successful");
 }

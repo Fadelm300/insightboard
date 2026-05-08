@@ -134,17 +134,132 @@ export default function RevenueChart() {
   const revenueColor = theme.palette.primary.light;
   const expensesColor = theme.palette.error.main;
   const profitColor = theme.palette.success.main;
-  const gridColor = alpha(theme.palette.text.secondary, 0.16);
+  const gridColor = alpha(theme.palette.text.secondary, 0.12);
+  const axisColor = alpha(theme.palette.text.secondary, 0.62);
 
   return (
-    <Card sx={{ height: "100%", minWidth: 0 }}>
-      <CardContent sx={{ p: 2.5, minWidth: 0 }}>
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="h6">Monthly Revenue</Typography>
+    <Card
+      sx={{
+        height: "100%",
+        minWidth: 0,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            theme.palette.mode === "dark"
+              ? `radial-gradient(circle at 18% 12%, ${alpha(
+                  theme.palette.primary.main,
+                  0.14
+                )}, transparent 36%),
+                 radial-gradient(circle at 82% 16%, ${alpha(
+                   theme.palette.success.main,
+                   0.1
+                 )}, transparent 32%)`
+              : `radial-gradient(circle at 18% 12%, ${alpha(
+                  theme.palette.primary.main,
+                  0.08
+                )}, transparent 36%),
+                 radial-gradient(circle at 82% 16%, ${alpha(
+                   theme.palette.success.main,
+                   0.08
+                 )}, transparent 32%)`,
+        }}
+      />
 
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            Revenue, expenses, and profit trend by month.
-          </Typography>
+      <CardContent
+        sx={{
+          position: "relative",
+          p: { xs: 2, md: 2.5 },
+          minWidth: 0,
+        }}
+      >
+        <Box
+          sx={{
+            mb: 2.5,
+            display: "flex",
+            flexDirection: { xs: "column", sm: "row" },
+            justifyContent: "space-between",
+            alignItems: { xs: "flex-start", sm: "center" },
+            gap: 1.5,
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 900,
+                letterSpacing: "-0.03em",
+              }}
+            >
+              Monthly Revenue
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+              Revenue, expenses, and profit trend by month.
+            </Typography>
+          </Box>
+
+          {!loading && !error && monthlyData.length > 0 && (
+            <Box
+              sx={{
+                display: { xs: "none", sm: "flex" },
+                alignItems: "center",
+                gap: 1,
+                flexWrap: "wrap",
+              }}
+            >
+              <Box
+                sx={{
+                  px: 1.25,
+                  py: 0.65,
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  color: "primary.light",
+                  bgcolor: alpha(theme.palette.primary.main, 0.12),
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.22)}`,
+                }}
+              >
+                Revenue
+              </Box>
+
+              <Box
+                sx={{
+                  px: 1.25,
+                  py: 0.65,
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  color: "success.main",
+                  bgcolor: alpha(theme.palette.success.main, 0.12),
+                  border: `1px solid ${alpha(theme.palette.success.main, 0.22)}`,
+                }}
+              >
+                Profit
+              </Box>
+
+              <Box
+                sx={{
+                  px: 1.25,
+                  py: 0.65,
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  color: "error.main",
+                  bgcolor: alpha(theme.palette.error.main, 0.12),
+                  border: `1px solid ${alpha(theme.palette.error.main, 0.22)}`,
+                }}
+              >
+                Expenses
+              </Box>
+            </Box>
+          )}
         </Box>
 
         {loading && (
@@ -170,52 +285,98 @@ export default function RevenueChart() {
                 width={width}
                 height={height}
                 data={monthlyData}
-                margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                margin={{ top: 18, right: 18, left: 0, bottom: 2 }}
               >
                 <defs>
-                  <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="revenueSurface" x1="0" y1="0" x2="0" y2="1">
                     <stop
-                      offset="5%"
+                      offset="0%"
                       stopColor={revenueColor}
-                      stopOpacity={0.42}
+                      stopOpacity={0.45}
                     />
                     <stop
-                      offset="95%"
+                      offset="58%"
                       stopColor={revenueColor}
-                      stopOpacity={0.02}
+                      stopOpacity={0.12}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor={revenueColor}
+                      stopOpacity={0.01}
                     />
                   </linearGradient>
 
-                  <linearGradient id="profitFill" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="profitSurface" x1="0" y1="0" x2="0" y2="1">
                     <stop
-                      offset="5%"
+                      offset="0%"
                       stopColor={profitColor}
-                      stopOpacity={0.28}
+                      stopOpacity={0.34}
                     />
                     <stop
-                      offset="95%"
+                      offset="62%"
                       stopColor={profitColor}
-                      stopOpacity={0.02}
+                      stopOpacity={0.09}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor={profitColor}
+                      stopOpacity={0.01}
                     />
                   </linearGradient>
+
+                  <filter id="revenueGlow" x="-25%" y="-25%" width="150%" height="150%">
+                    <feGaussianBlur stdDeviation="4" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+
+                  <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow
+                      dx="0"
+                      dy="8"
+                      stdDeviation="6"
+                      floodColor={alpha(theme.palette.common.black, 0.32)}
+                    />
+                  </filter>
                 </defs>
 
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <CartesianGrid
+                  strokeDasharray="4 10"
+                  vertical={false}
+                  stroke={gridColor}
+                />
 
                 <XAxis
                   dataKey="month"
-                  tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
-                  axisLine={{ stroke: gridColor }}
-                  tickLine={{ stroke: gridColor }}
+                  tick={{
+                    fill: axisColor,
+                    fontSize: 12,
+                    fontWeight: 800,
+                  }}
+                  axisLine={false}
+                  tickLine={false}
+                  dy={8}
                 />
 
                 <YAxis
-                  tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
-                  axisLine={{ stroke: gridColor }}
-                  tickLine={{ stroke: gridColor }}
+                  tick={{
+                    fill: axisColor,
+                    fontSize: 12,
+                    fontWeight: 800,
+                  }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={56}
                 />
 
                 <Tooltip
+                  cursor={{
+                    stroke: alpha(theme.palette.primary.light, 0.28),
+                    strokeWidth: 2,
+                    strokeDasharray: "4 8",
+                  }}
                   formatter={(value, name) => [
                     formatCurrency(Number(value)),
                     formatMetricName(String(name)),
@@ -231,48 +392,88 @@ export default function RevenueChart() {
                   }}
                   labelStyle={{
                     color: theme.palette.text.primary,
-                    fontWeight: 800,
+                    fontWeight: 900,
                   }}
                   itemStyle={{
                     color: theme.palette.text.primary,
+                    fontWeight: 700,
                   }}
                 />
 
                 <Legend
+                  verticalAlign="bottom"
+                  iconType="circle"
                   wrapperStyle={{
                     color: theme.palette.text.secondary,
-                    fontWeight: 700,
+                    fontWeight: 800,
+                    paddingTop: 14,
                   }}
                 />
 
                 <Area
                   type="monotone"
                   dataKey="revenue"
+                  name="Revenue"
                   stroke={revenueColor}
-                  fill="url(#revenueFill)"
-                  strokeWidth={3}
-                  dot={{ r: 4, strokeWidth: 2 }}
-                  activeDot={{ r: 6 }}
-                />
-
-                <Area
-                  type="monotone"
-                  dataKey="expenses"
-                  stroke={expensesColor}
-                  fill="transparent"
-                  strokeWidth={3}
-                  dot={{ r: 4, strokeWidth: 2 }}
-                  activeDot={{ r: 6 }}
+                  fill="url(#revenueSurface)"
+                  strokeWidth={4}
+                  dot={{
+                    r: 4.5,
+                    strokeWidth: 2,
+                    stroke: theme.palette.background.paper,
+                    fill: revenueColor,
+                  }}
+                  activeDot={{
+                    r: 7,
+                    strokeWidth: 3,
+                    stroke: theme.palette.background.paper,
+                    fill: revenueColor,
+                  }}
+                  filter="url(#revenueGlow)"
                 />
 
                 <Area
                   type="monotone"
                   dataKey="profit"
+                  name="Profit"
                   stroke={profitColor}
-                  fill="url(#profitFill)"
+                  fill="url(#profitSurface)"
+                  strokeWidth={3.5}
+                  dot={{
+                    r: 4,
+                    strokeWidth: 2,
+                    stroke: theme.palette.background.paper,
+                    fill: profitColor,
+                  }}
+                  activeDot={{
+                    r: 6.5,
+                    strokeWidth: 3,
+                    stroke: theme.palette.background.paper,
+                    fill: profitColor,
+                  }}
+                  filter="url(#softShadow)"
+                />
+
+                <Area
+                  type="monotone"
+                  dataKey="expenses"
+                  name="Expenses"
+                  stroke={expensesColor}
+                  fill="transparent"
                   strokeWidth={3}
-                  dot={{ r: 4, strokeWidth: 2 }}
-                  activeDot={{ r: 6 }}
+                  strokeDasharray="8 7"
+                  dot={{
+                    r: 4,
+                    strokeWidth: 2,
+                    stroke: theme.palette.background.paper,
+                    fill: expensesColor,
+                  }}
+                  activeDot={{
+                    r: 6,
+                    strokeWidth: 3,
+                    stroke: theme.palette.background.paper,
+                    fill: expensesColor,
+                  }}
                 />
               </AreaChart>
             )}

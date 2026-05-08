@@ -4,7 +4,7 @@ import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
 import { getAuthUser } from "@/lib/auth";
 import Client from "@/models/Client";
-
+import { blockIfDemoMode } from "@/lib/demoMode";
 type ClientStatus =
   | "New Lead"
   | "Contacted"
@@ -24,7 +24,26 @@ type ClientPayload = {
   notes?: string;
   status?: ClientStatus;
 };
+type SearchRegex = {
+  $regex: string;
+  $options: "i";
+};
 
+type ClientSearchField =
+  | "companyName"
+  | "businessType"
+  | "contactPerson"
+  | "phone"
+  | "email"
+  | "location"
+  | "status";
+
+type ClientFilter = {
+  isDeleted: {
+    $ne: boolean;
+  };
+  $or?: Partial<Record<ClientSearchField, SearchRegex>>[];
+};
 const CLIENT_STATUSES: ClientStatus[] = [
   "New Lead",
   "Contacted",
@@ -250,13 +269,53 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const clients = await Client.find({ isDeleted: { $ne: true } }).sort({
-      createdAt: -1,
-    });
+    const { searchParams } = new URL(req.url);
 
-    return successResponse({ clients }, "Clients fetched successfully");
-  } catch {
-    return errorResponse("Server error", 500);
+    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(searchParams.get("limit")) || 10, 1),
+      50,
+    );
+
+    const search = searchParams.get("search")?.trim() || "";
+    const skip = (page - 1) * limit;
+
+   const filter: ClientFilter = {
+  isDeleted: { $ne: true },
+};
+    if (search) {
+      filter.$or = [
+        { companyName: { $regex: search, $options: "i" } },
+        { businessType: { $regex: search, $options: "i" } },
+        { contactPerson: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } },
+        { status: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const [clients, total] = await Promise.all([
+      Client.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Client.countDocuments(filter),
+    ]);
+
+    return successResponse(
+      {
+        clients,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+      "Clients fetched successfully",
+    );
+  } catch  {
+    return errorResponse("Failed to fetch clients", 500);
   }
 }
 
@@ -267,7 +326,8 @@ export async function POST(req: NextRequest) {
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
-
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const body = await req.json().catch(() => null);

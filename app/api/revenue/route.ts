@@ -1,13 +1,12 @@
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
-
+import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
 import { getAuthUser } from "@/lib/auth";
 import Revenue from "@/models/Revenue";
 import Project from "@/models/Project";
-import "@/models/Client";
-
+import Client from "@/models/Client";
 type PaymentMethod =
   | "Cash"
   | "BenefitPay"
@@ -169,13 +168,88 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const revenues = await Revenue.find()
-      .populate("projectId", "name type price status paymentStatus")
-      .populate("clientId", "companyName contactPerson email")
-      .sort({ paymentDate: -1 });
+    const { searchParams } = new URL(req.url);
+
+    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(searchParams.get("limit")) || 10, 1),
+      50
+    );
+
+    const search = searchParams.get("search")?.trim() || "";
+    const skip = (page - 1) * limit;
+
+    const filter: Record<string, unknown> = {};
+
+    if (search) {
+      const matchingProjects = await Project.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { type: { $regex: search, $options: "i" } },
+          { status: { $regex: search, $options: "i" } },
+          { paymentStatus: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const matchingClients = await Client.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { companyName: { $regex: search, $options: "i" } },
+          { contactPerson: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const matchingProjectIds = matchingProjects.map((project) => project._id);
+      const matchingClientIds = matchingClients.map((client) => client._id);
+
+      const searchConditions: Record<string, unknown>[] = [
+        { paymentMethod: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { notes: { $regex: search, $options: "i" } },
+      ];
+
+      const amount = Number(search);
+
+      if (Number.isFinite(amount)) {
+        searchConditions.push({ amount });
+      }
+
+      if (matchingProjectIds.length > 0) {
+        searchConditions.push({
+          projectId: { $in: matchingProjectIds },
+        });
+      }
+
+      if (matchingClientIds.length > 0) {
+        searchConditions.push({
+          clientId: { $in: matchingClientIds },
+        });
+      }
+
+      filter.$or = searchConditions;
+    }
+
+    const [revenues, total] = await Promise.all([
+      Revenue.find(filter)
+        .populate("projectId", "name type price status paymentStatus")
+        .populate("clientId", "companyName contactPerson email")
+        .sort({ paymentDate: -1 })
+        .skip(skip)
+        .limit(limit),
+      Revenue.countDocuments(filter),
+    ]);
 
     return successResponse(
-      { revenues },
+      {
+        revenues,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
       "Revenue records fetched successfully"
     );
   } catch {
@@ -190,7 +264,8 @@ export async function POST(req: NextRequest) {
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
-
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const body = await req.json().catch(() => null);

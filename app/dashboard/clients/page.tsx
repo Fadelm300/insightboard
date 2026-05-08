@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type React from "react";
 import {
   Alert,
   Box,
@@ -13,7 +14,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Menu,
   MenuItem,
+  Pagination,
   Stack,
   Table,
   TableBody,
@@ -49,6 +53,7 @@ type Client = {
   notes?: string;
   status: ClientStatus;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 type ClientFormData = {
@@ -69,8 +74,20 @@ type ClientFormErrors = Partial<Record<keyof ClientFormData, string>>;
 type ClientsResponse = {
   success?: boolean;
   message?: string;
-  data?: Client[] | { clients?: Client[] };
+  data?:
+    | Client[]
+    | {
+        clients?: Client[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
+      };
   clients?: Client[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
 const CLIENT_STATUSES: ClientStatus[] = [
@@ -93,6 +110,49 @@ const emptyForm: ClientFormData = {
   notes: "",
   status: "New Lead",
 };
+const CLIENTS_PER_PAGE = 7;
+
+const readonlyTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+  },
+};
+
+const readonlyMultilineTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+    whiteSpace: "pre-wrap",
+  },
+};
+
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+} as const;
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+} as const;
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+} as const;
+
+const hideFromTabletSx = {
+  display: { xs: "none", lg: "table-cell" },
+} as const;
+
+const hideUntilWideSx = {
+  display: { xs: "none", xl: "table-cell" },
+} as const;
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+} as const;
 
 function getClientsFromResponse(response: ClientsResponse): Client[] {
   if (Array.isArray(response.data)) return response.data;
@@ -108,6 +168,24 @@ function getClientsFromResponse(response: ClientsResponse): Client[] {
   if (Array.isArray(response.clients)) return response.clients;
 
   return [];
+}
+
+function getPaginationFromResponse(response: ClientsResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || CLIENTS_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || CLIENTS_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
 }
 
 function cleanSingleLineText(value: string) {
@@ -163,7 +241,7 @@ function validateSafeText(
   label: string,
   value: string,
   maxLength: number,
-  required = false
+  required = false,
 ) {
   const cleanValue = cleanSingleLineText(value);
 
@@ -202,7 +280,7 @@ function validateClientForm(data: ClientFormData) {
     "Company name",
     values.companyName,
     120,
-    true
+    true,
   );
 
   if (companyNameError) errors.companyName = companyNameError;
@@ -210,7 +288,7 @@ function validateClientForm(data: ClientFormData) {
   const businessTypeError = validateSafeText(
     "Business type",
     values.businessType,
-    80
+    80,
   );
 
   if (businessTypeError) errors.businessType = businessTypeError;
@@ -218,7 +296,7 @@ function validateClientForm(data: ClientFormData) {
   const contactPersonError = validateSafeText(
     "Contact person",
     values.contactPerson,
-    80
+    80,
   );
 
   if (contactPersonError) errors.contactPerson = contactPersonError;
@@ -295,39 +373,101 @@ function getClientInitial(companyName: string) {
   return companyName.trim().charAt(0).toUpperCase() || "C";
 }
 
+function formatDate(date?: string) {
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getCreatedAtTime(createdAt?: string) {
+  if (!createdAt) return 0;
+
+  const time = new Date(createdAt).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
+}
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [formData, setFormData] = useState<ClientFormData>(emptyForm);
   const [formErrors, setFormErrors] = useState<ClientFormErrors>({});
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
+  const [viewClient, setViewClient] = useState<Client | null>(null);
+  const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const [actionClient, setActionClient] = useState<Client | null>(null);
 
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalClients, setTotalClients] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  async function fetchClients() {
-    setLoading(true);
-    setError("");
+  const sortedClients = useMemo(() => {
+    return [...clients].sort(
+      (firstClient, secondClient) =>
+        getCreatedAtTime(secondClient.createdAt) -
+        getCreatedAtTime(firstClient.createdAt),
+    );
+  }, [clients]);
 
-    try {
-      const response = await apiFetch<ClientsResponse>("/api/clients");
-      setClients(getClientsFromResponse(response));
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load clients";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+const fetchClients = useCallback(async (pageNumber: number, search: string) => {
+  setLoading(true);
+  setError("");
+
+  const queryParams = new URLSearchParams({
+    page: String(pageNumber),
+    limit: String(CLIENTS_PER_PAGE),
+  });
+
+  const cleanSearch = search.trim();
+
+  if (cleanSearch) {
+    queryParams.set("search", cleanSearch);
   }
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  try {
+    const response = await apiFetch<ClientsResponse>(
+      `/api/clients?${queryParams.toString()}`
+    );
+
+    const pagination = getPaginationFromResponse(response);
+
+    setClients(getClientsFromResponse(response));
+    setTotalClients(pagination.total);
+    setTotalPages(Math.max(pagination.totalPages, 1));
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to load clients";
+    setError(message);
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchClients(page, searchQuery);
+  }, 350);
+
+  return () => window.clearTimeout(timeoutId);
+}, [fetchClients, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingClient(null);
@@ -369,7 +509,7 @@ export default function ClientsPage() {
 
   function updateFormField<K extends keyof ClientFormData>(
     field: K,
-    value: ClientFormData[K]
+    value: ClientFormData[K],
   ) {
     setFormData((current) => ({
       ...current,
@@ -380,6 +520,35 @@ export default function ClientsPage() {
       ...current,
       [field]: "",
     }));
+  }
+
+  function handleActionMenuOpen(
+    event: React.MouseEvent<HTMLElement>,
+    client: Client,
+  ) {
+    setActionAnchorEl(event.currentTarget);
+    setActionClient(client);
+  }
+
+  function handleActionMenuClose() {
+    setActionAnchorEl(null);
+    setActionClient(null);
+  }
+
+  function handleMenuEdit() {
+    if (!actionClient) return;
+
+    const selectedClient = actionClient;
+    handleActionMenuClose();
+    handleEditOpen(selectedClient);
+  }
+
+  function handleMenuDelete() {
+    if (!actionClient) return;
+
+    const selectedClient = actionClient;
+    handleActionMenuClose();
+    setDeleteClient(selectedClient);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -417,7 +586,8 @@ export default function ClientsPage() {
       }
 
       handleFormClose();
-      await fetchClients();
+      setPage(1);
+      await fetchClients(1, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save client";
@@ -441,7 +611,7 @@ export default function ClientsPage() {
 
       setSuccess("Client deleted successfully");
       setDeleteClient(null);
-      await fetchClients();
+      await fetchClients(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to delete client";
@@ -493,6 +663,31 @@ export default function ClientsPage() {
         </Button>
       </Stack>
 
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by company, contact, email, phone, or location..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
           {error}
@@ -541,128 +736,538 @@ export default function ClientsPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow
-                    sx={{
-                      bgcolor: (theme) =>
-                        theme.palette.mode === "dark"
-                          ? alpha(theme.palette.primary.main, 0.08)
-                          : alpha(theme.palette.primary.main, 0.04),
-                    }}
-                  >
-                    <TableCell>Company</TableCell>
-                    <TableCell>Contact</TableCell>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Phone</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-
-                <TableBody>
-                  {clients.map((client) => (
+            <>
+              <TableContainer
+                sx={{
+                  width: "100%",
+                  maxWidth: "100%",
+                  overflowX: "hidden",
+                }}
+              >
+                <Table
+                  sx={{
+                    width: "100%",
+                    tableLayout: "fixed",
+                  }}
+                >
+                  <TableHead>
                     <TableRow
-                      key={client._id}
-                      hover
                       sx={{
-                        "&:last-child td": {
-                          borderBottom: 0,
-                        },
+                        bgcolor: (theme) =>
+                          theme.palette.mode === "dark"
+                            ? alpha(theme.palette.primary.main, 0.08)
+                            : alpha(theme.palette.primary.main, 0.04),
                       }}
                     >
-                      <TableCell sx={{ minWidth: 240 }}>
-                      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>  
-                          <Box
-                            sx={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 2.5,
-                              display: "grid",
-                              placeItems: "center",
-                              fontWeight: 800,
-                              color: "primary.main",
-                              bgcolor: (theme) =>
-                                alpha(theme.palette.primary.main, 0.12),
-                              border: (theme) =>
-                                `1px solid ${alpha(
-                                  theme.palette.primary.main,
-                                  0.18
-                                )}`,
-                            }}
-                          >
-                            {getClientInitial(client.companyName)}
-                          </Box>
-
-                          <Box>
-                            <Typography sx={{ fontWeight: 800 }}>
-                              {client.companyName}
-                            </Typography>
-
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ mt: 0.25 }}
-                            >
-                              {client.businessType || "No business type"}
-                            </Typography>
-                          </Box>
-                        </Stack>
+                      <TableCell
+                        align="center"
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: 56,
+                        }}
+                      >
+                        #
                       </TableCell>
 
-                      <TableCell>{client.contactPerson || "-"}</TableCell>
-                      <TableCell>{client.email || "-"}</TableCell>
-                      <TableCell>{client.phone || "-"}</TableCell>
-
-                      <TableCell>
-                        <Chip
-                          label={client.status}
-                          size="small"
-                          sx={getStatusChipSx(client.status)}
-                        />
+                      <TableCell
+                        align="left"
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: { xs: "72%", sm: "54%", md: "34%", lg: "30%" },
+                        }}
+                      >
+                        Company
                       </TableCell>
 
-                      <TableCell align="right">
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ justifyContent: "flex-end" }}
-                        >
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleEditOpen(client)}
-                            sx={{
-                              borderRadius: 2,
-                              fontWeight: 700,
-                            }}
-                          >
-                            Edit
-                          </Button>
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "18%", lg: "16%" },
+                        }}
+                      >
+                        Contact
+                      </TableCell>
 
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            onClick={() => setDeleteClient(client)}
-                            sx={{
-                              borderRadius: 2,
-                              fontWeight: 700,
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </Stack>
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideUntilWideSx,
+                          width: { xl: "20%" },
+                        }}
+                      >
+                        Email
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideUntilWideSx,
+                          width: { xl: "14%" },
+                        }}
+                      >
+                        Phone
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideFromTabletSx,
+                          width: { lg: "14%" },
+                        }}
+                      >
+                        Created Date
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideOnPhoneSx,
+                          width: { sm: "24%", md: "16%", lg: "14%" },
+                        }}
+                      >
+                        Status
+                      </TableCell>
+
+                      <TableCell
+                        align="center"
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: { xs: "28%", sm: "22%", md: 120 },
+                        }}
+                      >
+                        Actions
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+
+                  <TableBody>
+                    {sortedClients.map((client, index) => (
+                      <TableRow
+                        key={client._id}
+                        hover
+                        sx={{
+                          "&:last-child td": {
+                            borderBottom: 0,
+                          },
+                        }}
+                      >
+                        <TableCell
+                          align="center"
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: 56,
+                            fontWeight: 800,
+                            color: "text.secondary",
+                          }}
+                        >
+                          {(page - 1) * CLIENTS_PER_PAGE + index + 1}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "72%", sm: "54%", md: "34%", lg: "30%" },
+                            minWidth: 0,
+                          }}
+                        >
+                          <Stack
+                            direction="row"
+                            spacing={{ xs: 0.75, md: 1.5 }}
+                            sx={{ alignItems: "center", minWidth: 0 }}
+                          >
+                            <Box
+                              sx={{
+                                width: { xs: 32, md: 40 },
+                                height: { xs: 32, md: 40 },
+                                borderRadius: 2.5,
+                                display: "grid",
+                                placeItems: "center",
+                                flexShrink: 0,
+                                fontWeight: 800,
+                                fontSize: { xs: 12, md: 14 },
+                                color: "primary.main",
+                                bgcolor: (theme) =>
+                                  alpha(theme.palette.primary.main, 0.12),
+                                border: (theme) =>
+                                  `1px solid ${alpha(
+                                    theme.palette.primary.main,
+                                    0.18,
+                                  )}`,
+                              }}
+                            >
+                              {getClientInitial(client.companyName)}
+                            </Box>
+
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: { xs: 13, md: 14 },
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {client.companyName}
+                              </Typography>
+
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  mt: 0.25,
+                                  display: { xs: "none", sm: "block" },
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {client.businessType || "No business type"}
+                              </Typography>
+
+                              <Chip
+                                label={client.status}
+                                size="small"
+                                sx={{
+                                  ...getStatusChipSx(client.status),
+                                  display: { xs: "inline-flex", sm: "none" },
+                                  mt: 0.75,
+                                  maxWidth: "100%",
+                                  "& .MuiChip-label": {
+                                    px: 0.75,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  },
+                                }}
+                              />
+                            </Box>
+                          </Stack>
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {client.contactPerson || "-"}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideUntilWideSx,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {client.email || "-"}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideUntilWideSx,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {client.phone || "-"}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {formatDate(client.createdAt)}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideOnPhoneSx,
+                          }}
+                        >
+                          <Chip
+                            label={client.status}
+                            size="small"
+                            sx={getStatusChipSx(client.status)}
+                          />
+                        </TableCell>
+
+                        <TableCell
+                          align="right"
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "28%", sm: "22%", md: 120 },
+                          }}
+                        >
+                          <Stack
+                            direction="row"
+                            spacing={{ xs: 0.5, md: 1 }}
+                            sx={{
+                              justifyContent: "flex-end",
+                              alignItems: "center",
+                              flexWrap: "nowrap",
+                            }}
+                          >
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => setViewClient(client)}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 700,
+                                minWidth: { xs: 44, md: 64 },
+                                height: { xs: 30, md: 34 },
+                                px: { xs: 0.75, md: 1.5 },
+                                fontSize: { xs: 11, md: 13 },
+                              }}
+                            >
+                              View
+                            </Button>
+
+                            <IconButton
+                              size="small"
+                              onClick={(event) =>
+                                handleActionMenuOpen(event, client)
+                              }
+                              aria-label={`Open actions for ${client.companyName}`}
+                              sx={{
+                                display: { xs: "none", md: "inline-flex" },
+                                width: 34,
+                                height: 34,
+                                borderRadius: 2,
+                                border: (theme) =>
+                                  `1px solid ${theme.palette.divider}`,
+                                fontWeight: 900,
+                                fontSize: 18,
+                                lineHeight: 1,
+                              }}
+                            >
+                              ⋮
+                            </IconButton>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalClients} clients
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
           )}
         </CardContent>
       </Card>
+
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={Boolean(actionAnchorEl)}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleMenuEdit}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ✎
+          </Box>
+          Edit
+        </MenuItem>
+
+        <MenuItem onClick={handleMenuDelete} sx={{ color: "error.main" }}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ×
+          </Box>
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={Boolean(viewClient)}
+        onClose={() => setViewClient(null)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
+          Client Details
+        </DialogTitle>
+
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Company Name"
+              fullWidth
+              value={viewClient?.companyName || "-"}
+              sx={readonlyTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Business Type"
+                fullWidth
+                value={viewClient?.businessType || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Status"
+                fullWidth
+                value={viewClient?.status || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Stack>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Contact Person"
+                fullWidth
+                value={viewClient?.contactPerson || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Phone"
+                fullWidth
+                value={viewClient?.phone || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Stack>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Email"
+                fullWidth
+                value={viewClient?.email || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Website"
+                fullWidth
+                value={viewClient?.website || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Stack>
+
+            <TextField
+              label="Location"
+              fullWidth
+              value={viewClient?.location || "-"}
+              sx={readonlyTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewClient?.description || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewClient?.notes || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Created At"
+                fullWidth
+                value={formatDate(viewClient?.createdAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Updated At"
+                fullWidth
+                value={formatDate(viewClient?.updatedAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Stack>
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewClient(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={openForm}
@@ -851,7 +1456,10 @@ export default function ClientsPage() {
         <DialogContent>
           <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <Box component="span" sx={{ color: "text.primary", fontWeight: 800 }}>
+            <Box
+              component="span"
+              sx={{ color: "text.primary", fontWeight: 800 }}
+            >
               {deleteClient?.companyName}
             </Box>
             ?

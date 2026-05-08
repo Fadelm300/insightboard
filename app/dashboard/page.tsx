@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Box, CircularProgress, Grid, Typography } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
 import HandshakeIcon from "@mui/icons-material/Handshake";
@@ -129,7 +129,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function fetchDashboardData() {
+const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -160,12 +160,15 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchDashboardData();
   }, []);
 
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchDashboardData();
+  }, 0);
+
+  return () => window.clearTimeout(timeoutId);
+}, [fetchDashboardData]);
   const activeDealsCount = useMemo(() => {
     return deals.filter(
       (deal) => deal.status !== "Closed Won" && deal.status !== "Closed Lost"
@@ -232,9 +235,24 @@ export default function DashboardPage() {
   }
 
   return (
-    <Box>
+    <Box
+      sx={{
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        overflowX: "hidden",
+      }}
+    >
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4">Dashboard</Typography>
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: 800,
+            letterSpacing: "-0.04em",
+          }}
+        >
+          Dashboard
+        </Typography>
 
         <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
           Overview of your web design business performance.
@@ -247,9 +265,9 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      <Grid container spacing={{ xs: 2, md: 3 }}>
         {dashboardStats.map((stat) => (
-          <Grid key={stat.title} size={{ xs: 12, sm: 6, md: 3 }}>
+          <Grid key={stat.title} size={{ xs: 12, sm: 6, lg: 3 }}>
             <KPIBox
               title={stat.title}
               value={stat.value}
@@ -260,11 +278,11 @@ export default function DashboardPage() {
           </Grid>
         ))}
 
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           <RecentDeals />
         </Grid>
 
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <RevenueSummary />
         </Grid>
 

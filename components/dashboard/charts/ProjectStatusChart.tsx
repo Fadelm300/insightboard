@@ -10,13 +10,7 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
-import {
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  Tooltip,
-} from "recharts";
+import { Cell, Legend, Pie, PieChart, Tooltip } from "recharts";
 
 import { apiFetch } from "@/lib/apiClient";
 import MeasuredChartBox from "@/components/dashboard/charts/MeasuredChartBox";
@@ -115,15 +109,96 @@ export default function ProjectStatusChart() {
     })).filter((item) => item.value > 0);
   }, [projects]);
 
-  return (
-    <Card sx={{ height: "100%", minWidth: 0 }}>
-      <CardContent sx={{ p: 2.5, minWidth: 0 }}>
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="h6">Project Status</Typography>
+  const totalProjects = chartData.reduce((total, item) => total + item.value, 0);
 
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            Project distribution by current delivery state.
-          </Typography>
+  return (
+    <Card
+      sx={{
+        height: "100%",
+        minWidth: 0,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            theme.palette.mode === "dark"
+              ? `radial-gradient(circle at 18% 14%, ${alpha(
+                  theme.palette.primary.main,
+                  0.14
+                )}, transparent 36%),
+                 radial-gradient(circle at 86% 18%, ${alpha(
+                   theme.palette.success.main,
+                   0.1
+                 )}, transparent 34%)`
+              : `radial-gradient(circle at 18% 14%, ${alpha(
+                  theme.palette.primary.main,
+                  0.08
+                )}, transparent 36%),
+                 radial-gradient(circle at 86% 18%, ${alpha(
+                   theme.palette.success.main,
+                   0.08
+                 )}, transparent 34%)`,
+        }}
+      />
+
+      <CardContent
+        sx={{
+          position: "relative",
+          p: { xs: 2, md: 2.5 },
+          minWidth: 0,
+        }}
+      >
+        <Box
+          sx={{
+            mb: 2.5,
+            display: "flex",
+            flexDirection: { xs: "column", sm: "row" },
+            justifyContent: "space-between",
+            alignItems: { xs: "flex-start", sm: "center" },
+            gap: 1.5,
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 900,
+                letterSpacing: "-0.03em",
+              }}
+            >
+              Project Status
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+              Project distribution by current delivery state.
+            </Typography>
+          </Box>
+
+          {!loading && !error && chartData.length > 0 && (
+            <Box
+              sx={{
+                px: 1.4,
+                py: 0.75,
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 900,
+                color: "primary.light",
+                bgcolor: alpha(theme.palette.primary.main, 0.12),
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.22)}`,
+                boxShadow:
+                  theme.palette.mode === "dark"
+                    ? `0 0 24px ${alpha(theme.palette.primary.main, 0.16)}`
+                    : `0 10px 26px ${alpha(theme.palette.primary.main, 0.1)}`,
+              }}
+            >
+              {totalProjects} Projects
+            </Box>
+          )}
         </Box>
 
         {loading && (
@@ -153,22 +228,75 @@ export default function ProjectStatusChart() {
                 }}
               >
                 <PieChart width={width} height={height}>
+                  <defs>
+                    <filter
+                      id="projectStatusGlow"
+                      x="-25%"
+                      y="-25%"
+                      width="150%"
+                      height="150%"
+                    >
+                      <feGaussianBlur stdDeviation="3.5" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+
+                    <filter
+                      id="projectStatusShadow"
+                      x="-30%"
+                      y="-30%"
+                      width="160%"
+                      height="160%"
+                    >
+                      <feDropShadow
+                        dx="0"
+                        dy="10"
+                        stdDeviation="8"
+                        floodColor={alpha(theme.palette.common.black, 0.34)}
+                      />
+                    </filter>
+                  </defs>
+
                   <Pie
                     data={chartData}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={62}
-                    outerRadius={104}
-                    paddingAngle={4}
+                    innerRadius={66}
+                    outerRadius={108}
+                    paddingAngle={5}
                     labelLine={false}
                     label={({ value }) => value}
+                    filter="url(#projectStatusShadow)"
                   >
                     {chartData.map((entry) => (
                       <Cell
                         key={entry.name}
                         fill={entry.color}
                         stroke={theme.palette.background.paper}
-                        strokeWidth={3}
+                        strokeWidth={4}
+                      />
+                    ))}
+                  </Pie>
+
+                  <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={112}
+                    outerRadius={116}
+                    paddingAngle={5}
+                    labelLine={false}
+                    legendType="none"
+                    isAnimationActive={false}
+                    filter="url(#projectStatusGlow)"
+                  >
+                    {chartData.map((entry) => (
+                      <Cell
+                        key={`glow-${entry.name}`}
+                        fill={alpha(entry.color, 0.24)}
+                        stroke="none"
                       />
                     ))}
                   </Pie>
@@ -185,17 +313,21 @@ export default function ProjectStatusChart() {
                     }}
                     labelStyle={{
                       color: theme.palette.text.primary,
-                      fontWeight: 800,
+                      fontWeight: 900,
                     }}
                     itemStyle={{
                       color: theme.palette.text.primary,
+                      fontWeight: 700,
                     }}
                   />
 
                   <Legend
+                    verticalAlign="bottom"
+                    iconType="circle"
                     wrapperStyle={{
                       color: theme.palette.text.secondary,
-                      fontWeight: 700,
+                      fontWeight: 800,
+                      paddingTop: 14,
                     }}
                   />
                 </PieChart>
@@ -204,21 +336,74 @@ export default function ProjectStatusChart() {
                   sx={{
                     pointerEvents: "none",
                     position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    width: 112,
-                    height: 112,
+                    // Center circle vertical position:
+                    // xs/sm/md = phone/tablet/normal desktop
+                    // lg = laptop 13/14 inch adjustment
+                    // xl = large desktop
+                      top: {sm: "44%", xs: "37%", md: "44%", lg: "37%", xl: "39%" },
+
+                      "@media (min-width: 1800px)": {
+                        top: "40%",
+                      }, 
+                      "@media (max-width: 430px) and (min-height: 900px)": {
+                              top: "40%",
+                            },
+                                         left: "50%",
+                    width: 116,
+                    height: 116,
                     transform: "translate(-50%, -50%)",
                     borderRadius: "50%",
+                    display: "grid",
+                    placeItems: "center",
+                    bgcolor:
+                      theme.palette.mode === "dark"
+                        ? alpha(theme.palette.background.paper, 0.52)
+                        : alpha(theme.palette.background.paper, 0.82),
+                    border: `1px solid ${alpha(theme.palette.divider, 0.72)}`,
                     boxShadow:
                       theme.palette.mode === "dark"
-                        ? `0 0 42px ${alpha(
+                        ? `inset 0 1px 0 ${alpha(
+                            theme.palette.common.white,
+                            0.08
+                          )}, 0 0 42px ${alpha(
                             theme.palette.primary.main,
                             0.22
                           )}`
-                        : "none",
+                        : `inset 0 1px 0 ${alpha(
+                            theme.palette.common.white,
+                            0.95
+                          )}, 0 18px 34px ${alpha(
+                            theme.palette.primary.main,
+                            0.12
+                          )}`,
                   }}
-                />
+                >
+                  <Box sx={{ textAlign: "center" }}>
+                    <Typography
+                      sx={{
+                        fontSize: 26,
+                        fontWeight: 950,
+                        lineHeight: 1,
+                        letterSpacing: "-0.05em",
+                      }}
+                    >
+                      {totalProjects}
+                    </Typography>
+
+                    <Typography
+                      sx={{
+                        mt: 0.35,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: "text.secondary",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      Total
+                    </Typography>
+                  </Box>
+                </Box>
               </Box>
             )}
           </MeasuredChartBox>

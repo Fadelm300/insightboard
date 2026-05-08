@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type React from "react";
 import {
   Alert,
   Box,
@@ -13,7 +14,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Menu,
   MenuItem,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -57,6 +61,7 @@ type Deal = {
   description?: string;
   notes?: string;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 type ProjectDeal = string | { _id: string };
@@ -102,10 +107,18 @@ type DealsResponse = {
         deals?: Deal[];
         items?: Deal[];
         records?: Deal[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
       };
   deals?: Deal[];
   items?: Deal[];
   records?: Deal[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
 type ClientsResponse = {
@@ -159,6 +172,50 @@ const emptyForm: DealFormData = {
   notes: "",
 };
 
+const DEALS_PER_PAGE = 7;
+
+const readonlyTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+  },
+};
+
+const readonlyMultilineTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+    whiteSpace: "pre-wrap",
+  },
+};
+
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 2 },
+  py: { xs: 1.25, md: 2 },
+};
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+};
+
+const hideFromTabletSx = {
+  display: { xs: "none", lg: "table-cell" },
+};
+
+const hideUntilWideSx = {
+  display: { xs: "none", xl: "table-cell" },
+};
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+};
+
 function getDealsFromResponse(response: DealsResponse): Deal[] {
   if (Array.isArray(response.data)) return response.data;
   if (Array.isArray(response.deals)) return response.deals;
@@ -172,6 +229,24 @@ function getDealsFromResponse(response: DealsResponse): Deal[] {
   }
 
   return [];
+}
+
+function getDealsPaginationFromResponse(response: DealsResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || DEALS_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || DEALS_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
 }
 
 function getClientsFromResponse(response: ClientsResponse): Client[] {
@@ -223,6 +298,38 @@ function getTodayInputValue() {
   return new Date(today.getTime() - timezoneOffset).toISOString().slice(0, 10);
 }
 
+function formatDate(date?: string) {
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getExpectedCloseDateTime(expectedCloseDate?: string) {
+  if (!expectedCloseDate) return Number.POSITIVE_INFINITY;
+
+  const time = new Date(expectedCloseDate).getTime();
+
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+}
+
+function getCreatedAtTime(createdAt?: string) {
+  if (!createdAt) return 0;
+
+  const time = new Date(createdAt).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
+}
+
 function getProjectDealId(project: Project) {
   if (!project.dealId) return "";
 
@@ -261,7 +368,7 @@ function validateSafeText(
   label: string,
   value: string,
   maxLength: number,
-  required = false
+  required = false,
 ) {
   const cleanValue = cleanSingleLineText(value);
 
@@ -363,7 +470,7 @@ function validateDealForm(data: DealFormData) {
   const descriptionError = validateLongText(
     "Description",
     values.description,
-    1000
+    1000,
   );
 
   if (descriptionError) {
@@ -391,7 +498,7 @@ function validateDealForm(data: DealFormData) {
   return { values, payload, errors };
 }
 
-function getStatusChipSx(status: DealStatus): SxProps<Theme> {
+function getStatusChipSx(status: DealStatus) {
   const statusColors: Record<DealStatus, string> = {
     Lead: "#64748B",
     Contacted: "#0EA5E9",
@@ -434,35 +541,76 @@ export default function DealsPage() {
   const [formErrors, setFormErrors] = useState<DealFormErrors>({});
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [deleteDeal, setDeleteDeal] = useState<Deal | null>(null);
+  const [viewDeal, setViewDeal] = useState<Deal | null>(null);
+  const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const [actionDeal, setActionDeal] = useState<Deal | null>(null);
 
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalDeals, setTotalDeals] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const sortedDeals = useMemo(() => {
+    return [...deals].sort((firstDeal, secondDeal) => {
+      const closeDateDifference =
+        getExpectedCloseDateTime(firstDeal.expectedCloseDate) -
+        getExpectedCloseDateTime(secondDeal.expectedCloseDate);
+
+      if (closeDateDifference !== 0) {
+        return closeDateDifference;
+      }
+
+      return (
+        getCreatedAtTime(secondDeal.createdAt) -
+        getCreatedAtTime(firstDeal.createdAt)
+      );
+    });
+  }, [deals]);
 
   const convertedDealIds = useMemo(() => {
     return new Set(
       projects
         .map((project) => getProjectDealId(project))
-        .filter((dealId) => Boolean(dealId))
+        .filter((dealId) => Boolean(dealId)),
     );
   }, [projects]);
 
-  async function fetchData() {
+  const fetchData = useCallback(async (pageNumber: number, search: string) => {
     setLoading(true);
     setError("");
+
+    const queryParams = new URLSearchParams({
+      page: String(pageNumber),
+      limit: String(DEALS_PER_PAGE),
+    });
+
+    const cleanSearch = search.trim();
+
+    if (cleanSearch) {
+      queryParams.set("search", cleanSearch);
+    }
 
     try {
       const [dealsResponse, clientsResponse, projectsResponse] =
         await Promise.all([
-          apiFetch<DealsResponse>("/api/deals"),
-          apiFetch<ClientsResponse>("/api/clients"),
-          apiFetch<ProjectsResponse>("/api/projects"),
+          apiFetch<DealsResponse>(`/api/deals?${queryParams.toString()}`),
+          apiFetch<ClientsResponse>("/api/clients?limit=50"),
+          apiFetch<ProjectsResponse>("/api/projects?limit=50"),
         ]);
 
+      const pagination = getDealsPaginationFromResponse(dealsResponse);
+
       setDeals(getDealsFromResponse(dealsResponse));
+      setTotalDeals(pagination.total);
+      setTotalPages(Math.max(pagination.totalPages, 1));
       setClients(getClientsFromResponse(clientsResponse));
       setProjects(getProjectsFromResponse(projectsResponse));
     } catch (err) {
@@ -472,11 +620,15 @@ export default function DealsPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchData();
   }, []);
+
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchData(page, searchQuery);
+  }, 350);
+
+  return () => window.clearTimeout(timeoutId);
+}, [fetchData, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingDeal(null);
@@ -529,7 +681,7 @@ export default function DealsPage() {
 
   function updateFormField<K extends keyof DealFormData>(
     field: K,
-    value: DealFormData[K]
+    value: DealFormData[K],
   ) {
     setFormData((current) => ({
       ...current,
@@ -540,6 +692,35 @@ export default function DealsPage() {
       ...current,
       [field]: "",
     }));
+  }
+
+  function handleActionMenuOpen(
+    event: React.MouseEvent<HTMLElement>,
+    deal: Deal,
+  ) {
+    setActionAnchorEl(event.currentTarget);
+    setActionDeal(deal);
+  }
+
+  function handleActionMenuClose() {
+    setActionAnchorEl(null);
+    setActionDeal(null);
+  }
+
+  function handleMenuEdit() {
+    if (!actionDeal) return;
+
+    const selectedDeal = actionDeal;
+    handleActionMenuClose();
+    handleEditOpen(selectedDeal);
+  }
+
+  function handleMenuDelete() {
+    if (!actionDeal) return;
+
+    const selectedDeal = actionDeal;
+    handleActionMenuClose();
+    setDeleteDeal(selectedDeal);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -578,9 +759,11 @@ export default function DealsPage() {
       }
 
       handleFormClose();
-      await fetchData();
+      setPage(1);
+      await fetchData(1, searchQuery);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save deal";
+      const message =
+        err instanceof Error ? err.message : "Failed to save deal";
       setError(message);
     } finally {
       setSaving(false);
@@ -601,7 +784,7 @@ export default function DealsPage() {
 
       setSuccess("Deal deleted successfully");
       setDeleteDeal(null);
-      await fetchData();
+      await fetchData(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to delete deal";
@@ -622,7 +805,7 @@ export default function DealsPage() {
       });
 
       setSuccess("Deal converted to project successfully");
-      await fetchData();
+      await fetchData(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to convert deal";
@@ -675,6 +858,31 @@ export default function DealsPage() {
         </Button>
       </Box>
 
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by deal, client, status, budget, or expected close date..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
           {error}
@@ -682,11 +890,7 @@ export default function DealsPage() {
       )}
 
       {success && (
-        <Alert
-          severity="success"
-          sx={{ mb: 2 }}
-          onClose={() => setSuccess("")}
-        >
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>
           {success}
         </Alert>
       )}
@@ -723,8 +927,20 @@ export default function DealsPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
-              <Table>
+            <>
+              <TableContainer
+              sx={{
+                width: "100%",
+                maxWidth: "100%",
+                overflowX: "hidden",
+              }}
+            >
+              <Table
+                sx={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                }}
+              >
                 <TableHead>
                   <TableRow
                     sx={{
@@ -734,18 +950,99 @@ export default function DealsPage() {
                           : alpha(theme.palette.primary.main, 0.04),
                     }}
                   >
-                    <TableCell>Deal</TableCell>
-                    <TableCell>Client</TableCell>
-                    <TableCell>Budget</TableCell>
-                    <TableCell>Final Price</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Probability</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: 56,
+                      }}
+                    >
+                      #
+                    </TableCell>
+
+                    <TableCell
+                      align="left"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "48%", sm: "34%", md: "28%" },
+                      }}
+                    >
+                      Deal
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "13%", lg: "12%" },
+                      }}
+                    >
+                      Client
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromTabletSx,
+                        width: { lg: "11%" },
+                      }}
+                    >
+                      Expected Close
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "24%", sm: "18%", md: "11%" },
+                      }}
+                    >
+                      Budget
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilWideSx,
+                        width: { xl: "10%" },
+                      }}
+                    >
+                      Final Price
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideOnPhoneSx,
+                        width: { sm: "18%", md: "14%", lg: "13%" },
+                      }}
+                    >
+                      Status
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromTabletSx,
+                        width: { lg: "11%" },
+                      }}
+                    >
+                      Probability
+                    </TableCell>
+
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: { xs: "28%", sm: "30%", md: "22%", lg: "21%" },
+                      }}
+                    >
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHead>
 
                 <TableBody>
-                  {deals.map((deal) => {
+                  {sortedDeals.map((deal, index) => {
                     const isConverted = convertedDealIds.has(deal._id);
 
                     return (
@@ -758,37 +1055,65 @@ export default function DealsPage() {
                           },
                         }}
                       >
-                        <TableCell sx={{ minWidth: 260 }}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: 56,
+                            fontWeight: 800,
+                            color: "text.secondary",
+                          }}
+                        >
+                          {(page - 1) * DEALS_PER_PAGE + index + 1}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "48%", sm: "34%", md: "28%" },
+                          }}
+                        >
                           <Box
                             sx={{
                               display: "flex",
                               alignItems: "center",
-                              gap: 1.5,
+                              gap: { xs: 0.75, md: 1.5 },
+                              minWidth: 0,
                             }}
                           >
                             <Box
                               sx={{
-                                width: 40,
-                                height: 40,
+                                width: { xs: 32, md: 40 },
+                                height: { xs: 32, md: 40 },
                                 borderRadius: 2.5,
                                 display: "grid",
                                 placeItems: "center",
+                                flexShrink: 0,
                                 fontWeight: 900,
+                                fontSize: { xs: 12, md: 14 },
                                 color: "primary.main",
                                 bgcolor: (theme) =>
                                   alpha(theme.palette.primary.main, 0.12),
                                 border: (theme) =>
                                   `1px solid ${alpha(
                                     theme.palette.primary.main,
-                                    0.18
+                                    0.18,
                                   )}`,
                               }}
                             >
                               {getDealInitial(deal.title)}
                             </Box>
 
-                            <Box>
-                              <Typography sx={{ fontWeight: 800 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: { xs: 13, md: 14 },
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
                                 {deal.title}
                               </Typography>
 
@@ -798,6 +1123,7 @@ export default function DealsPage() {
                                 sx={{
                                   mt: 0.25,
                                   maxWidth: 280,
+                                  display: { xs: "none", md: "block" },
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
                                   whiteSpace: "nowrap",
@@ -805,21 +1131,84 @@ export default function DealsPage() {
                               >
                                 {deal.description || "No description"}
                               </Typography>
+
+                              <Chip
+                                label={deal.status}
+                                size="small"
+                                sx={{
+                                  ...getStatusChipSx(deal.status),
+                                  display: { xs: "inline-flex", sm: "none" },
+                                  mt: 0.75,
+                                  maxWidth: "100%",
+                                  "& .MuiChip-label": {
+                                    px: 0.75,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  },
+                                }}
+                              />
                             </Box>
                           </Box>
                         </TableCell>
 
-                        <TableCell>{getClientName(deal.clientId)}</TableCell>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              fontWeight: 700,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {getClientName(deal.clientId)}
+                          </Typography>
+                        </TableCell>
 
-                        <TableCell sx={{ fontWeight: 700 }}>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatDate(deal.expectedCloseDate)}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            fontWeight: 700,
+                            width: { xs: "24%", sm: "18%", md: "11%" },
+                            whiteSpace: "nowrap",
+                            fontSize: { xs: 12, md: 14 },
+                          }}
+                        >
                           {formatBHD(deal.estimatedBudget)}
                         </TableCell>
 
-                        <TableCell sx={{ fontWeight: 700 }}>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideUntilWideSx,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {formatBHD(deal.finalPrice)}
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideOnPhoneSx,
+                          }}
+                        >
                           <Chip
                             label={deal.status}
                             size="small"
@@ -827,7 +1216,12 @@ export default function DealsPage() {
                           />
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                          }}
+                        >
                           <Box
                             sx={{
                               display: "inline-flex",
@@ -853,7 +1247,7 @@ export default function DealsPage() {
                                 sx={{
                                   width: `${Math.min(
                                     Math.max(deal.probability || 0, 0),
-                                    100
+                                    100,
                                   )}%`,
                                   height: "100%",
                                   borderRadius: 999,
@@ -861,21 +1255,28 @@ export default function DealsPage() {
                                     deal.status === "Closed Won"
                                       ? theme.palette.success.main
                                       : deal.status === "Closed Lost"
-                                      ? theme.palette.error.main
-                                      : theme.palette.primary.main,
+                                        ? theme.palette.error.main
+                                        : theme.palette.primary.main,
                                 }}
                               />
                             </Box>
                           </Box>
                         </TableCell>
 
-                        <TableCell align="right">
+                        <TableCell
+                          align="right"
+                          sx={{
+                            ...tableBodyCellSx,
+                            width: { xs: "28%", sm: "30%", md: "22%", lg: "21%" },
+                          }}
+                        >
                           <Box
                             sx={{
                               display: "flex",
                               justifyContent: "flex-end",
-                              gap: 1,
-                              flexWrap: "wrap",
+                              alignItems: "center",
+                              gap: { xs: 0.5, md: 0.5 },
+                              flexWrap: "nowrap",
                             }}
                           >
                             {deal.status === "Closed Won" && !isConverted && (
@@ -885,8 +1286,11 @@ export default function DealsPage() {
                                 onClick={() => handleConvertToProject(deal)}
                                 disabled={saving}
                                 sx={{
+                                  display: { xs: "none", md: "inline-flex" },
                                   borderRadius: 2,
                                   fontWeight: 800,
+                                  minWidth: { md: 78 },
+                                  px: { md: 1.25 },
                                 }}
                               >
                                 Convert
@@ -899,8 +1303,11 @@ export default function DealsPage() {
                                 variant="outlined"
                                 disabled
                                 sx={{
+                                  display: { xs: "none", md: "inline-flex" },
                                   borderRadius: 2,
                                   fontWeight: 800,
+                                  minWidth: { md: 88 },
+                                  px: { md: 1.25 },
                                 }}
                               >
                                 Converted
@@ -910,27 +1317,40 @@ export default function DealsPage() {
                             <Button
                               size="small"
                               variant="outlined"
-                              onClick={() => handleEditOpen(deal)}
+                              onClick={() => setViewDeal(deal)}
                               sx={{
                                 borderRadius: 2,
                                 fontWeight: 800,
+                                minWidth: { xs: 44, md: 64 },
+                                height: { xs: 30, md: 34 },
+                                px: { xs: 0.75, md: 1.5 },
+                                fontSize: { xs: 11, md: 13 },
                               }}
                             >
-                              Edit
+                              View
                             </Button>
 
-                            <Button
+                            <IconButton
                               size="small"
-                              variant="outlined"
-                              color="error"
-                              onClick={() => setDeleteDeal(deal)}
+                              onClick={(event) =>
+                                handleActionMenuOpen(event, deal)
+                              }
+                              aria-label={`Open actions for ${deal.title}`}
                               sx={{
+                                display: { xs: "none", md: "inline-flex" },
+                                width: 34,
+                                height: 34,
+                                flexShrink: 0,
                                 borderRadius: 2,
-                                fontWeight: 800,
+                                border: (theme) =>
+                                  `1px solid ${theme.palette.divider}`,
+                                fontWeight: 900,
+                                fontSize: 18,
+                                lineHeight: 1,
                               }}
                             >
-                              Delete
-                            </Button>
+                              ⋮
+                            </IconButton>
                           </Box>
                         </TableCell>
                       </TableRow>
@@ -938,10 +1358,203 @@ export default function DealsPage() {
                   })}
                 </TableBody>
               </Table>
-            </TableContainer>
+              </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalDeals} deals
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
           )}
         </CardContent>
       </Card>
+
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={Boolean(actionAnchorEl)}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleMenuEdit}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ✎
+          </Box>
+          Edit
+        </MenuItem>
+
+        <MenuItem onClick={handleMenuDelete} sx={{ color: "error.main" }}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ×
+          </Box>
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={Boolean(viewDeal)}
+        onClose={() => setViewDeal(null)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>Deal Details</DialogTitle>
+
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Deal Title"
+                fullWidth
+                value={viewDeal?.title || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Client"
+                fullWidth
+                value={viewDeal ? getClientName(viewDeal.clientId) : "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Estimated Budget"
+                fullWidth
+                value={formatBHD(viewDeal?.estimatedBudget)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Final Price"
+                fullWidth
+                value={formatBHD(viewDeal?.finalPrice)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Probability"
+                fullWidth
+                value={`${viewDeal?.probability || 0}%`}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Status"
+                fullWidth
+                value={viewDeal?.status || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Expected Close Date"
+                fullWidth
+                value={formatDate(viewDeal?.expectedCloseDate)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Created At"
+                fullWidth
+                value={formatDate(viewDeal?.createdAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewDeal?.description || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewDeal?.notes || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Updated At"
+              fullWidth
+              value={formatDate(viewDeal?.updatedAt)}
+              sx={readonlyTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewDeal(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={openForm}
@@ -964,7 +1577,7 @@ export default function DealsPage() {
             {editingDeal ? "Edit Deal" : "Add Deal"}
           </DialogTitle>
 
-          <DialogContent>
+          <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
             <Box
               sx={{
                 display: "flex",
@@ -1104,7 +1717,8 @@ export default function DealsPage() {
                 }
                 error={Boolean(formErrors.expectedCloseDate)}
                 helperText={
-                  formErrors.expectedCloseDate || "Choose today or a future date"
+                  formErrors.expectedCloseDate ||
+                  "Choose today or a future date"
                 }
                 slotProps={{
                   inputLabel: {
@@ -1176,10 +1790,13 @@ export default function DealsPage() {
       >
         <DialogTitle sx={{ fontWeight: 900 }}>Delete Deal</DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <Box component="span" sx={{ color: "text.primary", fontWeight: 900 }}>
+            <Box
+              component="span"
+              sx={{ color: "text.primary", fontWeight: 900 }}
+            >
               {deleteDeal?.title}
             </Box>
             ?

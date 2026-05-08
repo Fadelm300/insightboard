@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
-
+import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
 import { getAuthUser } from "@/lib/auth";
@@ -94,20 +94,39 @@ function parseMoney(value: unknown) {
   return Number(getString(value));
 }
 
-function isPastDate(value: string) {
-  const inputDate = new Date(value);
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-  if (Number.isNaN(inputDate.getTime())) {
+function parseDateInput(value: string) {
+  if (!DATE_PATTERN.test(value)) return null;
+
+  const [year, month, day] = value.split("-").map(Number);
+
+  if (!year || !month || !day) return null;
+
+  const date = new Date(year, month - 1, day);
+
+  const isValidDate =
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day;
+
+  return isValidDate ? date : null;
+}
+
+function isPastDate(value: string) {
+  const inputDate = parseDateInput(value);
+
+  if (!inputDate) {
     return true;
   }
 
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+
   inputDate.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
 
   return inputDate < today;
 }
-
 function validateProjectPayload(body: unknown):
   | { data: ProjectPayload }
   | { error: string } {
@@ -225,7 +244,6 @@ function validateProjectPayload(body: unknown):
     },
   };
 }
-
 export async function GET(req: NextRequest) {
   try {
     const authUser = getAuthUser(req);
@@ -236,12 +254,95 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const projects = await Project.find({ isDeleted: { $ne: true } })
-      .populate("clientId", "companyName contactPerson email")
-      .populate("dealId", "title status finalPrice estimatedBudget")
-      .sort({ createdAt: -1 });
+    const { searchParams } = new URL(req.url);
 
-    return successResponse({ projects }, "Projects fetched successfully");
+    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(searchParams.get("limit")) || 10, 1),
+      50
+    );
+
+    const search = searchParams.get("search")?.trim() || "";
+    const skip = (page - 1) * limit;
+
+    const filter: Record<string, unknown> = {
+      isDeleted: { $ne: true },
+    };
+
+    if (search) {
+      const matchingClients = await Client.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { companyName: { $regex: search, $options: "i" } },
+          { contactPerson: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const matchingDeals = await Deal.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { title: { $regex: search, $options: "i" } },
+          { status: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const matchingClientIds = matchingClients.map((client) => client._id);
+      const matchingDealIds = matchingDeals.map((deal) => deal._id);
+
+      const searchConditions: Record<string, unknown>[] = [
+        { name: { $regex: search, $options: "i" } },
+        { type: { $regex: search, $options: "i" } },
+        { status: { $regex: search, $options: "i" } },
+        { paymentStatus: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { notes: { $regex: search, $options: "i" } },
+      ];
+
+      const amount = Number(search);
+
+      if (Number.isFinite(amount)) {
+        searchConditions.push({ price: amount });
+        searchConditions.push({ cost: amount });
+        searchConditions.push({ profit: amount });
+      }
+
+      if (matchingClientIds.length > 0) {
+        searchConditions.push({
+          clientId: { $in: matchingClientIds },
+        });
+      }
+
+      if (matchingDealIds.length > 0) {
+        searchConditions.push({
+          dealId: { $in: matchingDealIds },
+        });
+      }
+
+      filter.$or = searchConditions;
+    }
+
+    const [projects, total] = await Promise.all([
+      Project.find(filter)
+        .populate("clientId", "companyName contactPerson email")
+        .populate("dealId", "title status finalPrice estimatedBudget")
+        .sort({ deadline: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Project.countDocuments(filter),
+    ]);
+
+    return successResponse(
+      {
+        projects,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+      "Projects fetched successfully"
+    );
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -254,7 +355,8 @@ export async function POST(req: NextRequest) {
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
-
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const body = await req.json().catch(() => null);

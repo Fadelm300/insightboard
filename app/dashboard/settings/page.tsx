@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Alert,
@@ -38,7 +38,6 @@ type MeResponse = {
 type ThemeMode = "Light" | "Dark" | "System";
 
 const BUSINESS_NAME_KEY = "insightboard_business_name";
-const CURRENCY_KEY = "insightboard_currency";
 const THEME_MODE_KEY = "insightboard_theme_mode";
 
 const DEFAULT_BUSINESS_NAME = "InsightBoard CRM";
@@ -106,7 +105,6 @@ export default function SettingsPage() {
 
   const [user, setUser] = useState<User | null>(null);
   const [businessName, setBusinessName] = useState(DEFAULT_BUSINESS_NAME);
-  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [themeMode, setThemeMode] = useState<ThemeMode>(DEFAULT_THEME_MODE);
 
   const [loading, setLoading] = useState(true);
@@ -116,7 +114,7 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  async function fetchUser() {
+ const fetchUser = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -130,19 +128,17 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  function loadPreferences() {
+  const loadPreferences = useCallback(() => {
     if (typeof window === "undefined") return;
 
     const savedBusinessName = localStorage.getItem(BUSINESS_NAME_KEY);
-    const savedCurrency = localStorage.getItem(CURRENCY_KEY);
     const savedThemeMode = localStorage.getItem(THEME_MODE_KEY);
 
     if (savedBusinessName) setBusinessName(savedBusinessName);
-    if (savedCurrency) setCurrency(savedCurrency);
     if (isThemeMode(savedThemeMode)) setThemeMode(savedThemeMode);
-  }
+  }, []);
 
   function handleSavePreferences() {
     setSavingPreferences(true);
@@ -159,7 +155,6 @@ export default function SettingsPage() {
       }
 
       localStorage.setItem(BUSINESS_NAME_KEY, businessNameValidation.value);
-      localStorage.setItem(CURRENCY_KEY, currency);
       localStorage.setItem(THEME_MODE_KEY, themeMode);
 
       setBusinessName(businessNameValidation.value);
@@ -175,11 +170,9 @@ export default function SettingsPage() {
 
   function handleResetPreferences() {
     localStorage.removeItem(BUSINESS_NAME_KEY);
-    localStorage.removeItem(CURRENCY_KEY);
     localStorage.removeItem(THEME_MODE_KEY);
 
     setBusinessName(DEFAULT_BUSINESS_NAME);
-    setCurrency(DEFAULT_CURRENCY);
     setThemeMode(DEFAULT_THEME_MODE);
 
     notifyThemeChanged();
@@ -188,25 +181,31 @@ export default function SettingsPage() {
     setError("");
   }
 
-  async function handleLogout() {
-    setLoggingOut(true);
+ async function handleLogout() {
+  setLoggingOut(true);
+  setError("");
 
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-      });
-    } catch {
-      // frontend logout should still continue
-    }
-
+  try {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } catch {
+  } finally {
     removeToken();
-    router.replace("/login");
+    router.replace("/");
+    router.refresh();
   }
+}
 
-  useEffect(() => {
-    loadPreferences();
-    fetchUser();
-  }, []);
+        useEffect(() => {
+          const timeoutId = window.setTimeout(() => {
+            loadPreferences();
+            void fetchUser();
+          }, 0);
+
+          return () => window.clearTimeout(timeoutId);
+        }, [fetchUser, loadPreferences]);
 
   if (loading) {
     return (
@@ -216,237 +215,530 @@ export default function SettingsPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
+        <Box
+          sx={{
+            position: "absolute",
+            width: 260,
+            height: 260,
+            borderRadius: "50%",
+            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.14),
+            filter: "blur(70px)",
+          }}
+        />
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Box>
-      <Box sx={{ mb: 3 }}>
-        <Typography
-          variant="h4"
-          sx={{
-            fontWeight: 800,
-            letterSpacing: "-0.04em",
-          }}
-        >
-          Settings
-        </Typography>
+    <Box sx={{ position: "relative", overflow: "hidden", pb: 2 }}>
+ 
 
-        <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-          Manage account information and dashboard preferences.
-        </Typography>
-      </Box>
+     
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert
-          severity="success"
-          sx={{ mb: 2 }}
-          onClose={() => setSuccess("")}
-        >
-          {success}
-        </Alert>
-      )}
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-          gap: 3,
-        }}
-      >
+      <Box sx={{ position: "relative", zIndex: 1 }}>
         <Card
           sx={{
-            borderRadius: 4,
-            border: (theme) => `1px solid ${theme.palette.divider}`,
-            bgcolor: "background.paper",
+            mb: 3,
+            borderRadius: 5,
             overflow: "hidden",
-          }}
+            border: (theme) =>
+              `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+            bgcolor: (theme) =>
+              theme.palette.mode === "dark"
+                ? alpha(theme.palette.primary.main, 0.08)
+                : alpha(theme.palette.primary.main, 0.04),
+            backgroundImage: (theme) =>
+              `radial-gradient(circle at top right, ${alpha(
+                theme.palette.primary.main,
+                theme.palette.mode === "dark" ? 0.28 : 0.14,
+              )}, transparent 34%), linear-gradient(135deg, ${alpha(
+                theme.palette.background.paper,
+                0.92,
+              )}, ${alpha(theme.palette.background.paper, 0.72)})`,
+            boxShadow: (theme) =>
+              `0 24px 80px ${alpha(theme.palette.primary.main, 0.12)}`,
+          }
+        }
         >
-          <CardContent sx={{ p: 3 }}>
+          <CardContent sx={{ p: { xs: 2.5, md: 3.5 } }}>
             <Box
               sx={{
-                width: 52,
-                height: 52,
-                borderRadius: 3,
-                display: "grid",
-                placeItems: "center",
-                mb: 2,
-                fontWeight: 900,
-                fontSize: 22,
-                color: "primary.main",
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
-                border: (theme) =>
-                  `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+                display: "flex",
+                flexDirection: { xs: "column", md: "row" },
+                justifyContent: "space-between",
+                alignItems: { xs: "flex-start", md: "center" },
+                gap: 2.5,
               }}
             >
-              {(user?.name || "A").charAt(0).toUpperCase()}
-            </Box>
-
-            <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 900 }}>
-              Account
-            </Typography>
-
-            <Typography color="text.secondary" sx={{ mb: 3 }}>
-              Current authenticated dashboard user.
-            </Typography>
-
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <TextField
-                label="Name"
-                value={user?.name || "Admin User"}
-                fullWidth
-                disabled
-              />
-
-              <TextField
-                label="Email"
-                value={user?.email || ""}
-                fullWidth
-                disabled
-              />
-
-              <TextField
-                label="Role"
-                value={user?.role || "admin"}
-                fullWidth
-                disabled
-              />
-            </Box>
-
-            <Divider sx={{ my: 3 }} />
-
-            <Button
-              variant="contained"
-              color="error"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              sx={{
-                height: 44,
-                borderRadius: 2,
-                fontWeight: 800,
-              }}
-            >
-              {loggingOut ? "Logging out..." : "Logout"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card
-          sx={{
-            borderRadius: 4,
-            border: (theme) => `1px solid ${theme.palette.divider}`,
-            bgcolor: "background.paper",
-            overflow: "hidden",
-          }}
-        >
-          <CardContent sx={{ p: 3 }}>
-            <Box
-              sx={{
-                width: 52,
-                height: 52,
-                borderRadius: 3,
-                display: "grid",
-                placeItems: "center",
-                mb: 2,
-                fontWeight: 900,
-                fontSize: 22,
-                color: "success.main",
-                bgcolor: (theme) => alpha(theme.palette.success.main, 0.12),
-                border: (theme) =>
-                  `1px solid ${alpha(theme.palette.success.main, 0.18)}`,
-              }}
-            >
-              ⚙
-            </Box>
-
-            <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 900 }}>
-              Dashboard Preferences
-            </Typography>
-
-            <Typography color="text.secondary" sx={{ mb: 3 }}>
-              Customize local dashboard preferences and theme mode.
-            </Typography>
-
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <TextField
-                label="Business Name"
-                value={businessName}
-                onChange={(event) => setBusinessName(event.target.value)}
-                fullWidth
-                helperText="Used as the local dashboard business label."
-              />
-
-              <TextField
-                select
-                label="Currency"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
-                fullWidth
-              >
-                <MenuItem value="BHD">BHD</MenuItem>
-                <MenuItem value="USD">USD</MenuItem>
-                <MenuItem value="SAR">SAR</MenuItem>
-                <MenuItem value="AED">AED</MenuItem>
-              </TextField>
-
-              <TextField
-                select
-                label="Theme Mode"
-                value={themeMode}
-                onChange={(event) =>
-                  setThemeMode(event.target.value as ThemeMode)
-                }
-                fullWidth
-              >
-                <MenuItem value="Light">Light</MenuItem>
-                <MenuItem value="Dark">Dark</MenuItem>
-                <MenuItem value="System">System</MenuItem>
-              </TextField>
-
-              <Alert severity="info">
-                These preferences are saved in localStorage for now. Backend
-                storage can be added later.
-              </Alert>
-
-              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                <Button
-                  variant="contained"
-                  onClick={handleSavePreferences}
-                  disabled={savingPreferences}
+              <Box>
+                <Box
                   sx={{
-                    height: 44,
-                    borderRadius: 2,
-                    fontWeight: 800,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 1,
+                    mb: 1.5,
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: 999,
+                    color: "primary.main",
+                    bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                    border: (theme) =>
+                      `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+                    fontSize: 12,
+                    fontWeight: 900,
                   }}
                 >
-                  {savingPreferences ? "Saving..." : "Save Settings"}
-                </Button>
+                  <Box
+                    component="span"
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      bgcolor: "primary.main",
+                      boxShadow: (theme) =>
+                        `0 0 16px ${alpha(theme.palette.primary.main, 0.8)}`,
+                    }}
+                  />
+                  Admin Control Center
+                </Box>
 
-                <Button
-                  variant="outlined"
-                  onClick={handleResetPreferences}
+                <Typography
+                  variant="h4"
                   sx={{
-                    height: 44,
-                    borderRadius: 2,
-                    fontWeight: 800,
+                    fontWeight: 900,
+                    letterSpacing: "-0.05em",
+                    fontSize: { xs: 30, md: 38 },
                   }}
                 >
-                  Reset
-                </Button>
+                  Settings
+                </Typography>
+
+                <Typography
+                  color="text.secondary"
+                  sx={{ mt: 1, maxWidth: 760, lineHeight: 1.8 }}
+                >
+                  Manage account information, dashboard preferences, local
+                  business labels and theme mode from one clean place.
+                </Typography>
+              </Box>
+
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, 1fr)" },
+                  gap: 1.5,
+                  width: { xs: "100%", md: "auto" },
+                  minWidth: { md: 430 },
+                }}
+              >
+                {[
+                  { label: "Business", value: businessName },
+                  { label: "Currency", value: DEFAULT_CURRENCY },
+                  { label: "Theme", value: themeMode },
+                ].map((item) => (
+                  <Box
+                    key={item.label}
+                    sx={{
+                      borderRadius: 2,
+                      p: 1.5,
+                      bgcolor: (theme) =>
+                        alpha(theme.palette.background.paper, 0.68),
+                      border: (theme) => `1px solid ${theme.palette.divider}`,
+                      backdropFilter: "blur(16px)",
+                    }}
+                  >
+                    <Typography
+                      sx={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: "text.secondary",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      {item.label}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        mt: 0.5,
+                        fontWeight: 900,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.value}
+                    </Typography>
+                  </Box>
+                ))}
               </Box>
             </Box>
           </CardContent>
         </Card>
+
+        {error && (
+          <Alert
+            severity="error"
+            sx={{ mb: 2, borderRadius: 3 }}
+            onClose={() => setError("")}
+          >
+            {error}
+          </Alert>
+        )}
+
+        {success && (
+          <Alert
+            severity="success"
+            sx={{ mb: 2, borderRadius: 3 }}
+            onClose={() => setSuccess("")}
+          >
+            {success}
+          </Alert>
+        )}
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "0.92fr 1.08fr" },
+            gap: 3,
+          }}
+        >
+          <Card
+            sx={{
+              position: "relative",
+              borderRadius: 5,
+              border: (theme) =>
+                `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+              bgcolor: "background.paper",
+              overflow: "hidden",
+              boxShadow: (theme) =>
+                `0 24px 70px ${alpha(theme.palette.primary.main, 0.1)}`,
+              "&::before": {
+                content: '""',
+                position: "absolute",
+                inset: 0,
+                background: (theme) =>
+                  `radial-gradient(circle at top left, ${alpha(
+                    theme.palette.primary.main,
+                    0.16,
+                  )}, transparent 34%)`,
+                pointerEvents: "none",
+              },
+            }}
+          >
+            <CardContent sx={{ position: "relative", p: { xs: 2.5, md: 3 } }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 2,
+                  mb: 3,
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Box
+                    sx={{
+                      width: 58,
+                      height: 58,
+                      borderRadius: 4,
+                      display: "grid",
+                      placeItems: "center",
+                      fontWeight: 900,
+                      fontSize: 24,
+                      color: "primary.main",
+                      bgcolor: (theme) =>
+                        alpha(theme.palette.primary.main, 0.12),
+                      border: (theme) =>
+                        `1px solid ${alpha(theme.palette.primary.main, 0.22)}`,
+                      boxShadow: (theme) =>
+                        `0 0 36px ${alpha(theme.palette.primary.main, 0.18)}`,
+                    }}
+                  >
+                    {(user?.name || "A").charAt(0).toUpperCase()}
+                  </Box>
+
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                      Account
+                    </Typography>
+                    <Typography color="text.secondary" sx={{ mt: 0.3 }}>
+                      Current authenticated dashboard user.
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Box
+                  sx={{
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: 900,
+                    color: "success.main",
+                    bgcolor: (theme) => alpha(theme.palette.success.main, 0.1),
+                    border: (theme) =>
+                      `1px solid ${alpha(theme.palette.success.main, 0.18)}`,
+                  }}
+                >
+                  Active
+                </Box>
+              </Box>
+
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <TextField
+                  label="Name"
+                  value={user?.name || "Admin User"}
+                  fullWidth
+                  disabled
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 3,
+                    },
+                  }}
+                />
+
+                <TextField
+                  label="Email"
+                  value={user?.email || ""}
+                  fullWidth
+                  disabled
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 3,
+                    },
+                  }}
+                />
+
+                <TextField
+                  label="Role"
+                  value={user?.role || "admin"}
+                  fullWidth
+                  disabled
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 3,
+                    },
+                  }}
+                />
+              </Box>
+
+              <Divider sx={{ my: 3 }} />
+
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: { xs: "stretch", sm: "center" },
+                  gap: 2,
+                }}
+              >
+                <Box>
+                  <Typography sx={{ fontWeight: 900 }}>Session</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    End the current authenticated dashboard session.
+                  </Typography>
+                </Box>
+
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  sx={{
+                    height: 44,
+                    borderRadius: 3,
+                    fontWeight: 900,
+                    px: 3,
+                    boxShadow: (theme) =>
+                      `0 14px 32px ${alpha(theme.palette.error.main, 0.22)}`,
+                  }}
+                >
+                  {loggingOut ? "Logging out..." : "Logout"}
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card
+            sx={{
+              position: "relative",
+              borderRadius: 5,
+              border: (theme) =>
+                `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+              bgcolor: "background.paper",
+              overflow: "hidden",
+              boxShadow: (theme) =>
+                `0 24px 70px ${alpha(theme.palette.primary.main, 0.1)}`,
+              "&::before": {
+                content: '""',
+                position: "absolute",
+                inset: 0,
+                background: (theme) =>
+                  `radial-gradient(circle at top right, ${alpha(
+                    theme.palette.info.main,
+                    0.16,
+                  )}, transparent 34%)`,
+                pointerEvents: "none",
+              },
+            }}
+          >
+            <CardContent sx={{ position: "relative", p: { xs: 2.5, md: 3 } }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 2,
+                  mb: 3,
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Box
+                    sx={{
+                      width: 58,
+                      height: 58,
+                      borderRadius: 4,
+                      display: "grid",
+                      placeItems: "center",
+                      fontWeight: 900,
+                      fontSize: 23,
+                      color: "primary.main",
+                      bgcolor: (theme) =>
+                        alpha(theme.palette.primary.main, 0.12),
+                      border: (theme) =>
+                        `1px solid ${alpha(theme.palette.primary.main, 0.22)}`,
+                      boxShadow: (theme) =>
+                        `0 0 36px ${alpha(theme.palette.primary.main, 0.18)}`,
+                    }}
+                  >
+                    ⚙
+                  </Box>
+
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                      Dashboard Preferences
+                    </Typography>
+                    <Typography color="text.secondary" sx={{ mt: 0.3 }}>
+                      Customize local dashboard preferences and theme mode.
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <TextField
+                  label="Business Name"
+                  value={businessName}
+                  onChange={(event) => setBusinessName(event.target.value)}
+                  fullWidth
+                  helperText="Used as the local dashboard business label."
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 3,
+                    },
+                  }}
+                />
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                    gap: 2,
+                  }}
+                >
+                  <TextField
+                    label="Default Currency"
+                    value={`${DEFAULT_CURRENCY} — Bahraini Dinar`}
+                    fullWidth
+                    disabled
+                    helperText="InsightBoard currently uses Bahraini Dinar only."
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: 3,
+                      },
+                    }}
+                  />
+
+                  <TextField
+                    select
+                    label="Theme Mode"
+                    value={themeMode}
+                    onChange={(event) =>
+                      setThemeMode(event.target.value as ThemeMode)
+                    }
+                    fullWidth
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: 3,
+                      },
+                    }}
+                  >
+                    <MenuItem value="Light">Light</MenuItem>
+                    <MenuItem value="Dark">Dark</MenuItem>
+                    <MenuItem value="System">System</MenuItem>
+                  </TextField>
+                </Box>
+
+                <Alert
+                  severity="info"
+                  sx={{
+                    borderRadius: 3,
+                    border: (theme) =>
+                      `1px solid ${alpha(theme.palette.info.main, 0.18)}`,
+                    bgcolor: (theme) => alpha(theme.palette.info.main, 0.08),
+                  }}
+                >
+                  Demo settings are saved locally in your browser for preview purposes.
+                </Alert>
+
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1.25,
+                    flexWrap: "wrap",
+                    pt: 0.5,
+                  }}
+                >
+                  <Button
+                    variant="contained"
+                    onClick={handleSavePreferences}
+                    disabled={savingPreferences}
+                    sx={{
+                      height: 44,
+                      borderRadius: 3,
+                      fontWeight: 900,
+                      px: 3,
+                      boxShadow: (theme) =>
+                        `0 14px 32px ${alpha(theme.palette.primary.main, 0.24)}`,
+                    }}
+                  >
+                    {savingPreferences ? "Saving..." : "Save Settings"}
+                  </Button>
+
+                  <Button
+                    variant="outlined"
+                    onClick={handleResetPreferences}
+                    sx={{
+                      height: 44,
+                      borderRadius: 3,
+                      fontWeight: 900,
+                      px: 3,
+                    }}
+                  >
+                    Reset
+                  </Button>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Box>
       </Box>
     </Box>
   );

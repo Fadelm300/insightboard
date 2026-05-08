@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -11,10 +11,12 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography,
 } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 
 import { apiFetch } from "@/lib/apiClient";
 
@@ -106,11 +108,13 @@ function getStatusColor(
 }
 
 export default function RecentDeals() {
+  const theme = useTheme();
+
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function fetchDeals() {
+  const fetchDeals = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -126,18 +130,106 @@ export default function RecentDeals() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchDeals();
   }, []);
 
+      useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+          void fetchDeals();
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+      }, [fetchDeals]);
+      
   return (
-    <Card sx={{ borderRadius: 3, height: "100%" }}>
-      <CardContent>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-          Recent Deals
-        </Typography>
+    <Card
+      sx={{
+        borderRadius: 4,
+        height: "100%",
+        minWidth: 0,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            theme.palette.mode === "dark"
+              ? `radial-gradient(circle at 18% 14%, ${alpha(
+                  theme.palette.primary.main,
+                  0.13
+                )}, transparent 36%),
+                 radial-gradient(circle at 86% 18%, ${alpha(
+                   theme.palette.info.main,
+                   0.08
+                 )}, transparent 34%)`
+              : `radial-gradient(circle at 18% 14%, ${alpha(
+                  theme.palette.primary.main,
+                  0.07
+                )}, transparent 36%),
+                 radial-gradient(circle at 86% 18%, ${alpha(
+                   theme.palette.info.main,
+                   0.06
+                 )}, transparent 34%)`,
+        }}
+      />
+
+      <CardContent
+        sx={{
+          position: "relative",
+          p: { xs: 2, md: 2.5 },
+          minWidth: 0,
+        }}
+      >
+        <Box
+          sx={{
+            mb: 2,
+            display: "flex",
+            flexDirection: { xs: "column", sm: "row" },
+            justifyContent: "space-between",
+            alignItems: { xs: "flex-start", sm: "center" },
+            gap: 1.5,
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 900,
+                letterSpacing: "-0.03em",
+              }}
+            >
+              Recent Deals
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+              Latest sales opportunities in your pipeline.
+            </Typography>
+          </Box>
+
+          {!loading && !error && deals.length > 0 && (
+            <Box
+              sx={{
+                px: 1.4,
+                py: 0.75,
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 900,
+                color: "primary.light",
+                bgcolor: alpha(theme.palette.primary.main, 0.12),
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.22)}`,
+                boxShadow:
+                  theme.palette.mode === "dark"
+                    ? `0 0 24px ${alpha(theme.palette.primary.main, 0.16)}`
+                    : `0 10px 26px ${alpha(theme.palette.primary.main, 0.1)}`,
+              }}
+            >
+              Latest {deals.length}
+            </Box>
+          )}
+        </Box>
 
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
@@ -148,48 +240,224 @@ export default function RecentDeals() {
         ) : deals.length === 0 ? (
           <Typography color="text.secondary">No deals yet.</Typography>
         ) : (
-          <Box sx={{ overflowX: "auto" }}>
-            <Table size="small">
+          <TableContainer
+            sx={{
+              width: "100%",
+              maxWidth: "100%",
+              overflowX: "hidden",
+            }}
+          >
+            <Table
+              size="small"
+              sx={{
+                width: "100%",
+                tableLayout: "fixed",
+              }}
+            >
               <TableHead>
-                <TableRow>
-                  <TableCell>Deal</TableCell>
-                  <TableCell>Client</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Value</TableCell>
+                <TableRow
+                  sx={{
+                    bgcolor:
+                      theme.palette.mode === "dark"
+                        ? alpha(theme.palette.primary.main, 0.08)
+                        : alpha(theme.palette.primary.main, 0.04),
+                  }}
+                >
+                  <TableCell
+                    sx={{
+                      width: { xs: "58%", md: "40%" },
+                      px: { xs: 1.25, md: 2 },
+                      py: 1.5,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Deal
+                  </TableCell>
+
+                  <TableCell
+                    sx={{
+                      display: { xs: "none", md: "table-cell" },
+                      width: "24%",
+                      px: 2,
+                      py: 1.5,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Client
+                  </TableCell>
+
+                  <TableCell
+                    sx={{
+                      display: { xs: "none", sm: "table-cell" },
+                      width: { sm: "24%", md: "20%" },
+                      px: { sm: 1.25, md: 2 },
+                      py: 1.5,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Status
+                  </TableCell>
+
+                  <TableCell
+                    align="right"
+                    sx={{
+                      width: { xs: "42%", sm: "24%", md: "16%" },
+                      px: { xs: 1.25, md: 2 },
+                      py: 1.5,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Value
+                  </TableCell>
                 </TableRow>
               </TableHead>
 
               <TableBody>
                 {deals.map((deal) => (
-                  <TableRow key={deal._id} hover>
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 600 }}>
-                        {deal.title}
-                      </Typography>
+                  <TableRow
+                    key={deal._id}
+                    hover
+                    sx={{
+                      "&:last-child td": {
+                        borderBottom: 0,
+                      },
+                    }}
+                  >
+                    <TableCell
+                      sx={{
+                        px: { xs: 1.25, md: 2 },
+                        py: { xs: 1.5, md: 1.75 },
+                        minWidth: 0,
+                      }}
+                    >
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography
+                          sx={{
+                            fontWeight: 900,
+                            fontSize: { xs: 13, md: 14 },
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {deal.title}
+                        </Typography>
 
-                      <Typography variant="body2" color="text.secondary">
-                        Probability: {deal.probability || 0}%
-                      </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            mt: 0.35,
+                            fontSize: { xs: 11.5, md: 12 },
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Probability: {deal.probability || 0}%
+                        </Typography>
+
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            mt: 0.25,
+                            display: { xs: "block", md: "none" },
+                            fontSize: 11.5,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {getClientName(deal.clientId)}
+                        </Typography>
+
+                        <Chip
+                          label={deal.status}
+                          color={getStatusColor(deal.status)}
+                          size="small"
+                          sx={{
+                            display: { xs: "inline-flex", sm: "none" },
+                            mt: 0.75,
+                            height: 24,
+                            borderRadius: 999,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            maxWidth: "100%",
+                            "& .MuiChip-label": {
+                              px: 0.75,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            },
+                          }}
+                        />
+                      </Box>
                     </TableCell>
 
-                    <TableCell>{getClientName(deal.clientId)}</TableCell>
+                    <TableCell
+                      sx={{
+                        display: { xs: "none", md: "table-cell" },
+                        px: 2,
+                        py: 1.75,
+                        color: "text.secondary",
+                        fontWeight: 700,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {getClientName(deal.clientId)}
+                    </TableCell>
 
-                    <TableCell>
+                    <TableCell
+                      sx={{
+                        display: { xs: "none", sm: "table-cell" },
+                        px: { sm: 1.25, md: 2 },
+                        py: 1.75,
+                      }}
+                    >
                       <Chip
                         label={deal.status}
                         color={getStatusColor(deal.status)}
                         size="small"
+                        sx={{
+                          height: 26,
+                          borderRadius: 999,
+                          fontWeight: 800,
+                          maxWidth: "100%",
+                          "& .MuiChip-label": {
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          },
+                        }}
                       />
                     </TableCell>
 
-                    <TableCell align="right">
+                    <TableCell
+                      align="right"
+                      sx={{
+                        px: { xs: 1.25, md: 2 },
+                        py: 1.75,
+                        fontWeight: 900,
+                        whiteSpace: "nowrap",
+                        fontSize: { xs: 12, md: 14 },
+                      }}
+                    >
                       {formatMoney(getDealAmount(deal))}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </Box>
+          </TableContainer>
         )}
       </CardContent>
     </Card>

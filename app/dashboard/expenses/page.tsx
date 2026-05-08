@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import {
   Alert,
@@ -14,7 +14,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Menu,
   MenuItem,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -65,6 +68,7 @@ type Expense = {
   description?: string;
   notes?: string;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 type ExpenseFormData = {
@@ -89,11 +93,19 @@ type ExpensesResponse = {
         expenses?: Expense[];
         items?: Expense[];
         records?: Expense[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
       };
   expense?: Expense[];
   expenses?: Expense[];
   items?: Expense[];
   records?: Expense[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
 type ProjectsResponse = {
@@ -133,14 +145,52 @@ const emptyForm: ExpenseFormData = {
   notes: "",
 };
 
+const EXPENSES_PER_PAGE = 7;
+
+const readonlyTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+  },
+};
+
+const readonlyMultilineTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+    whiteSpace: "pre-wrap",
+  },
+};
+
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 1.25, xl: 2 },
+  py: { xs: 1.25, md: 1.75, xl: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 1.25, xl: 2 },
+  py: { xs: 1.25, md: 1.75, xl: 2 },
+};
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+};
+
+const hideFromTabletSx = {
+  display: { xs: "none", xl: "table-cell" },
+};
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+};
+
+
 function getTodayInputValue() {
   const today = new Date();
+  const timezoneOffset = today.getTimezoneOffset() * 60_000;
 
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+  return new Date(today.getTime() - timezoneOffset).toISOString().slice(0, 10);
 }
 
 function getExpensesFromResponse(response: ExpensesResponse): Expense[] {
@@ -161,6 +211,24 @@ function getExpensesFromResponse(response: ExpensesResponse): Expense[] {
   return [];
 }
 
+function getPaginationFromResponse(response: ExpensesResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || EXPENSES_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || EXPENSES_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
+}
+
 function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   if (Array.isArray(response.data)) return response.data;
   if (Array.isArray(response.projects)) return response.projects;
@@ -176,7 +244,7 @@ function getProjectsFromResponse(response: ProjectsResponse): Project[] {
   return [];
 }
 
-function getId(value?: { _id: string } | string) {
+function getId(value?: { _id: string } | string | null) {
   if (!value) return "";
   return typeof value === "object" ? value._id : value;
 }
@@ -184,6 +252,26 @@ function getId(value?: { _id: string } | string) {
 function getProjectName(projectId: ExpenseProject) {
   if (typeof projectId === "object" && projectId?.name) {
     return projectId.name;
+  }
+
+  return "-";
+}
+
+function getProjectType(projectId: ExpenseProject) {
+  if (typeof projectId === "object" && projectId?.type) {
+    return projectId.type;
+  }
+
+  return "-";
+}
+
+function getProjectClientName(projectId: ExpenseProject) {
+  if (
+    typeof projectId === "object" &&
+    typeof projectId.clientId === "object" &&
+    projectId.clientId?.companyName
+  ) {
+    return projectId.clientId.companyName;
   }
 
   return "-";
@@ -198,15 +286,43 @@ function formatDateToInputValue(date?: string) {
     return "";
   }
 
-  const year = parsedDate.getFullYear();
-  const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
-  const day = String(parsedDate.getDate()).padStart(2, "0");
+  const timezoneOffset = parsedDate.getTimezoneOffset() * 60_000;
 
-  return `${year}-${month}-${day}`;
+  return new Date(parsedDate.getTime() - timezoneOffset)
+    .toISOString()
+    .slice(0, 10);
 }
 
 function formatDate(date?: string) {
-  return formatDateToInputValue(date) || "-";
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getExpenseDateTime(date?: string) {
+  if (!date) return null;
+
+  const time = new Date(date).getTime();
+
+  return Number.isNaN(time) ? null : time;
+}
+
+function getCreatedAtTime(createdAt?: string) {
+  if (!createdAt) return 0;
+
+  const time = new Date(createdAt).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function cleanSingleLineText(value: string) {
@@ -254,7 +370,7 @@ function isFutureDate(value: string) {
 
 function validateExpenseForm(
   formData: ExpenseFormData,
-  isEditing: boolean
+  isEditing: boolean,
 ):
   | {
       isValid: true;
@@ -369,11 +485,11 @@ function formatBHD(value?: number) {
   })} BHD`;
 }
 
-function getAmountSx(): SxProps<Theme> {
+function getAmountSx() {
   return {
     fontWeight: 900,
     color: "error.main",
-  };
+  } satisfies SxProps<Theme>;
 }
 
 export default function ExpensesPage() {
@@ -387,25 +503,79 @@ export default function ExpensesPage() {
   const [formErrors, setFormErrors] = useState<ExpenseFormErrors>({});
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
+  const [viewExpense, setViewExpense] = useState<Expense | null>(null);
+  const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const [actionExpense, setActionExpense] = useState<Expense | null>(null);
 
   const [openForm, setOpenForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  async function fetchData() {
+  const todayInputValue = getTodayInputValue();
+
+  const sortedExpenses = useMemo(() => {
+    return [...expenses].sort((firstExpense, secondExpense) => {
+      const firstExpenseDateTime = getExpenseDateTime(firstExpense.date);
+      const secondExpenseDateTime = getExpenseDateTime(secondExpense.date);
+
+      if (firstExpenseDateTime === null && secondExpenseDateTime !== null) {
+        return 1;
+      }
+
+      if (firstExpenseDateTime !== null && secondExpenseDateTime === null) {
+        return -1;
+      }
+
+      if (
+        firstExpenseDateTime !== null &&
+        secondExpenseDateTime !== null &&
+        firstExpenseDateTime !== secondExpenseDateTime
+      ) {
+        return secondExpenseDateTime - firstExpenseDateTime;
+      }
+
+      return (
+        getCreatedAtTime(secondExpense.createdAt) -
+        getCreatedAtTime(firstExpense.createdAt)
+      );
+    });
+  }, [expenses]);
+
+  const fetchData = useCallback(async (pageNumber: number, search: string) => {
     setLoading(true);
     setError("");
 
+    const queryParams = new URLSearchParams({
+      page: String(pageNumber),
+      limit: String(EXPENSES_PER_PAGE),
+    });
+
+    const cleanSearch = search.trim();
+
+    if (cleanSearch) {
+      queryParams.set("search", cleanSearch);
+    }
+
     try {
       const [expensesResponse, projectsResponse] = await Promise.all([
-        apiFetch<ExpensesResponse>("/api/expenses"),
+        apiFetch<ExpensesResponse>(`/api/expenses?${queryParams.toString()}`),
         apiFetch<ProjectsResponse>("/api/projects"),
       ]);
 
+      const pagination = getPaginationFromResponse(expensesResponse);
+
       setExpenses(getExpensesFromResponse(expensesResponse));
+      setTotalExpenses(pagination.total);
+      setTotalPages(Math.max(pagination.totalPages, 1));
       setProjects(getProjectsFromResponse(projectsResponse));
     } catch (err) {
       const message =
@@ -414,17 +584,21 @@ export default function ExpensesPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchData();
   }, []);
+
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchData(page, searchQuery);
+  }, 350);
+
+  return () => window.clearTimeout(timeoutId);
+}, [fetchData, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingExpense(null);
     setFormData({
       ...emptyForm,
-      date: getTodayInputValue(),
+      date: todayInputValue,
     });
     setFormErrors({});
     setOpenForm(true);
@@ -440,7 +614,7 @@ export default function ExpensesPage() {
       title: item.title || "",
       amount: String(item.amount || ""),
       category: item.category || "Hosting",
-      date: formatDateToInputValue(item.date) || getTodayInputValue(),
+      date: formatDateToInputValue(item.date) || todayInputValue,
       description: item.description || "",
       notes: item.notes || "",
     });
@@ -458,14 +632,14 @@ export default function ExpensesPage() {
     setEditingExpense(null);
     setFormData({
       ...emptyForm,
-      date: getTodayInputValue(),
+      date: todayInputValue,
     });
     setFormErrors({});
   }
 
   function updateFormField<K extends keyof ExpenseFormData>(
     field: K,
-    value: ExpenseFormData[K]
+    value: ExpenseFormData[K],
   ) {
     setFormData((current) => ({
       ...current,
@@ -476,6 +650,35 @@ export default function ExpensesPage() {
       ...current,
       [field]: undefined,
     }));
+  }
+
+  function handleActionMenuOpen(
+    event: React.MouseEvent<HTMLElement>,
+    expense: Expense,
+  ) {
+    setActionAnchorEl(event.currentTarget);
+    setActionExpense(expense);
+  }
+
+  function handleActionMenuClose() {
+    setActionAnchorEl(null);
+    setActionExpense(null);
+  }
+
+  function handleMenuEdit() {
+    if (!actionExpense) return;
+
+    const selectedExpense = actionExpense;
+    handleActionMenuClose();
+    handleEditOpen(selectedExpense);
+  }
+
+  function handleMenuDelete() {
+    if (!actionExpense) return;
+
+    const selectedExpense = actionExpense;
+    handleActionMenuClose();
+    setDeleteExpense(selectedExpense);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -533,7 +736,8 @@ export default function ExpensesPage() {
       }
 
       handleFormClose();
-      await fetchData();
+      setPage(1);
+      await fetchData(1, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save expense";
@@ -557,7 +761,7 @@ export default function ExpensesPage() {
 
       setSuccess("Expense deleted successfully");
       setDeleteExpense(null);
-      await fetchData();
+      await fetchData(page, searchQuery);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to delete expense";
@@ -610,6 +814,31 @@ export default function ExpensesPage() {
         </Button>
       </Box>
 
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by expense, project, category, description, or notes..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
           {error}
@@ -617,11 +846,7 @@ export default function ExpensesPage() {
       )}
 
       {success && (
-        <Alert
-          severity="success"
-          sx={{ mb: 2 }}
-          onClose={() => setSuccess("")}
-        >
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>
           {success}
         </Alert>
       )}
@@ -658,154 +883,553 @@ export default function ExpensesPage() {
               </Button>
             </Box>
           ) : (
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow
-                    sx={{
-                      bgcolor: (theme) =>
-                        theme.palette.mode === "dark"
-                          ? alpha(theme.palette.primary.main, 0.08)
-                          : alpha(theme.palette.primary.main, 0.04),
-                    }}
-                  >
-                    <TableCell>Expense</TableCell>
-                    <TableCell>Project</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>Category</TableCell>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Description</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-
-                <TableBody>
-                  {expenses.map((item) => (
+            <>
+              <TableContainer
+                sx={{
+                  width: "100%",
+                  maxWidth: "100%",
+                  overflowX: "hidden",
+                }}
+              >
+                <Table
+                  sx={{
+                    width: "100%",
+                    tableLayout: "fixed",
+                  }}
+                >
+                  <TableHead>
                     <TableRow
-                      key={item._id}
-                      hover
                       sx={{
-                        "&:last-child td": {
-                          borderBottom: 0,
-                        },
+                        bgcolor: (theme) =>
+                          theme.palette.mode === "dark"
+                            ? alpha(theme.palette.primary.main, 0.08)
+                            : alpha(theme.palette.primary.main, 0.04),
                       }}
                     >
-                      <TableCell sx={{ minWidth: 240 }}>
-                        <Box
+                      <TableCell
+                        align="center"
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: 56,
+                        }}
+                      >
+                        #
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: { xs: "52%", sm: "42%", md: "28%", xl: "24%" },
+                        }}
+                      >
+                        Expense
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "17%", xl: "16%" },
+                        }}
+                      >
+                        Project
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: { xs: "25%", sm: "20%", md: "12%", xl: "10%" },
+                        }}
+                      >
+                        Amount
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideOnPhoneSx,
+                          width: { sm: "20%", md: "13%", xl: "12%" },
+                        }}
+                      >
+                        Category
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideFromMobileSx,
+                        }}
+                      >
+                        Date
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableHeaderCellSx,
+                          ...hideFromTabletSx,
+                          width: { xl: "18%" },
+                        }}
+                      >
+                        Description
+                      </TableCell>
+
+                      <TableCell
+                        align="center"
+                        sx={{
+                          ...tableHeaderCellSx,
+                          width: { xs: "23%", sm: "18%", md: "14%", xl: "8%" },
+                        }}
+                      >
+                        Actions
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+
+                  <TableBody>
+                    {sortedExpenses.map((item, index) => (
+                      <TableRow
+                        key={item._id}
+                        hover
+                        sx={{
+                          "&:last-child td": {
+                            borderBottom: 0,
+                          },
+                        }}
+                      >
+                        <TableCell
+                          align="center"
                           sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 1.5,
+                            ...tableBodyCellSx,
+                            width: 56,
+                            fontWeight: 800,
+                            color: "text.secondary",
+                          }}
+                        >
+                          {(page - 1) * EXPENSES_PER_PAGE + index + 1}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                          width: { xs: "52%", sm: "42%", md: "28%", xl: "24%" },
+                            minWidth: 0,
                           }}
                         >
                           <Box
                             sx={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 2.5,
-                              display: "grid",
-                              placeItems: "center",
-                              fontWeight: 900,
-                              color: "error.main",
-                              bgcolor: (theme) =>
-                                alpha(theme.palette.error.main, 0.12),
-                              border: (theme) =>
-                                `1px solid ${alpha(
-                                  theme.palette.error.main,
-                                  0.18
-                                )}`,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: { xs: 0.75, md: 1.5 },
+                              minWidth: 0,
                             }}
                           >
-                            {getExpenseInitial(item.title)}
-                          </Box>
-
-                          <Box>
-                            <Typography sx={{ fontWeight: 800 }}>
-                              {item.title}
-                            </Typography>
-
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ mt: 0.25 }}
+                            <Box
+                              sx={{
+                                width: { xs: 32, md: 40 },
+                                height: { xs: 32, md: 40 },
+                                borderRadius: 2.5,
+                                display: "grid",
+                                placeItems: "center",
+                                flexShrink: 0,
+                                fontWeight: 900,
+                                fontSize: { xs: 12, md: 14 },
+                                color: "error.main",
+                                bgcolor: (theme) =>
+                                  alpha(theme.palette.error.main, 0.12),
+                                border: (theme) =>
+                                  `1px solid ${alpha(
+                                    theme.palette.error.main,
+                                    0.18,
+                                  )}`,
+                              }}
                             >
-                              Expense record
-                            </Typography>
+                              {getExpenseInitial(item.title)}
+                            </Box>
+
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: { xs: 13, md: 14 },
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {item.title}
+                              </Typography>
+
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  mt: 0.25,
+                                  display: { xs: "none", sm: "block" },
+                                }}
+                              >
+                                Expense record
+                              </Typography>
+
+                              <Chip
+                                label={item.category}
+                                size="small"
+                                sx={{
+                                  ...getExpenseCategoryChipSx(item.category),
+                                  display: { xs: "inline-flex", sm: "none" },
+                                  mt: 0.75,
+                                  maxWidth: "100%",
+                                  "& .MuiChip-label": {
+                                    px: 0.75,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  },
+                                }}
+                              />
+                            </Box>
                           </Box>
-                        </Box>
-                      </TableCell>
+                        </TableCell>
 
-                      <TableCell>{getProjectName(item.projectId)}</TableCell>
-
-                      <TableCell sx={getAmountSx()}>
-                        {formatBHD(item.amount)}
-                      </TableCell>
-
-                      <TableCell>
-                        <Chip
-                          label={item.category}
-                          size="small"
-                          sx={getExpenseCategoryChipSx(item.category)}
-                        />
-                      </TableCell>
-
-                      <TableCell>{formatDate(item.date)}</TableCell>
-
-                      <TableCell
-                        sx={{
-                          maxWidth: 260,
-                          color: "text.secondary",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {item.description || "-"}
-                      </TableCell>
-
-                      <TableCell align="right">
-                        <Box
+                        <TableCell
                           sx={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            gap: 1,
-                            flexWrap: "wrap",
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                            width: { md: "17%", xl: "16%" },
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
                           }}
                         >
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleEditOpen(item)}
-                            sx={{
-                              borderRadius: 2,
-                              fontWeight: 800,
-                            }}
-                          >
-                            Edit
-                          </Button>
+                          {getProjectName(item.projectId)}
+                        </TableCell>
 
-                          <Button
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...getAmountSx(),
+                          width: { xs: "25%", sm: "20%", md: "12%", xl: "10%" },
+                            whiteSpace: "nowrap",
+                            fontSize: { xs: 11, sm: 12, md: 14 },
+                          }}
+                        >
+                          {formatBHD(item.amount)}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideOnPhoneSx,
+                            width: { sm: "20%", md: "13%", xl: "12%" },
+                            minWidth: 0,
+                          }}
+                        >
+                          <Chip
+                            label={item.category}
                             size="small"
-                            variant="outlined"
-                            color="error"
-                            onClick={() => setDeleteExpense(item)}
+                            sx={getExpenseCategoryChipSx(item.category)}
+                          />
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromMobileSx,
+                            width: { md: "13%", xl: "12%" },
+                            minWidth: 0,
+                            fontWeight: 800,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatDate(item.date)}
+                        </TableCell>
+
+                        <TableCell
+                          sx={{
+                            ...tableBodyCellSx,
+                            ...hideFromTabletSx,
+                            width: { xl: "18%" },
+                            color: "text.secondary",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {item.description || "-"}
+                        </TableCell>
+
+                        <TableCell
+                          align="right"
+                          sx={{
+                            ...tableBodyCellSx,
+                          width: { xs: "23%", sm: "18%", md: "14%", xl: "8%" },
+                            minWidth: 0,
+                          }}
+                        >
+                          <Box
                             sx={{
-                              borderRadius: 2,
-                              fontWeight: 800,
+                              display: "flex",
+                              justifyContent: "flex-end",
+                              alignItems: "center",
+                              gap: { xs: 0.5, md: 1 },
+                              flexWrap: "nowrap",
                             }}
                           >
-                            Delete
-                          </Button>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => setViewExpense(item)}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 800,
+                                minWidth: { xs: 52, sm: 56, md: 64 },
+                                height: { xs: 30, md: 34 },
+                                px: { xs: 0.75, md: 1.5 },
+                                fontSize: { xs: 11, md: 13 },
+                              }}
+                            >
+                              View
+                            </Button>
+
+                            <IconButton
+                              size="small"
+                              onClick={(event) =>
+                                handleActionMenuOpen(event, item)
+                              }
+                              aria-label={`Open actions for ${item.title}`}
+                              sx={{
+                                display: { xs: "none", md: "inline-flex" },
+                                width: 34,
+                                height: 34,
+                                flexShrink: 0,
+                                borderRadius: 2,
+                                border: (theme) =>
+                                  `1px solid ${theme.palette.divider}`,
+                                fontWeight: 900,
+                                fontSize: 18,
+                                lineHeight: 1,
+                              }}
+                            >
+                              ⋮
+                            </IconButton>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalExpenses} expenses
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
           )}
         </CardContent>
       </Card>
+
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={Boolean(actionAnchorEl)}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleMenuEdit}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ✎
+          </Box>
+          Edit
+        </MenuItem>
+
+        <MenuItem onClick={handleMenuDelete} sx={{ color: "error.main" }}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ×
+          </Box>
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={Boolean(viewExpense)}
+        onClose={() => setViewExpense(null)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+          Expense Details
+        </DialogTitle>
+
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Title"
+                fullWidth
+                value={viewExpense?.title || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Project"
+                fullWidth
+                value={
+                  viewExpense ? getProjectName(viewExpense.projectId) : "-"
+                }
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Amount"
+                fullWidth
+                value={formatBHD(viewExpense?.amount)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Category"
+                fullWidth
+                value={viewExpense?.category || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Expense Date"
+                fullWidth
+                value={formatDate(viewExpense?.date)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Project Type"
+                fullWidth
+                value={
+                  viewExpense ? getProjectType(viewExpense.projectId) : "-"
+                }
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Client"
+                fullWidth
+                value={
+                  viewExpense
+                    ? getProjectClientName(viewExpense.projectId)
+                    : "-"
+                }
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewExpense?.description || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewExpense?.notes || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Created At"
+                fullWidth
+                value={formatDate(viewExpense?.createdAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Updated At"
+                fullWidth
+                value={formatDate(viewExpense?.updatedAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewExpense(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={openForm}
@@ -828,7 +1452,7 @@ export default function ExpensesPage() {
             {editingExpense ? "Edit Expense" : "Add Expense"}
           </DialogTitle>
 
-          <DialogContent>
+          <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
             <Box
               sx={{
                 display: "flex",
@@ -898,7 +1522,7 @@ export default function ExpensesPage() {
                 onChange={(event) =>
                   updateFormField(
                     "category",
-                    event.target.value as ExpenseCategory
+                    event.target.value as ExpenseCategory,
                   )
                 }
               >
@@ -926,7 +1550,7 @@ export default function ExpensesPage() {
                     shrink: true,
                   },
                   htmlInput: {
-                    max: getTodayInputValue(),
+                    max: todayInputValue,
                   },
                 }}
               />
@@ -991,10 +1615,13 @@ export default function ExpensesPage() {
       >
         <DialogTitle sx={{ fontWeight: 900 }}>Delete Expense</DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Typography color="text.secondary">
             Are you sure you want to delete{" "}
-            <Box component="span" sx={{ color: "text.primary", fontWeight: 900 }}>
+            <Box
+              component="span"
+              sx={{ color: "text.primary", fontWeight: 900 }}
+            >
               {deleteExpense?.title}
             </Box>
             ?

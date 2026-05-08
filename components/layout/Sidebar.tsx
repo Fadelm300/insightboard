@@ -51,9 +51,11 @@ export default function Sidebar() {
     <Drawer
       variant="permanent"
       sx={(theme) => ({
+        display: { xs: "none", xl: "block" },
         width: drawerWidth,
         flexShrink: 0,
         "& .MuiDrawer-paper": {
+          display: { xs: "none", xl: "block" },
           width: drawerWidth,
           boxSizing: "border-box",
           borderRight: "1px solid",
@@ -75,7 +77,7 @@ export default function Sidebar() {
     >
       <Toolbar
         sx={{
-          minHeight: { xs: 64, md: 72 },
+          minHeight: { xs: 64, xl: 72 },
           px: 2,
           alignItems: "center",
         }}

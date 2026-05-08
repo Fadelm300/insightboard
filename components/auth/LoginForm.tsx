@@ -34,6 +34,8 @@ type LoginResponse = {
   };
   token?: string;
 };
+const DEMO_EMAIL = "admin@insightboard.demo";
+const DEMO_PASSWORD = "Admin@123456";
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -161,13 +163,17 @@ export default function LoginForm() {
   const compactLaptop =
     "@media (min-width: 900px) and (max-width: 1700px) and (max-height: 850px)";
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // const [email, setEmail] = useState("");
+  // const [password, setPassword] = useState("");
+const [email, setEmail] = useState(DEMO_EMAIL);
+const [password, setPassword] = useState(DEMO_PASSWORD);
 
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+//رساله تظهر انه ما عندك الصلاحية لرست باسورد
+const [demoNotice, setDemoNotice] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,6 +186,7 @@ export default function LoginForm() {
     }
 
     setError("");
+    setDemoNotice("");
     setLoading(true);
 
     try {
@@ -822,7 +829,26 @@ export default function LoginForm() {
           >
             Sign in to your InsightBoard account
           </Typography>
+<Alert
+  severity="info"
+  sx={{
+    mb: 2.5,
+    borderRadius: 3,
+    bgcolor: alpha("#38BDF8", 0.12),
+    color: "#DBEAFE",
+    border: `1px solid ${alpha("#38BDF8", 0.28)}`,
 
+    [compactLaptop]: {
+      mb: 1.8,
+    },
+
+    "& .MuiAlert-icon": {
+      color: "#7DD3FC",
+    },
+  }}
+>
+  Demo access is pre-filled for preview only.
+</Alert>
           {error && (
             <Alert
               severity="error"
@@ -846,7 +872,29 @@ export default function LoginForm() {
               {error}
             </Alert>
           )}
+{demoNotice && (
+  <Alert
+    severity="info"
+    sx={{
+      mb: 2.5,
+      borderRadius: 3,
+      bgcolor: alpha("#38BDF8", 0.14),
+      color: "#DBEAFE",
+      border: `1px solid ${alpha("#38BDF8", 0.35)}`,
 
+      [compactLaptop]: {
+        mb: 1.8,
+      },
+
+      "& .MuiAlert-icon": {
+        color: "#7DD3FC",
+      },
+    }}
+    onClose={() => setDemoNotice("")}
+  >
+    {demoNotice}
+  </Alert>
+)}
           <Box
             sx={{
               mb: { xs: 1.7, sm: 2.1, md: 2.3 },
@@ -1007,6 +1055,12 @@ export default function LoginForm() {
             <Button
               type="button"
               variant="text"
+               onClick={() => {
+                setError("");
+                setDemoNotice(
+                  "Nice try 😂 This is demo mode, so password reset is disabled for security."
+                );
+              }}
               sx={{
                 minWidth: 0,
                 p: 0,
