@@ -81,7 +81,8 @@ export async function POST(req: NextRequest) {
       },
       "Login successful"
     );
-  } catch {
+  } catch (error) {
+    console.error("LOGIN_API_ERROR:", error);
     return errorResponse("Server error", 500);
   }
 }
