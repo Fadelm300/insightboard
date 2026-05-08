@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
 type Language = "en" | "ar";
@@ -22,7 +23,35 @@ const techStack = [
   "Postman",
   "Git",
 ];
-
+const previewScreenshots = [
+  {
+    light: "/images/Screenshot/Dashboard_img_1.png",
+    dark: "/images/Screenshot/Dashboard_img_1_dark.png",
+  },
+  {
+    light: "/images/Screenshot/Clients_img.png",
+  },
+  {
+    light: "/images/Screenshot/Deals_img.png",
+  },
+  {
+    light: "/images/Screenshot/Projects_img.png",
+  },
+  {
+    light: "/images/Screenshot/Revenue_img.png",
+  },
+  {
+    light: "/images/Screenshot/Expenses_img.png",
+  },
+  {
+    light: "/images/Screenshot/Reports_img_1.png",
+    dark: "/images/Screenshot/Reports_img_1_dark.png",
+  },
+  {
+    light: "/images/Screenshot/Settings_img.png",
+    dark: "/images/Screenshot/Settings_img_dark.png",
+  },
+];
 const content = {
   en: {
     nav: {
@@ -120,7 +149,7 @@ const content = {
       label: "Dashboard Preview",
       heading: "A quick look at the main InsightBoard modules.",
       text:
-        "This section is ready for animated dashboard screenshots — from business overview to clients, deals, projects, finance, and reports.",
+        "This section is ready for animated dashboard screenshots  from business overview to clients, deals, projects, finance, and reports.",
       badge: "Auto-moving showcase",
       replace: "Replace this card with a real screenshot later.",
       previewLabel: "Preview",
@@ -372,10 +401,21 @@ export default function HomePage() {
 
   const t = content[language];
 
-  const marqueeItems = useMemo(
-    () => [...t.preview.items, ...t.preview.items],
-    [t.preview.items]
-  );
+const marqueeItems = useMemo(() => {
+  const items = t.preview.items.map((title, index) => {
+    const screenshot = previewScreenshots[index];
+
+    return {
+      title,
+      image:
+        theme === "dark" && screenshot?.dark
+          ? screenshot.dark
+          : screenshot?.light,
+    };
+  });
+
+  return [...items, ...items];
+}, [t.preview.items, theme]);
 
 useEffect(() => {
   const timeoutId = window.setTimeout(() => {
@@ -539,7 +579,7 @@ useEffect(() => {
 
         .preview-marquee {
           width: max-content;
-          animation: marqueeMove 34s linear infinite;
+          animation: marqueeMove 46s linear infinite;
         }
 
         .preview-marquee:hover {
@@ -833,38 +873,35 @@ useEffect(() => {
 
           <div className="overflow-hidden rounded-[36px] border border-[var(--ib-border)] bg-[var(--ib-card)] p-5 shadow-[0_0_70px_rgba(37,99,235,0.1)] backdrop-blur-xl">
             <div className="preview-marquee flex gap-5">
-              {marqueeItems.map((item, index) => (
-                <div
-                  key={`${item}-${index}`}
-                  className="relative h-56 w-[330px] shrink-0 overflow-hidden rounded-[30px] border border-[var(--ib-border)] bg-[var(--ib-preview-card)] p-5 shadow-[0_0_32px_rgba(37,99,235,0.1)]"
-                >
-                  <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-cyan-400/14 blur-[60px]" />
-                  <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-blue-500/14 blur-[65px]" />
+            {marqueeItems.map((item, index) => (
+              <div
+                key={`${item.title}-${index}`}
+                className="group relative h-[300px] w-[460px] shrink-0 overflow-hidden rounded-[34px] border border-[var(--ib-border)] bg-[var(--ib-preview-card)] p-4 shadow-[0_0_42px_rgba(37,99,235,0.14)] transition hover:-translate-y-1 hover:border-cyan-300/40 sm:h-[360px] sm:w-[600px] lg:h-[410px] lg:w-[720px]"
+              >
+                <div className="absolute right-0 top-0 h-36 w-36 rounded-full bg-cyan-400/14 blur-[70px]" />
+                <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-blue-500/14 blur-[75px]" />
 
-                  <div className="relative flex items-center justify-between gap-4">
-                    <p className="text-sm font-black">{item}</p>
-                    <span className="rounded-full bg-blue-500/15 px-3 py-1 text-[10px] font-bold text-[var(--ib-pill-text)]">
-                      {t.preview.previewLabel}
-                    </span>
-                  </div>
+                <div className="relative mb-4 flex items-center justify-between gap-4">
+                  <p className="text-sm font-black md:text-base">{item.title}</p>
 
-                  <div className="relative mt-6 grid grid-cols-3 gap-3">
-                    <div className="h-16 rounded-2xl border border-[var(--ib-border)] bg-[var(--ib-soft)]" />
-                    <div className="h-16 rounded-2xl border border-[var(--ib-border)] bg-[var(--ib-soft)]" />
-                    <div className="h-16 rounded-2xl border border-[var(--ib-border)] bg-[var(--ib-soft)]" />
-                  </div>
-
-                  <div className="relative mt-5 space-y-3">
-                    <div className="h-2 w-[85%] rounded-full bg-gradient-to-r from-blue-500 to-cyan-300" />
-                    <div className="h-2 w-[65%] rounded-full bg-[var(--ib-soft)]" />
-                    <div className="h-2 w-[45%] rounded-full bg-[var(--ib-soft)]" />
-                  </div>
-
-                  <div className="relative mt-6 rounded-2xl border border-blue-300/20 bg-blue-500/10 px-4 py-3 text-xs text-[var(--ib-muted)]">
-                    {t.preview.replace}
-                  </div>
+                  <span className="rounded-full bg-blue-500/15 px-3 py-1 text-[10px] font-bold text-[var(--ib-pill-text)] md:text-xs">
+                    {t.preview.previewLabel}
+                  </span>
                 </div>
-              ))}
+
+                <div className="relative h-[235px] overflow-hidden rounded-[26px] border border-[var(--ib-border)] bg-[var(--ib-soft)] sm:h-[290px] lg:h-[330px]">
+                  {item.image && (
+                    <Image
+                      src={item.image}
+                      alt={`${item.title} screenshot`}
+                      fill
+                      sizes="(max-width: 640px) 460px, (max-width: 1024px) 600px, 720px"
+                      className="object-cover object-top transition duration-700 group-hover:scale-[1.025]"
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
             </div>
           </div>
         </div>
