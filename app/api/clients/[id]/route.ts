@@ -5,7 +5,7 @@ import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
 import { getAuthUser } from "@/lib/auth";
 import Client from "@/models/Client";
-
+import { blockIfDemoMode } from "@/lib/demoMode";
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
@@ -293,7 +293,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
-
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const id = await getClientId(context);
@@ -338,7 +339,8 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
-
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const id = await getClientId(context);

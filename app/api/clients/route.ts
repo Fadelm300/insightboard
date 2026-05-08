@@ -4,7 +4,7 @@ import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
 import { getAuthUser } from "@/lib/auth";
 import Client from "@/models/Client";
-
+import { blockIfDemoMode } from "@/lib/demoMode";
 type ClientStatus =
   | "New Lead"
   | "Contacted"
@@ -326,7 +326,8 @@ export async function POST(req: NextRequest) {
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
-
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const body = await req.json().catch(() => null);

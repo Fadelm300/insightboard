@@ -695,8 +695,7 @@ export default function SettingsPage() {
                     bgcolor: (theme) => alpha(theme.palette.info.main, 0.08),
                   }}
                 >
-                  Business name and theme preferences are saved in localStorage
-                  for now. Backend storage can be added later.
+                  Demo settings are saved locally in your browser for preview purposes.
                 </Alert>
 
                 <Box

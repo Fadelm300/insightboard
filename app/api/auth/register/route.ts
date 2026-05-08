@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
-
+import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { successResponse, errorResponse } from "@/lib/apiResponse";
 import { signToken } from "@/lib/auth";
@@ -16,6 +16,8 @@ function isValidEmail(value: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     // CRM is single-admin only.

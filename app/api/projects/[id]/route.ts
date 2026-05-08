@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
-
+import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
 import { getAuthUser } from "@/lib/auth";
@@ -169,7 +169,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
-
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const { id } = await context.params;
@@ -429,7 +430,8 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
     }
-
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const { id } = await context.params;
