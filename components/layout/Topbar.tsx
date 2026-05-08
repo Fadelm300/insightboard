@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AppBar,
@@ -202,17 +203,46 @@ export default function Topbar() {
           }}
         >
           <Box>
-            <Typography
-              variant="h6"
-              sx={{
-                fontWeight: 900,
-                letterSpacing: "-0.04em",
-                lineHeight: 1.1,
-                color: "#FFFFFF",
-              }}
-            >
-              InsightBoard
-            </Typography>
+            <Box
+  component={Link}
+  href="/"
+  sx={{
+    display: "flex",
+    alignItems: "center",
+    textDecoration: "none",
+    minWidth: 0,
+    flexShrink: 0,
+     mt: "7px",
+  }}
+>
+  <Box
+    sx={{
+      position: "relative",
+      width: {
+        xs: 150,
+        sm: 185,
+        md: 220,
+      },
+      height: {
+        xs: 38,
+        sm: 46,
+        md: 54,
+      },
+    }}
+  >
+    <Image
+      src="/images/logo/insightboard-logo-1.png"
+      alt="InsightBoard Logo"
+      fill
+      priority
+      sizes="(max-width: 600px) 150px, (max-width: 900px) 185px, 220px"
+      style={{
+        objectFit: "contain",
+        objectPosition: "left center",
+      }}
+    />
+  </Box>
+</Box>
 
             <Typography
               variant="caption"

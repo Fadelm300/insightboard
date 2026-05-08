@@ -74,6 +74,12 @@ function getShortStatusLabel(status: string) {
   if (status === "Closed Lost") return "Lost";
   return status;
 }
+function getMobileStatusLabel(status: string) {
+  if (status === "Contacted") return "Contact";
+  if (status === "Proposal") return "Prop.";
+  if (status === "Negotiation") return "Neg.";
+  return status;
+}
 
 function getStatusColor(status: string) {
   if (status === "Closed Won") return "#10B981";
@@ -83,7 +89,82 @@ function getStatusColor(status: string) {
   if (status === "Contacted") return "#0EA5E9";
   return "#64748B";
 }
+type NeonBarShapeProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+  payload?: {
+    color?: string;
+  };
+};
 
+function NeonBarShape({
+  x = 0,
+  y = 0,
+  width = 0,
+  height = 0,
+  fill = "#0EA5E9",
+  payload,
+}: NeonBarShapeProps) {
+  if (height <= 0 || width <= 0) return null;
+
+  const neonColor = payload?.color || "#38BDF8";
+  const radius = Math.min(12, width / 2, height / 2);
+
+  return (
+    <g>
+          <path
+            d={`
+              M ${x} ${y + height}
+              L ${x} ${y + radius}
+              Q ${x} ${y} ${x + radius} ${y}
+              H ${x + width - radius}
+              Q ${x + width} ${y} ${x + width} ${y + radius}
+              L ${x + width} ${y + height}
+              Z
+            `}
+            fill={fill}
+          />
+
+      <path
+        d={`
+          M ${x} ${y + height}
+          L ${x} ${y + radius}
+          Q ${x} ${y} ${x + radius} ${y}
+          H ${x + width - radius}
+          Q ${x + width} ${y} ${x + width} ${y + radius}
+          L ${x + width} ${y + height}
+        `}
+        fill="none"
+        stroke={neonColor}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={0.95}
+        filter="url(#neonBarEdgeGlow)"
+      />
+
+      <path
+        d={`
+          M ${x + 2} ${y + height}
+          L ${x + 2} ${y + radius + 2}
+          Q ${x + 2} ${y + 2} ${x + radius + 2} ${y + 2}
+          H ${x + width - radius - 2}
+          Q ${x + width - 2} ${y + 2} ${x + width - 2} ${y + radius + 2}
+          L ${x + width - 2} ${y + height}
+        `}
+        fill="none"
+        stroke="#E0F2FE"
+        strokeWidth={0.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={0.45}
+      />
+    </g>
+  );
+}
 export default function DealsPipelineChart() {
   const theme = useTheme();
 
@@ -270,48 +351,41 @@ export default function DealsPipelineChart() {
                 opacity: 0.9,
                 pointerEvents: "none",
               },
-              "&::after": {
-                content: '""',
-                position: "absolute",
-                left: 42,
-                right: 42,
-                bottom: 34,
-                height: 18,
-                borderRadius: "50%",
-                background:
-                  theme.palette.mode === "dark"
-                    ? alpha(theme.palette.common.black, 0.28)
-                    : alpha(theme.palette.primary.main, 0.1),
-                filter: "blur(15px)",
-                transform: "perspective(700px) rotateX(58deg)",
-                pointerEvents: "none",
-              },
+             
             }}
           >
             <MeasuredChartBox height={330}>
-              {({ width, height }) => (
+             {({ width, height }) => {
+                const isMobileChart = width < 520;
+
+                return (
                 <BarChart
                   width={width}
                   height={height}
                   data={chartData}
-                  margin={{ top: 18, right: 18, left: 0, bottom: 4 }}
-                  barCategoryGap="28%"
+                 margin={{
+                    top: 18,
+                    right: isMobileChart ? 6 : 18,
+                    left: isMobileChart ? -18 : 0,
+                    bottom: isMobileChart ? 34 : 4,
+                  }}
+                  barCategoryGap={isMobileChart ? "18%" : "28%"}
                 >
                   <defs>
-                    <filter
-                      id="dealsPipelineBarShadow"
-                      x="-25%"
-                      y="-25%"
-                      width="150%"
-                      height="150%"
-                    >
-                      <feDropShadow
-                        dx="0"
-                        dy="9"
-                        stdDeviation="6"
-                        floodColor={alpha(theme.palette.common.black, 0.28)}
-                      />
-                    </filter>
+              <filter
+                id="neonBarEdgeGlow"
+                x="-80%"
+                y="-80%"
+                width="260%"
+                height="260%"
+              >
+                <feGaussianBlur stdDeviation="2.8" result="coloredBlur" />
+                <feMerge>
+                  <feMergeNode in="coloredBlur" />
+                  <feMergeNode in="coloredBlur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
 
                     {chartData.map((entry, index) => (
                       <linearGradient
@@ -342,17 +416,24 @@ export default function DealsPipelineChart() {
                     stroke={gridColor}
                   />
 
-                  <XAxis
-                    dataKey="status"
-                    tick={{
-                      fill: axisColor,
-                      fontSize: 12,
-                      fontWeight: 800,
-                    }}
-                    axisLine={false}
-                    tickLine={false}
-                    dy={8}
-                  />
+                      <XAxis
+                        dataKey="status"
+                        interval={0}
+                        height={isMobileChart ? 58 : 36}
+                        tickFormatter={(value) =>
+                          isMobileChart ? getMobileStatusLabel(String(value)) : String(value)
+                        }
+                        tick={{
+                          fill: axisColor,
+                          fontSize: isMobileChart ? 10 : 12,
+                          fontWeight: 800,
+                        }}
+                        angle={isMobileChart ? -28 : 0}
+                        textAnchor={isMobileChart ? "end" : "middle"}
+                        axisLine={false}
+                        tickLine={false}
+                        dy={isMobileChart ? 14 : 8}
+                      />
 
                   <YAxis
                     allowDecimals={false}
@@ -394,12 +475,14 @@ export default function DealsPipelineChart() {
                     }}
                   />
 
-                  <Bar
-                    dataKey="deals"
-                    radius={[12, 12, 4, 4]}
-                    maxBarSize={56}
-                    filter="url(#dealsPipelineBarShadow)"
-                  >
+                      <Bar
+                        dataKey="deals"
+                        radius={[12, 12, 4, 4]}
+                        maxBarSize={isMobileChart ? 38 : 56}
+                        shape={(props: unknown) => (
+                          <NeonBarShape {...(props as NeonBarShapeProps)} />
+                        )}
+                      >
                     {chartData.map((entry, index) => (
                       <Cell
                         key={entry.fullStatus}
@@ -408,7 +491,8 @@ export default function DealsPipelineChart() {
                     ))}
                   </Bar>
                 </BarChart>
-              )}
+               );
+            }}
             </MeasuredChartBox>
           </Box>
         )}

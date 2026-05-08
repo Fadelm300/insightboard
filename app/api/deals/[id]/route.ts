@@ -125,25 +125,61 @@ function getNumberField(body: Record<string, unknown>, field: string) {
 
   return numberValue;
 }
-
-function getTodayDateOnly() {
+function getTodayDateKey() {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
+  const timezoneOffset = today.getTimezoneOffset() * 60000;
+
+  return new Date(today.getTime() - timezoneOffset)
+    .toISOString()
+    .slice(0, 10);
 }
 
-function validateExpectedCloseDate(value: string) {
+function getDateKey(value: Date | string | null | undefined) {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    return value.slice(0, 10);
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return "";
+}
+
+function parseDateOnly(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  const isValid =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+
+  return isValid ? date : null;
+}
+
+function validateExpectedCloseDate(
+  value: string,
+  currentValue?: Date | string | null
+) {
   if (!value) return { date: undefined, error: "" };
 
-  const date = new Date(value);
+  const incomingDateKey = getDateKey(value);
+  const currentDateKey = getDateKey(currentValue);
 
-  if (Number.isNaN(date.getTime())) {
+  const date = parseDateOnly(incomingDateKey);
+
+  if (!date) {
     return { date: undefined, error: "Expected close date is invalid" };
   }
 
-  date.setHours(0, 0, 0, 0);
+  const isDateChanged = incomingDateKey !== currentDateKey;
 
-  if (date < getTodayDateOnly()) {
+  if (isDateChanged && incomingDateKey < getTodayDateKey()) {
     return {
       date: undefined,
       error: "Expected close date cannot be in the past",
@@ -153,8 +189,11 @@ function validateExpectedCloseDate(value: string) {
   return { date, error: "" };
 }
 
-function validateDealPayload(body: unknown) {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
+
+function validateDealPayload(
+  body: unknown,
+  currentExpectedCloseDate?: Date | string | null
+) {  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return {
       values: null,
       error: "Invalid deal data",
@@ -209,8 +248,8 @@ function validateDealPayload(body: unknown) {
       };
     }
 
-    const { date: expectedCloseDate, error: dateError } =
-      validateExpectedCloseDate(expectedCloseDateValue);
+const { date: expectedCloseDate, error: dateError } =
+  validateExpectedCloseDate(expectedCloseDateValue, currentExpectedCloseDate);
 
     if (dateError) {
       return { values: null, error: dateError };
@@ -312,9 +351,21 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     if (!id) {
       return errorResponse("Invalid deal id", 400);
     }
-
     const body = await req.json().catch(() => null);
-    const { values, error } = validateDealPayload(body);
+
+    const existingDeal = await Deal.findOne({
+      _id: id,
+      isDeleted: { $ne: true },
+    });
+
+    if (!existingDeal) {
+      return errorResponse("Deal not found", 404);
+    }
+
+    const { values, error } = validateDealPayload(
+      body,
+      existingDeal.expectedCloseDate
+    );
 
     if (!values) {
       return errorResponse(error, 400);

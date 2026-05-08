@@ -401,7 +401,10 @@ function isPastDate(value: string) {
   return inputDate < today;
 }
 
-function validateProjectForm(formData: ProjectFormData):
+function validateProjectForm(
+  formData: ProjectFormData,
+  editingProject?: Project | null,
+):
   | {
       isValid: true;
       values: ProjectFormData;
@@ -456,9 +459,19 @@ function validateProjectForm(formData: ProjectFormData):
     errors.cost = "Cost cannot be negative";
   }
 
-  if (cleanedValues.deadline && isPastDate(cleanedValues.deadline)) {
-    errors.deadline = "Deadline cannot be in the past";
-  }
+const originalDeadline = editingProject
+  ? getDateInputValue(editingProject.deadline)
+  : "";
+
+const isDeadlineChanged = cleanedValues.deadline !== originalDeadline;
+
+if (
+  cleanedValues.deadline &&
+  (!editingProject || isDeadlineChanged) &&
+  isPastDate(cleanedValues.deadline)
+) {
+  errors.deadline = "Deadline cannot be in the past";
+}
 
   if (!PROJECT_STATUSES.includes(cleanedValues.status)) {
     errors.status = "Invalid project status";
@@ -798,9 +811,9 @@ export default function ProjectsPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const validation = validateProjectForm(formData);
+const validation = validateProjectForm(formData, editingProject);
 
-    if (!validation.isValid) {
+if (!validation.isValid) {
       setFormErrors(validation.errors);
       setError("Please fix the highlighted fields");
       return;
@@ -1586,6 +1599,7 @@ export default function ProjectsPage() {
                 value={formatDate(viewProject?.deadline)}
                 sx={readonlyTextFieldSx}
                 slotProps={{ input: { readOnly: true } }}
+                
               />
 
               <TextField
@@ -1863,7 +1877,7 @@ export default function ProjectsPage() {
                     shrink: true,
                   },
                   htmlInput: {
-                    min: todayInputValue,
+                    min: editingProject ? undefined : todayInputValue,
                   },
                 }}
               />

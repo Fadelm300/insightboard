@@ -404,8 +404,7 @@ function validateLongText(label: string, value: string, maxLength: number) {
   return "";
 }
 
-function validateDealForm(data: DealFormData) {
-  const today = getTodayInputValue();
+function validateDealForm(data: DealFormData, editingDeal?: Deal | null) {  const today = getTodayInputValue();
 
   const values: DealFormData = {
     clientId: data.clientId,
@@ -463,9 +462,20 @@ function validateDealForm(data: DealFormData) {
     }
   }
 
-  if (values.expectedCloseDate && values.expectedCloseDate < today) {
-    errors.expectedCloseDate = "Expected close date cannot be in the past";
-  }
+const originalExpectedCloseDate = editingDeal
+  ? getDateInputValue(editingDeal.expectedCloseDate)
+  : "";
+
+const isExpectedCloseDateChanged =
+  values.expectedCloseDate !== originalExpectedCloseDate;
+
+if (
+  values.expectedCloseDate &&
+  (!editingDeal || isExpectedCloseDateChanged) &&
+  values.expectedCloseDate < today
+) {
+  errors.expectedCloseDate = "Expected close date cannot be in the past";
+}
 
   const descriptionError = validateLongText(
     "Description",
@@ -726,8 +736,7 @@ useEffect(() => {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const { values, payload, errors } = validateDealForm(formData);
-
+const { values, payload, errors } = validateDealForm(formData, editingDeal);
     if (Object.keys(errors).length > 0) {
       setFormData(values);
       setFormErrors(errors);
@@ -1724,9 +1733,11 @@ useEffect(() => {
                   inputLabel: {
                     shrink: true,
                   },
-                  htmlInput: {
-                    min: getTodayInputValue(),
-                  },
+                 htmlInput: {
+                  min: editingDeal
+                    ? undefined
+                    : getTodayInputValue(),
+                },
                 }}
               />
 

@@ -340,7 +340,7 @@ export default function ProjectStatusChart() {
                     // xs/sm/md = phone/tablet/normal desktop
                     // lg = laptop 13/14 inch adjustment
                     // xl = large desktop
-                      top: {sm: "44%", xs: "37%", md: "44%", lg: "37%", xl: "39%" },
+                      top: {sm: "44%", xs: "40%", md: "44%", lg: "37%", xl: "39%" },
 
                       "@media (min-width: 1800px)": {
                         top: "40%",

@@ -226,35 +226,35 @@ const content = {
 
   ar: {
     nav: {
-      features: "المميزات",
-      preview: "العرض",
-      stack: "التقنيات",
-      builder: "المطور",
+      features: "الخصائص",
+      preview: "استعراض النظام",
+      stack: "التقنيات المستخدمة",
+      builder: "عن المطور",
       contact: "تواصل",
       login: "تسجيل الدخول",
-      system: "نظام CRM خاص",
-      themeLight: "فاتح",
-      themeDark: "داكن",
+      system: "نظام إدارة علاقات العملاء",
+      themeLight: "الوضع الفاتح",
+      themeDark: "الوضع الداكن",
       lang: "EN",
     },
     hero: {
-      badge: "InsightBoard · نظام CRM خاص · بناء فاضل محمد فاضل",
-      title: "لوحة CRM احترافية تساعدك على اتخاذ قرارات عمل أوضح.",
+      badge: "InsightBoard · نظام CRM خاص · تطوير فاضل محمد فاضل",
+      title: "لوحة إدارة أعمال تساعدك على فهم نشاطك واتخاذ قرارات أفضل",
       description:
-        "InsightBoard هو نظام CRM خاص يساعد على تحويل نشاط العمل اليومي إلى قرارات أوضح. يجمع إدارة العملاء، الصفقات، المشاريع، الإيرادات، المصروفات، والتقارير داخل لوحة واحدة آمنة بدل الاعتماد على ملفات وملاحظات متفرقة.",
+        "InsightBoard هو نظام خاص لإدارة علاقات العملاء صُمم لتنظيم العمل اليومي وتحويله إلى قرارات أوضح، من خلال جمع العملاء، الصفقات، المشاريع، الإيرادات، المصروفات، والتقارير داخل لوحة واحدة آمنة بدل الاعتماد على ملفات وملاحظات متفرقة.",
       sub:
-        "من متابعة العميل المحتمل إلى وضوح الربح — يساعدك InsightBoard على تنظيم سير العمل بالكامل وقياسه والتحكم فيه من مكان واحد.",
+        "من أول عميل محتمل إلى قياس الربح   ، يساعدك InsightBoard على تنظيم سير العمل بالكامل وقياسه والتحكم فيه من مكان واحد.",
       enter: "Enter Admin Portal",
       contact: "تواصل / عرض البورتفوليو",
     },
     stats: [
       { label: "العملاء", value: "سجلات منظمة" },
-      { label: "الصفقات", value: "متابعة خط البيع" },
-      { label: "المالية", value: "وضوح الربح" },
+      { label: "الصفقات", value: "متابعة المبيعات" },
+      { label: "المالية", value: "رؤية أوضح للربح" },
     ],
     crm: {
       live: "عرض مباشر للنظام",
-      health: "صحة العمل",
+      health: "أداء العمل",
       strong: "قوي",
       revenue: "الإيرادات",
       growth: "+18% نمو",
@@ -319,8 +319,9 @@ const content = {
     preview: {
       label: "عرض النظام",
       heading: "نظرة سريعة على أهم أقسام InsightBoard.",
-      text:
-        "هذا القسم جاهز لإضافة صور متحركة من صفحات النظام مثل لوحة التحكم، العملاء، الصفقات، المشاريع، المالية، والتقارير.",
+        text:
+      "استعراض سريع لأهم صفحات النظام، من لوحة التحكم إلى العملاء، الصفقات، المشاريع، المالية، والتقارير.",
+
       badge: "شريط عرض متحرك",
       replace: "استبدل هذا الكارد لاحقًا بصورة حقيقية من النظام.",
       previewLabel: "عرض",
@@ -337,13 +338,13 @@ const content = {
     },
     stack: {
       label: "الأساس التقني",
-      heading: "مبني باستخدام Stack حديث يعتمد على TypeScript.",
+      heading: "مبني بتقنيات حديثة تعتمد على TypeScript",
       text:
         "تم بناء InsightBoard بتركيز على الأداء، سهولة الصيانة، حماية الوصول، ربط البيانات بقاعدة بيانات فعلية، وتجربة لوحة تحكم نظيفة وعملية.",
     },
     product: {
-      label: "تفكير منتجي",
-      heading: "مصمم كأداة عمل حقيقية، وليس مجرد واجهة.",
+      label: "فكر عملي في بناء المنتج",
+      heading: "مبني ليكون أداة عمل حقيقية، وليس مجرد تصميم واجهة",
       text:
         "يجمع InsightBoard بين تصميم واجهات واضح، منطق خلفي محمي، نمذجة قواعد البيانات، ومميزات CRM عملية تخدم إدارة العمل اليومية.",
       points: [
@@ -355,9 +356,9 @@ const content = {
     },
     builder: {
       label: "المطور",
-      heading: "بناء فاضل محمد فاضل.",
+      heading: "تطوير فاضل محمد فاضل",
       text:
-        "أنا مهندس برمجيات بحريني أركز على بناء أنظمة ويب نظيفة، آمنة، وعملية. يعكس InsightBoard خبرتي في تصميم الواجهات، تطوير الأنظمة الكاملة، منطق الأعمال، ربط الـ API، نمذجة قواعد البيانات، وتصميم لوحات التحكم الحديثة.",
+        " مهندس برمجيات  أركز على بناء أنظمة ويب نظيفة، آمنة، وعملية. يعكس InsightBoard خبرتي في تصميم الواجهات، تطوير الأنظمة الكاملة، منطق الأعمال، ربط الـ API، تصميم قواعد البيانات، وتطوير  لوحات التحكم الحديثة.",
       cards: [
         {
           title: "تركيز على الواجهات",
@@ -380,13 +381,13 @@ const content = {
       label: "تواصل ودخول خاص",
       heading: "ادخل إلى لوحة الإدارة أو تواصل مع المطور.",
       text:
-        "InsightBoard مصمم كنظام CRM خاص. يستطيع الزائر التعرف على فكرة النظام والتواصل مع المطور، بينما الدخول للوحة التحكم متاح فقط للمستخدمين المصرح لهم.",
-      enter: "Enter Admin Portal",
+      "InsightBoard مصمم كنظام CRM خاص. يستطيع الزائر التعرف على فكرة النظام والتواصل مع المطور، مع إمكانية تجربة دخول محدود عبر وضع Demo  بينما تبقى لوحة التحكم الكاملة متاحة فقط للمستخدمين المصرح لهم. ",
+      enter: "دخول لوحة الإدارة",
       email: "راسلني بالإيميل",
       portfolio: "صفحة التواصل في البورتفوليو",
     },
     footer: {
-      rights: "© 2026 InsightBoard. بناء فاضل محمد فاضل. جميع الحقوق محفوظة.",
+      rights: "© 2026 InsightBoard. تطوير فاضل محمد فاضل. جميع الحقوق محفوظة.",
       made: "نظام CRM خاص · صُنع في البحرين",
       portfolio: "البورتفوليو",
       admin: "دخول الإدارة",
@@ -538,10 +539,12 @@ useEffect(() => {
           100% { transform: translateX(-50%); }
         }
 
-        [dir="rtl"] .preview-marquee {
-          animation-direction: reverse;
-        }
-
+   .preview-marquee {
+        width: max-content;
+        direction: ltr;
+        animation: marqueeMove 46s linear infinite;
+        will-change: transform;
+      }
         .floating-orb {
           animation: floatSlow 7s ease-in-out infinite;
         }
@@ -597,7 +600,7 @@ useEffect(() => {
         <div className="floating-orb absolute bottom-20 left-10 h-64 w-64 rounded-full bg-indigo-500/15 blur-[110px]" />
 
         <nav className="relative z-20 mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 rounded-3xl border border-[var(--ib-border)] bg-[var(--ib-nav)] px-5 py-4 backdrop-blur-xl">
-          <Link href="/" className="flex items-center gap-3">
+          {/* <Link href="/" className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500 text-lg font-black text-white shadow-lg shadow-blue-500/25">
               IB
             </span>
@@ -605,8 +608,17 @@ useEffect(() => {
               <p className="text-sm font-bold tracking-wide">InsightBoard</p>
               <p className="text-xs text-[var(--ib-muted)]">{t.nav.system}</p>
             </div>
-          </Link>
-
+          </Link> */}
+<Link href="/" className="flex min-w-0 items-center">
+  <Image
+    src="/images/logo/insightboard-logo-1.png"
+    alt="InsightBoard Logo"
+    width={240}
+    height={60}
+    priority
+    className="h-10 w-auto max-w-[170px] object-contain sm:h-12 sm:max-w-[210px] lg:h-14 lg:max-w-[250px]"
+  />
+</Link>
           <div className="hidden items-center gap-6 text-sm text-[var(--ib-muted)] md:flex">
             <button
               type="button"
@@ -674,10 +686,17 @@ useEffect(() => {
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-96px)] max-w-7xl items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
             <div className="mb-6 inline-flex max-w-full items-center gap-3 rounded-full border border-blue-400/30 bg-[var(--ib-pill-bg)] px-4 py-2 text-sm font-semibold text-[var(--ib-pill-text)] shadow-lg shadow-blue-500/10">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500 text-xs font-black text-white shadow-lg shadow-blue-500/25">
-                IB
-              </span>
-              <span className="line-clamp-2">{t.hero.badge}</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-500/10 ring-1 ring-cyan-300/30">
+                  <Image
+                    src="/images/logo/insightboard-logo3.png"
+                    alt="InsightBoard Icon"
+                    width={36}
+                    height={36}
+                    className="h-7 w-7 object-contain"
+                  />
+                </span>
+
+                <span className="line-clamp-2">{t.hero.badge}</span>
             </div>
 
             <h1 className="max-w-4xl text-5xl font-black leading-[0.95] tracking-tight md:text-7xl">
@@ -871,11 +890,15 @@ useEffect(() => {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-[36px] border border-[var(--ib-border)] bg-[var(--ib-card)] p-5 shadow-[0_0_70px_rgba(37,99,235,0.1)] backdrop-blur-xl">
-            <div className="preview-marquee flex gap-5">
+<div
+    dir="ltr"
+    className="overflow-hidden rounded-[36px] border border-[var(--ib-border)] bg-[var(--ib-card)] p-5 shadow-[0_0_70px_rgba(37,99,235,0.1)] backdrop-blur-xl"
+    >
+  <div className="preview-marquee flex gap-5">
             {marqueeItems.map((item, index) => (
               <div
                 key={`${item.title}-${index}`}
+                  dir={language === "ar" ? "rtl" : "ltr"}
                 className="group relative h-[300px] w-[460px] shrink-0 overflow-hidden rounded-[34px] border border-[var(--ib-border)] bg-[var(--ib-preview-card)] p-4 shadow-[0_0_42px_rgba(37,99,235,0.14)] transition hover:-translate-y-1 hover:border-cyan-300/40 sm:h-[360px] sm:w-[600px] lg:h-[410px] lg:w-[720px]"
               >
                 <div className="absolute right-0 top-0 h-36 w-36 rounded-full bg-cyan-400/14 blur-[70px]" />
