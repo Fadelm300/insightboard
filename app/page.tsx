@@ -72,7 +72,7 @@ const content = {
       description:
         "InsightBoard is a private CRM system built to turn daily business activity into clear decisions. It helps manage clients, deals, projects, revenue, expenses, and performance reports from one secure dashboard instead of scattered files, notes, and manual tracking.",
       sub:
-        "From lead tracking to profit visibility — InsightBoard keeps the full business workflow organized, measurable, and under control.",
+        "From lead tracking to profit visibility  InsightBoard keeps the full business workflow organized, measurable, and under control.",
       enter: "Enter Admin Portal",
       contact: "Contact / View Portfolio",
     },
