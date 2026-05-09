@@ -72,25 +72,25 @@ const content = {
       description:
         "InsightBoard is a private CRM system built to turn daily business activity into clear decisions. It helps manage clients, deals, projects, revenue, expenses, and performance reports from one secure dashboard instead of scattered files, notes, and manual tracking.",
       sub:
-        "From lead tracking to profit visibility  InsightBoard keeps the full business workflow organized, measurable, and under control.",
+        "From lead tracking to profit visibility, InsightBoard keeps the full business workflow organized, measurable, and under control.",
       enter: "Enter Admin Portal",
       contact: "Contact / View Portfolio",
     },
     stats: [
       { label: "Clients", value: "Organized records" },
-      { label: "Deals", value: "Pipeline tracking" },
+      { label: "Deals", value: "Deal tracking" },
       { label: "Finance", value: "Profit visibility" },
     ],
     crm: {
-      live: "LIVE CRM VIEW",
-      health: "Business Health",
+      live: "CRM DASHBOARD PREVIEW",
+      health: "Business Overview",
       strong: "Strong",
       revenue: "Revenue",
       growth: "+18% growth",
       projects: "Projects",
-      active: "4 active",
-      pipeline: "Pipeline Overview",
-      monthly: "Monthly",
+      active: "4 active projects",
+      pipeline: "Deal Overview",
+      monthly: "Snapshot",
       clarityTitle: "Business clarity from one place",
       clarityText:
         "InsightBoard connects clients, deals, projects, and finance into one workflow so decisions are based on real business data, not scattered notes.",
@@ -149,9 +149,9 @@ const content = {
       label: "Dashboard Preview",
       heading: "A quick look at the main InsightBoard modules.",
       text:
-        "This section is ready for animated dashboard screenshots  from business overview to clients, deals, projects, finance, and reports.",
-      badge: "Auto-moving showcase",
-      replace: "Replace this card with a real screenshot later.",
+        "Explore how InsightBoard brings clients, deals, projects, finance, and reports into one clear business dashboard.",
+      badge: "Auto-scrolling showcase",
+      replace: "Dashboard interface preview.",
       previewLabel: "Preview",
       items: [
         "Dashboard Overview",
@@ -243,25 +243,25 @@ const content = {
       description:
         "InsightBoard هو نظام خاص لإدارة علاقات العملاء صُمم لتنظيم العمل اليومي وتحويله إلى قرارات أوضح، من خلال جمع العملاء، الصفقات، المشاريع، الإيرادات، المصروفات، والتقارير داخل لوحة واحدة آمنة بدل الاعتماد على ملفات وملاحظات متفرقة.",
       sub:
-        "من أول عميل محتمل إلى قياس الربح   ، يساعدك InsightBoard على تنظيم سير العمل بالكامل وقياسه والتحكم فيه من مكان واحد.",
-      enter: "Enter Admin Portal",
+  "من أول عميل محتمل إلى وضوح الربح، يساعدك InsightBoard على تنظيم سير العمل بالكامل وقياسه والتحكم فيه من مكان واحد.",
+      enter: "دخول لوحة الإدارة",
       contact: "تواصل / عرض البورتفوليو",
     },
     stats: [
       { label: "العملاء", value: "سجلات منظمة" },
-      { label: "الصفقات", value: "متابعة المبيعات" },
+      { label: "الصفقات", value: "متابعة الصفقات" },
       { label: "المالية", value: "رؤية أوضح للربح" },
     ],
     crm: {
-      live: "عرض مباشر للنظام",
-      health: "أداء العمل",
+      live: "معاينة لوحة التحكم",
+      health: "نظرة عامة على العمل",
       strong: "قوي",
       revenue: "الإيرادات",
       growth: "+18% نمو",
       projects: "المشاريع",
-      active: "4 نشطة",
+      active: "4 مشاريع نشطة",
       pipeline: "نظرة على الصفقات",
-      monthly: "شهري",
+      monthly: "معاينة",
       clarityTitle: "وضوح العمل من مكان واحد",
       clarityText:
         "يربط InsightBoard العملاء والصفقات والمشاريع والمالية في سير عمل واحد حتى تكون القرارات مبنية على بيانات واضحة، وليس ملاحظات متفرقة.",
@@ -285,7 +285,7 @@ const content = {
           outcome: "تحكم أفضل",
         },
         {
-          title: "خط الصفقات",
+          title: "متابعة الصفقات",
           description:
             "متابعة العملاء المحتملين، العروض، التفاوض، والصفقات المغلقة مع رؤية واضحة لتقدم المبيعات.",
           outcome: "متابعة أدق",
@@ -319,16 +319,15 @@ const content = {
     preview: {
       label: "عرض النظام",
       heading: "نظرة سريعة على أهم أقسام InsightBoard.",
-        text:
-      "استعراض سريع لأهم صفحات النظام، من لوحة التحكم إلى العملاء، الصفقات، المشاريع، المالية، والتقارير.",
-
+text:
+  "نظرة واضحة على أهم أقسام النظام، من لوحة التحكم والعملاء إلى الصفقات، المشاريع، المالية، والتقارير.",
       badge: "شريط عرض متحرك",
-      replace: "استبدل هذا الكارد لاحقًا بصورة حقيقية من النظام.",
+      replace: "معاينة من واجهات النظام.",
       previewLabel: "عرض",
       items: [
         "لوحة التحكم",
         "صفحة العملاء",
-        "خط الصفقات",
+        "صفحة الصفقات",
         "إدارة المشاريع",
         "تتبع الإيرادات",
         "تتبع المصروفات",
@@ -357,9 +356,9 @@ const content = {
     builder: {
       label: "المطور",
       heading: "تطوير فاضل محمد فاضل",
-      text:
-        " مهندس برمجيات  أركز على بناء أنظمة ويب نظيفة، آمنة، وعملية. يعكس InsightBoard خبرتي في تصميم الواجهات، تطوير الأنظمة الكاملة، منطق الأعمال، ربط الـ API، تصميم قواعد البيانات، وتطوير  لوحات التحكم الحديثة.",
-      cards: [
+  text:
+  "أنا مهندس برمجيات بحريني أركز على بناء أنظمة ويب نظيفة، آمنة، وعملية. يعكس InsightBoard خبرتي في تصميم الواجهات، تطوير الأنظمة الكاملة، منطق الأعمال، ربط الـ API، تصميم قواعد البيانات، وتطوير لوحات التحكم الحديثة.",
+   cards: [
         {
           title: "تركيز على الواجهات",
           description:
@@ -380,9 +379,9 @@ const content = {
     contact: {
       label: "تواصل ودخول خاص",
       heading: "ادخل إلى لوحة الإدارة أو تواصل مع المطور.",
-      text:
-      "InsightBoard مصمم كنظام CRM خاص. يستطيع الزائر التعرف على فكرة النظام والتواصل مع المطور، مع إمكانية تجربة دخول محدود عبر وضع Demo  بينما تبقى لوحة التحكم الكاملة متاحة فقط للمستخدمين المصرح لهم. ",
-      enter: "دخول لوحة الإدارة",
+   text:
+  "InsightBoard مصمم كنظام CRM خاص. يستطيع الزائر التعرف على فكرة النظام والتواصل مع المطور، مع إمكانية تجربة دخول محدود عبر الوضع التجريبي، بينما تبقى لوحة التحكم الكاملة متاحة فقط للمستخدمين المصرح لهم.",
+     enter: "دخول لوحة الإدارة",
       email: "راسلني بالإيميل",
       portfolio: "صفحة التواصل في البورتفوليو",
     },
