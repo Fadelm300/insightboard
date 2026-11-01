@@ -245,12 +245,18 @@ export default function Landing({
       <div className="ib-container ib-header-row">
         <Link
           href="/"
-          className="ib-brand"
+          className="ib-brand ib-header-brand"
           aria-label="InsightBoard"
+          dir="ltr"
         >
-          <span dir="ltr">
-            InsightBoard<span className="ib-brand-dot">.</span>
-          </span>
+          <Image
+            src="/images/logo/insightboard-logo3.png"
+            alt=""
+            width={36}
+            height={36}
+            className="ib-brand-logo"
+          />
+          <span>InsightBoard</span>
         </Link>
 
         <nav
