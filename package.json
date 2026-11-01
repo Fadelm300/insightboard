@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "setup:dev-user": "node --env-file=.env.development.local scripts/create-dev-user.mjs",
+    "configure:dev-db": "node scripts/configure-dev-db.mjs"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
