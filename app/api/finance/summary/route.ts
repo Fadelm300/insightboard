@@ -1,3 +1,4 @@
+import { logServerError } from "@/lib/serverLogger";
 import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
@@ -8,7 +9,7 @@ import Expense from "@/models/Expense";
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
@@ -54,8 +55,8 @@ export async function GET(req: NextRequest) {
       },
       "Finance summary fetched successfully"
     );
-  } catch (error) {
-    console.error("GET_FINANCE_SUMMARY_ERROR:", error);
+  } catch {
+    logServerError("GET_FINANCE_SUMMARY_ERROR");
     return errorResponse("Server error", 500);
   }
 }

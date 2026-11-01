@@ -1,3 +1,4 @@
+import { logServerError } from "@/lib/serverLogger";
 import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
@@ -13,7 +14,7 @@ type RouteContext = {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
@@ -94,8 +95,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
       },
       "Project finance summary fetched successfully"
     );
-  } catch (error) {
-    console.error("GET_PROJECT_FINANCE_SUMMARY_ERROR:", error);
+  } catch {
+    logServerError("GET_PROJECT_FINANCE_SUMMARY_ERROR");
     return errorResponse("Server error", 500);
   }
 }
