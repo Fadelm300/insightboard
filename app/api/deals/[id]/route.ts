@@ -284,12 +284,10 @@ const { date: expectedCloseDate, error: dateError } =
     };
 
     return { values, error: "" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid deal data";
-
+  } catch {
     return {
       values: null,
-      error: message,
+      error: "Invalid deal data",
     };
   }
 }
@@ -306,7 +304,7 @@ async function getDealId(context: RouteContext) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
@@ -337,7 +335,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
@@ -404,7 +402,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);

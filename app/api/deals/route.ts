@@ -262,19 +262,17 @@ function validateDealPayload(body: unknown) {
     };
 
     return { values, error: "" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid deal data";
-
+  } catch {
     return {
       values: null,
-      error: message,
+      error: "Invalid deal data",
     };
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
@@ -351,7 +349,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
