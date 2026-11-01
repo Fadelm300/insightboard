@@ -1,22 +1,43 @@
-import { NextResponse } from "next/server";
-import  connectDB  from "@/lib/mongodb";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+import { getAuthUser } from "@/lib/auth";
+import connectDB from "@/lib/mongodb";
+import { logServerError } from "@/lib/serverLogger";
+
+export const dynamic = "force-dynamic";
+
+function diagnosticResponse(message: string, status: number) {
+  return NextResponse.json(
+    { success: status === 200, message },
+    {
+      status,
+      headers: { "Cache-Control": "no-store" },
+    }
+  );
+}
+
+export async function GET(req: NextRequest) {
+  // This diagnostic must not run in Production or Vercel Preview builds.
+  if (process.env.NODE_ENV !== "development") {
+    return diagnosticResponse("Not found", 404);
+  }
+
   try {
+    const user = await getAuthUser(req);
+
+    if (!user) {
+      return diagnosticResponse("Unauthorized", 401);
+    }
+
+    if (user.role !== "admin") {
+      return diagnosticResponse("Forbidden", 403);
+    }
+
     await connectDB();
 
-    return NextResponse.json({
-      success: true,
-      message: "MongoDB connected successfully",
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "MongoDB connection failed",
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    return diagnosticResponse("Database connection available", 200);
+  } catch {
+    logServerError("DATABASE_DIAGNOSTIC_ERROR");
+    return diagnosticResponse("Database connection unavailable", 503);
   }
 }

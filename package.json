@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "setup:dev-user": "node --env-file=.env.development.local scripts/create-dev-user.mjs",
-    "configure:dev-db": "node scripts/configure-dev-db.mjs"
+    "configure:dev-db": "node scripts/configure-dev-db.mjs",
+    "test:security": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
