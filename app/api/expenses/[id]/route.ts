@@ -82,7 +82,7 @@ function isFutureDate(value: string) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
@@ -220,7 +220,7 @@ if (demoBlock) return demoBlock;
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);

@@ -246,7 +246,7 @@ function validateProjectPayload(body: unknown):
 }
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
@@ -350,7 +350,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
+    const authUser = await getAuthUser(req);
 
     if (!authUser) {
       return errorResponse("Unauthorized", 401);
