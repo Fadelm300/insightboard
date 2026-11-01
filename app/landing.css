@@ -188,8 +188,18 @@
   white-space: nowrap;
 }
 
-.ib-landing .ib-brand-dot {
-  color: var(--ib-accent);
+.ib-landing .ib-header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ib-text);
+}
+
+.ib-landing .ib-brand-logo {
+  display: block;
+  width: clamp(30px, 3vw, 36px);
+  height: auto;
+  flex-shrink: 0;
 }
 
 .ib-landing .ib-desktop-nav {
