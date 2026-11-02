@@ -1,9 +1,12 @@
+import { logServerError } from "@/lib/serverLogger";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
 import connectDB from "@/lib/mongodb";
 import { successResponse, errorResponse } from "@/lib/apiResponse";
-import { signToken } from "@/lib/auth";
+import { createSession } from "@/lib/auth";
+import { isTrustedMutation } from "@/lib/sessionPolicy";
+import { allowLoginAttempt } from "@/lib/loginRateLimit";
 
 import User from "@/models/User";
 
@@ -26,13 +29,14 @@ function loginFail(message: string) {
       success: false,
       message,
     },
-    { status: 200 }
+    { status: 401, headers: { "Cache-Control": "no-store" } }
   );
 }
 
 export async function POST(req: NextRequest) {
+  if (!isTrustedMutation(req)) return errorResponse("Forbidden", 403);
+
   try {
-    await connectDB();
 
     const body = await req.json().catch(() => null);
 
@@ -40,8 +44,16 @@ export async function POST(req: NextRequest) {
       return loginFail("Invalid login request");
     }
 
-    const cleanEmail = normalizeEmail(String(body.email || ""));
-    const cleanPassword = String(body.password || "");
+    if (typeof body.email !== "string" || typeof body.password !== "string") {
+      return loginFail("Invalid email or password");
+    }
+
+    const cleanEmail = normalizeEmail(body.email);
+    const cleanPassword = body.password;
+
+    if (cleanEmail.length > 254 || cleanPassword.length > 128) {
+      return loginFail("Invalid email or password");
+    }
 
     if (!cleanEmail || !cleanPassword) {
       return loginFail("Email and password are required");
@@ -51,25 +63,24 @@ export async function POST(req: NextRequest) {
       return loginFail("Enter a valid email address");
     }
 
+    await connectDB();
+
+    if (!(await allowLoginAttempt(req, cleanEmail))) {
+      const response = errorResponse("Too many sign-in attempts. Try again later.", 429);
+      response.headers.set("Retry-After", "900");
+      return response;
+    }
+
     const user = await User.findOne({ email: cleanEmail });
 
-    if (!user) {
+    const passwordHash = user?.password ?? "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    const isPasswordValid = await bcrypt.compare(cleanPassword, passwordHash);
+
+    if (!user || !isPasswordValid) {
       return loginFail("Invalid email or password");
     }
 
-    const isPasswordValid = await bcrypt.compare(cleanPassword, user.password);
-
-    if (!isPasswordValid) {
-      return loginFail("Invalid email or password");
-    }
-
-    const token = signToken({
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    });
-
-    return successResponse(
+    const response = successResponse(
       {
         user: {
           id: user._id.toString(),
@@ -77,12 +88,13 @@ export async function POST(req: NextRequest) {
           email: user.email,
           role: user.role,
         },
-        token,
       },
       "Login successful"
     );
-  } catch (error) {
-    console.error("LOGIN_API_ERROR:", error);
+    await createSession(user._id.toString(), req, response);
+    return response;
+  } catch {
+    logServerError("LOGIN_API_ERROR");
     return errorResponse("Server error", 500);
   }
 }

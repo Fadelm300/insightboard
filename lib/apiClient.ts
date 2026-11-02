@@ -1,53 +1,53 @@
-const TOKEN_KEY = "insightboard_token";
+export const AUTH_CHANGED_EVENT = "insightboard-auth-changed";
 
-export function getToken() {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
+let sessionEndAnnounced = false;
 
-export function setToken(token: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function removeToken() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(TOKEN_KEY);
-}
-
-export async function apiFetch<T>(
-  url: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const token = getToken();
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+export function notifyAuthChanged(type: "changed" | "logout" | "expired") {
+  if (type === "changed") {
+    sessionEndAnnounced = false;
+  } else {
+    if (sessionEndAnnounced) return;
+    sessionEndAnnounced = true;
   }
+  window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT, { detail: type }));
+  if (typeof BroadcastChannel !== "undefined") {
+    const channel = new BroadcastChannel("insightboard-session");
+    channel.postMessage(type);
+    channel.close();
+  }
+}
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
+export async function logout() {
+  const response = await fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "X-InsightBoard-Request": "1" },
   });
 
-  const data = await response.json();
+  if (!response.ok) throw new Error("Unable to sign out. Please try again.");
+  notifyAuthChanged("logout");
+}
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      removeToken();
+export async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
+  // Never send private CRM cookies or this CSRF header to another origin.
+  const target = new URL(url, window.location.origin);
+  if (target.origin !== window.location.origin) throw new Error("External API requests are not allowed");
 
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
-      }
-    }
-
-    throw new Error(data.message || "Request failed");
+  const headers = new Headers(options.headers);
+  if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (!["GET", "HEAD"].includes((options.method ?? "GET").toUpperCase())) {
+    headers.set("X-InsightBoard-Request", "1");
   }
 
-  return data;
+  const response = await fetch(target, { ...options, headers, credentials: "same-origin", cache: "no-store" });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    if (response.status === 401) notifyAuthChanged("expired");
+    throw new Error(data?.message || "Request failed");
+  }
+
+  return data as T;
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Alert,
   Box,
@@ -16,7 +15,8 @@ import {
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 
-import { apiFetch, removeToken } from "@/lib/apiClient";
+import { apiFetch, logout } from "@/lib/apiClient";
+import { getPreference, setPreference, removePreference } from "@/lib/preferences";
 
 type User = {
   _id?: string;
@@ -101,7 +101,6 @@ function validateBusinessName(value: string) {
 }
 
 export default function SettingsPage() {
-  const router = useRouter();
 
   const [user, setUser] = useState<User | null>(null);
   const [businessName, setBusinessName] = useState(DEFAULT_BUSINESS_NAME);
@@ -133,8 +132,8 @@ export default function SettingsPage() {
   const loadPreferences = useCallback(() => {
     if (typeof window === "undefined") return;
 
-    const savedBusinessName = localStorage.getItem(BUSINESS_NAME_KEY);
-    const savedThemeMode = localStorage.getItem(THEME_MODE_KEY);
+    const savedBusinessName = getPreference(BUSINESS_NAME_KEY);
+    const savedThemeMode = getPreference(THEME_MODE_KEY);
 
     if (savedBusinessName) setBusinessName(savedBusinessName);
     if (isThemeMode(savedThemeMode)) setThemeMode(savedThemeMode);
@@ -154,8 +153,8 @@ export default function SettingsPage() {
         return;
       }
 
-      localStorage.setItem(BUSINESS_NAME_KEY, businessNameValidation.value);
-      localStorage.setItem(THEME_MODE_KEY, themeMode);
+      setPreference(BUSINESS_NAME_KEY, businessNameValidation.value);
+      setPreference(THEME_MODE_KEY, themeMode);
 
       setBusinessName(businessNameValidation.value);
       notifyThemeChanged();
@@ -169,8 +168,8 @@ export default function SettingsPage() {
   }
 
   function handleResetPreferences() {
-    localStorage.removeItem(BUSINESS_NAME_KEY);
-    localStorage.removeItem(THEME_MODE_KEY);
+    removePreference(BUSINESS_NAME_KEY);
+    removePreference(THEME_MODE_KEY);
 
     setBusinessName(DEFAULT_BUSINESS_NAME);
     setThemeMode(DEFAULT_THEME_MODE);
@@ -181,22 +180,17 @@ export default function SettingsPage() {
     setError("");
   }
 
- async function handleLogout() {
-  setLoggingOut(true);
-  setError("");
-
-  try {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "same-origin",
-    });
-  } catch {
-  } finally {
-    removeToken();
-    router.replace("/");
-    router.refresh();
+  async function handleLogout() {
+    setLoggingOut(true);
+    setError("");
+    try {
+      await logout();
+    } catch {
+      setError("Unable to sign out. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
   }
-}
 
         useEffect(() => {
           const timeoutId = window.setTimeout(() => {

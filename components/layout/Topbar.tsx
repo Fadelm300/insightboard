@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   AppBar,
   Box,
@@ -29,7 +29,7 @@ import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import SettingsIcon from "@mui/icons-material/Settings";
 
-import { removeToken } from "@/lib/apiClient";
+import { AUTH_CHANGED_EVENT, logout } from "@/lib/apiClient";
 
 const drawerWidth = 240;
 
@@ -53,21 +53,15 @@ function isActivePath(pathname: string, itemPath: string) {
 }
 
 export default function Topbar() {
-  const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   async function handleLogout() {
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-      });
+      await logout();
     } catch {
-      // frontend logout should still continue
+      window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT, { detail: "error" }));
     }
-
-    removeToken();
-    router.replace("/");
   }
 
   function handleMobileDrawerClose() {

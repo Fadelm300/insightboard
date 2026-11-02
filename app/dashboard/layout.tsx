@@ -1,15 +1,19 @@
 import { ReactNode } from "react";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 import { Box, Toolbar } from "@mui/material";
 
 import AuthGuard from "@/components/auth/AuthGuard";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: ReactNode;
 }) {
+  if (!(await getCurrentUser())) redirect("/login");
+
   return (
     <AuthGuard>
       <Box
