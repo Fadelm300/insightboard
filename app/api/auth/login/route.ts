@@ -7,6 +7,7 @@ import { successResponse, errorResponse } from "@/lib/apiResponse";
 import { createSession } from "@/lib/auth";
 import { isTrustedMutation } from "@/lib/sessionPolicy";
 import { allowLoginAttempt } from "@/lib/loginRateLimit";
+import { getPermissions, isAccountEnabled } from "@/lib/permissions";
 
 import User from "@/models/User";
 
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
     const passwordHash = user?.password ?? "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
     const isPasswordValid = await bcrypt.compare(cleanPassword, passwordHash);
 
-    if (!user || !isPasswordValid) {
+    if (!user || !isPasswordValid || !isAccountEnabled(user)) {
       return loginFail("Invalid email or password");
     }
 
@@ -87,11 +88,12 @@ export async function POST(req: NextRequest) {
           name: user.name,
           email: user.email,
           role: user.role,
+          allowedPermissions: getPermissions(user),
         },
       },
       "Login successful"
     );
-    await createSession(user._id.toString(), req, response);
+    await createSession(user._id.toString(), req, response, user.authVersion ?? 0);
     return response;
   } catch {
     logServerError("LOGIN_API_ERROR");
