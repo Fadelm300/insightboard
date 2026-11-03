@@ -25,14 +25,14 @@ export async function allowLoginAttempt(req: NextRequest, email: string) {
     try {
       record = await LoginAttempt.findOneAndUpdate({ _id: key }, update, {
         upsert: true,
-        new: true,
+        returnDocument: "after",
       }).lean();
     } catch (error) {
       if (!(typeof error === "object" && error !== null && "code" in error && error.code === 11000)) {
         throw error;
       }
 
-      record = await LoginAttempt.findOneAndUpdate({ _id: key }, { $inc: { attempts: 1 } }, { new: true }).lean();
+      record = await LoginAttempt.findOneAndUpdate({ _id: key }, { $inc: { attempts: 1 } }, { returnDocument: "after" }).lean();
     }
 
     if (!record || (record as unknown as { attempts: number }).attempts > maximum) {
