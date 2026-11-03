@@ -47,3 +47,5 @@ next-env.d.ts
 /project-tree.txt
 .env.example
 .env.development.local
+
+/docs/
