@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Deal from "@/models/Deal";
 import Client from "@/models/Client";
 
@@ -304,11 +304,8 @@ async function getDealId(context: RouteContext) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -335,11 +332,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.update");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -385,7 +379,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       },
       values,
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     ).populate("clientId", "companyName contactPerson email status");
@@ -402,11 +396,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.delete");
+    if (authorization.response) return authorization.response;
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
@@ -426,7 +417,7 @@ if (demoBlock) return demoBlock;
         isDeleted: true,
       },
       {
-        new: true,
+        returnDocument: "after",
       }
     );
 
