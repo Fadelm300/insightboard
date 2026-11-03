@@ -39,6 +39,7 @@ function loadSource(relativePath, dependencies = {}, environment = {}) {
 }
 
 const environment = loadSource("lib/serverEnv.ts");
+const permissions = loadSource("lib/permissions.ts");
 
 test("missing server settings identify the key without exposing values", () => {
   assert.throws(() => environment.getMongoUri({}), /MONGODB_URI/);
@@ -87,6 +88,7 @@ function diagnostic({ mode, user = null, failure = false }) {
           return user;
         },
       },
+      "@/lib/permissions": permissions,
       "@/lib/mongodb": {
         __esModule: true,
         default: async () => {
@@ -120,7 +122,7 @@ test("production and preview builds cannot authenticate or contact the database 
 });
 
 test("development diagnostics require an authenticated admin", async () => {
-  for (const [user, status] of [[null, 401], [{ role: "viewer" }, 403]]) {
+  for (const [user, status] of [[null, 401], [{ role: "viewer" }, 403], [{ role: "admin", allowedPermissions: [] }, 403]]) {
     const { route, calls } = diagnostic({ mode: "development", user });
     assert.equal((await route.GET({})).status, status);
     assert.equal(calls.database, 0);
