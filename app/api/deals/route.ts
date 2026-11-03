@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Deal from "@/models/Deal";
 import Client from "@/models/Client";
 
@@ -272,11 +272,8 @@ function validateDealPayload(body: unknown) {
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -349,11 +346,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.create");
+    if (authorization.response) return authorization.response;
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
