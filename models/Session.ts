@@ -3,6 +3,7 @@ import { Schema, model, models } from "mongoose";
 const SessionSchema = new Schema({
   tokenHash: { type: String, required: true, unique: true },
   userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+  authVersion: { type: Number, default: 0, min: 0 },
   lastActiveAt: { type: Date, required: true },
   expiresAt: { type: Date, required: true },
   absoluteExpiresAt: { type: Date, required: true },

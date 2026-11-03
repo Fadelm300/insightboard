@@ -1,4 +1,5 @@
 import { Schema, model, models } from "mongoose";
+import { PERMISSIONS, USER_ROLES } from "@/lib/permissions";
 
 const UserSchema = new Schema(
   {
@@ -27,8 +28,28 @@ const UserSchema = new Schema(
 
     role: {
       type: String,
-      enum: ["admin"],
-      default: "admin",
+      enum: USER_ROLES,
+      default: "employee",
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    allowedPermissions: {
+      type: [{ type: String, enum: PERMISSIONS }],
+      default: undefined,
+    },
+    // Assigned by the provisioning API; managers can manage only their own accounts.
+    managedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    // Existing users and sessions without this field resolve to revision zero.
+    authVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
   },
   {
