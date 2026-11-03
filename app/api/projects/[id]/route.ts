@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Project from "@/models/Project";
 import Client from "@/models/Client";
 import Deal from "@/models/Deal";
@@ -131,11 +131,8 @@ function isPastDate(value: string) {
 }
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "projects.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -164,11 +161,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "projects.update");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -425,11 +419,8 @@ const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "projects.delete");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
