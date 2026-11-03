@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Project from "@/models/Project";
 import Revenue from "@/models/Revenue";
 import Expense from "@/models/Expense";
@@ -26,11 +26,8 @@ type ClientFinanceItem = {
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "finance.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
