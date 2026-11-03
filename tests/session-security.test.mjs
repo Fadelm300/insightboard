@@ -24,6 +24,7 @@ function load(relative, dependencies = {}, env = {}, Clock = Date) {
 }
 
 const policy = load("lib/sessionPolicy.ts");
+const permissions = load("lib/permissions.ts");
 const headers = (origin = "https://crm.example", custom = "1") => new Headers({ origin, "x-insightboard-request": custom });
 
 test("idle policy is 2 minutes locally, 20 in production, with an 8-hour absolute cap", () => {
@@ -78,7 +79,9 @@ function sessionHarness() {
     create: async (row) => { rows.push(row); },
     deleteOne: async ({ tokenHash }) => { rows = rows.filter((row) => row.tokenHash !== tokenHash); },
     findOne: ({ tokenHash }) => ({ lean: async () => rows.find((row) => row.tokenHash === tokenHash) ?? null }),
-    findOneAndUpdate: (query, update) => ({ lean: async () => {
+    findOneAndUpdate: (query, update, options) => ({ lean: async () => {
+      assert.equal(options.returnDocument, "after");
+      assert.equal("new" in options, false);
       const row = rows.find((entry) => entry.tokenHash === query.tokenHash && entry.expiresAt > query.expiresAt.$gt && entry.absoluteExpiresAt > query.absoluteExpiresAt.$gt);
       if (!row) return null;
       mutations += 1;
@@ -90,6 +93,7 @@ function sessionHarness() {
     "node:crypto": crypto,
     "next/headers": { cookies: async () => ({ get: () => undefined }) },
     "@/lib/mongodb": { __esModule: true, default: async () => { connections += 1; } },
+    "@/lib/permissions": permissions,
     "@/lib/sessionPolicy": load("lib/sessionPolicy.ts", {}, { NODE_ENV: "production" }),
     "@/models/Session": { __esModule: true, default: Session },
     "@/models/User": { __esModule: true, default: { findById: () => ({ select: () => ({ lean: async () => userPresent ? user : null }) }) } },
@@ -100,11 +104,36 @@ function sessionHarness() {
     return { method, url: "https://crm.example/api/auth/renew", headers: headers(), cookies: { get: () => token ? { value: token } : undefined } };
   }
   return {
-    auth, response, request, cookieWrites,
+    auth, response, request, cookieWrites, user,
     get rows() { return rows; }, get connections() { return connections; }, get mutations() { return mutations; },
     advance(ms) { now += ms; }, removeUser() { userPresent = false; },
   };
 }
+
+test("disabled users, reserved roles and changed account revisions invalidate existing cookies", async () => {
+  for (const change of [{ isActive: false }, { role: "programmer" }, { role: "unknown" }, { authVersion: 1 }]) {
+    const h = sessionHarness();
+    await h.auth.createSession("user-1", h.request(), h.response);
+    const token = h.cookieWrites[0][1];
+    assert.ok(await h.auth.getAuthUser(h.request(token)));
+    Object.assign(h.user, change);
+    assert.equal(await h.auth.getAuthUser(h.request(token)), null);
+  }
+});
+
+test("resource grants are read from the current account on every authenticated request", async () => {
+  const h = sessionHarness();
+  await h.auth.createSession("user-1", h.request(), h.response);
+  const token = h.cookieWrites[0][1];
+  h.user.role = "employee";
+  h.user.allowedPermissions = ["projects.read", "projects.create"];
+  let user = await h.auth.getAuthUser(h.request(token));
+  assert.equal(permissions.hasPermission(user, "projects.create"), true);
+  assert.equal(permissions.hasPermission(user, "finance.read"), false);
+  h.user.allowedPermissions = ["projects.read"];
+  user = await h.auth.getAuthUser(h.request(token));
+  assert.equal(permissions.hasPermission(user, "projects.create"), false);
+});
 
 test("login creates a random identifier but persists only its hash; missing or malformed cookies skip DB", async () => {
   const h = sessionHarness();
@@ -185,7 +214,9 @@ test("login throttling is persisted, hashed, and shared across instances", async
   const limiter = load("lib/loginRateLimit.ts", {
     "node:crypto": crypto,
     "@/models/LoginAttempt": { __esModule: true, default: {
-      findOneAndUpdate: ({ _id }, update) => ({ lean: async () => {
+      findOneAndUpdate: ({ _id }, update, options) => ({ lean: async () => {
+        assert.equal(options.returnDocument, "after");
+        assert.equal("new" in options, false);
         const row = records.get(_id) ?? { attempts: 0, expiresAt: update.$setOnInsert?.expiresAt };
         row.attempts += 1;
         records.set(_id, row);
@@ -212,6 +243,7 @@ function loginHarness(userPresent = true, validPassword = true) {
     "@/lib/mongodb": { __esModule: true, default: async () => { connected += 1; } },
     "@/lib/apiResponse": { successResponse: makeResponse, errorResponse: (message, status) => makeResponse({}, message, status) },
     "@/lib/auth": { createSession: async (id, req, response) => { created += 1; response.headers.set("set-cookie", "test-session=opaque; HttpOnly"); } },
+    "@/lib/permissions": permissions,
     "@/lib/sessionPolicy": policy,
     "@/lib/loginRateLimit": { allowLoginAttempt: async () => true },
     "@/models/User": { __esModule: true, default: { findOne: async () => userPresent ? { _id: "user-1", name: "Example", email: "example@example.invalid", role: "admin", password: "test-hash" } : null } },
