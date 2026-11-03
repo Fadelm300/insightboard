@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import connectDB from "@/lib/mongodb";
 import { logServerError } from "@/lib/serverLogger";
 
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
       return diagnosticResponse("Unauthorized", 401);
     }
 
-    if (user.role !== "admin") {
+    if (user.role !== "admin" || !hasPermission(user, "system.diagnose")) {
       return diagnosticResponse("Forbidden", 403);
     }
 
