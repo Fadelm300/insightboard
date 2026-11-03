@@ -15,15 +15,22 @@ import {
 } from "@/lib/sessionPolicy";
 import Session from "@/models/Session";
 import User from "@/models/User";
+import { getPermissions, isAccountEnabled, type PermissionSubject } from "@/lib/permissions";
 
 type SessionRecord = {
   tokenHash: string;
   userId: { toString(): string };
   expiresAt: Date;
   absoluteExpiresAt: Date;
+  authVersion?: number;
 };
 
-export type AuthUser = { id: string; name: string; email: string; role: string };
+export type AuthUser = PermissionSubject & {
+  id: string;
+  name: string;
+  email: string;
+  allowedPermissions: string[];
+};
 
 function hashSessionToken(token: string | undefined) {
   if (!token || !/^[a-f0-9]{64}$/.test(token)) {
@@ -45,14 +52,21 @@ async function lookupSession(token: string | undefined) {
     return null;
   }
 
-  const user = await User.findById(session.userId).select("_id name email role").lean();
+  const user = await User.findById(session.userId)
+    .select("_id name email role isActive allowedPermissions authVersion").lean();
 
   if (!user || isSessionExpired(session.expiresAt, session.absoluteExpiresAt, Date.now())) return null;
 
-  const data = user as unknown as AuthUser & { _id: { toString(): string } };
+  const data = user as unknown as PermissionSubject & {
+    _id: { toString(): string }; name: string; email: string; authVersion?: number;
+  };
+  if (!isAccountEnabled(data) || (data.authVersion ?? 0) !== (session.authVersion ?? 0)) return null;
   return {
     session,
-    user: { id: data._id.toString(), name: data.name, email: data.email, role: data.role },
+    user: {
+      id: data._id.toString(), name: data.name, email: data.email, role: data.role,
+      allowedPermissions: getPermissions(data),
+    },
   };
 }
 
@@ -80,7 +94,7 @@ export function sessionDetails(session: Pick<SessionRecord, "expiresAt" | "absol
   };
 }
 
-export async function createSession(userId: string, req: NextRequest, response: NextResponse) {
+export async function createSession(userId: string, req: NextRequest, response: NextResponse, authVersion = 0) {
   await connectDB();
   const previousHash = hashSessionToken(req.cookies.get(sessionCookieName())?.value);
   if (previousHash) await Session.deleteOne({ tokenHash: previousHash });
@@ -91,7 +105,7 @@ export async function createSession(userId: string, req: NextRequest, response: 
   const absoluteExpiresAt = new Date(now + SESSION_ABSOLUTE_MS);
   const expiresAt = nextSessionExpiry(now, absoluteExpiresAt.getTime(), sessionIdleMs());
 
-  await Session.create({ tokenHash, userId, lastActiveAt: new Date(now), expiresAt, absoluteExpiresAt });
+  await Session.create({ tokenHash, userId, authVersion, lastActiveAt: new Date(now), expiresAt, absoluteExpiresAt });
   response.cookies.set(sessionCookieName(), token, { ...sessionCookieOptions(), expires: absoluteExpiresAt });
   response.headers.set("Cache-Control", "no-store");
 }
@@ -114,7 +128,7 @@ export async function renewSession(req: NextRequest, explicit: boolean) {
   const updated = await Session.findOneAndUpdate(
     { tokenHash: current.session.tokenHash, expiresAt: { $gt: new Date(now) }, absoluteExpiresAt: { $gt: new Date(now) } },
     { $max: { expiresAt, lastActiveAt: new Date(now) } },
-    { new: true }
+    { returnDocument: "after" }
   ).lean() as unknown as SessionRecord | null;
 
   if (!updated) return null;
