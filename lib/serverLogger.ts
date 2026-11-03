@@ -1,4 +1,5 @@
 type ServerErrorEvent =
+  | "USER_MANAGEMENT_ERROR"
   | "LOGIN_API_ERROR"
   | "ME_ERROR"
   | "GET_CLIENTS_FINANCE_SUMMARY_ERROR"
