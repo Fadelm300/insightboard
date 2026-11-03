@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Expense from "@/models/Expense";
 import "@/models/Project";
 
@@ -82,11 +82,8 @@ function isFutureDate(value: string) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "expenses.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -113,11 +110,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "expenses.update");
+    if (authorization.response) return authorization.response;
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
@@ -220,11 +214,8 @@ if (demoBlock) return demoBlock;
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "expenses.delete");
+    if (authorization.response) return authorization.response;
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
