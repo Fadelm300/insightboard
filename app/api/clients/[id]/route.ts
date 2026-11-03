@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Client from "@/models/Client";
 import { blockIfDemoMode } from "@/lib/demoMode";
 type RouteContext = {
@@ -254,11 +254,8 @@ async function getClientId(context: RouteContext) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "clients.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -285,11 +282,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "clients.update");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -314,7 +308,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       },
       values,
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     );
@@ -331,11 +325,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = await getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "clients.delete");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -352,7 +343,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
         isDeleted: { $ne: true },
       },
       { isDeleted: true },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!client) {
