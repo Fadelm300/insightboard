@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { getPermissions } from "@/lib/permissions";
+import PermissionProvider from "@/components/access/PermissionProvider";
 import { Box, Toolbar } from "@mui/material";
 
 import AuthGuard from "@/components/auth/AuthGuard";
@@ -12,10 +14,12 @@ export default async function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  if (!(await getCurrentUser())) redirect("/login");
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
   return (
     <AuthGuard>
+      <PermissionProvider permissions={getPermissions(user)}>
       <Box
         sx={{
           display: "flex",
@@ -49,6 +53,7 @@ export default async function DashboardLayout({
           {children}
         </Box>
       </Box>
+    </PermissionProvider>
     </AuthGuard>
   );
 }
