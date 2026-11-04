@@ -24,9 +24,13 @@ import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import SettingsIcon from "@mui/icons-material/Settings";
 
+import { usePermissions } from "@/components/access/PermissionProvider";
+import { PAGE_PERMISSIONS } from "@/lib/permissions";
+
 const drawerWidth = 240;
 
 const menuItems = [
+  { text: "Users", icon: <PeopleIcon />, path: "/dashboard/users" },
   { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
   { text: "Clients", icon: <PeopleIcon />, path: "/dashboard/clients" },
   { text: "Deals", icon: <HandshakeIcon />, path: "/dashboard/deals" },
@@ -47,6 +51,8 @@ function isActivePath(pathname: string, itemPath: string) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const permissions = usePermissions();
+  const visibleMenuItems = menuItems.filter((item) => permissions.includes(PAGE_PERMISSIONS[item.path as keyof typeof PAGE_PERMISSIONS]));
 
   return (
     <Drawer
@@ -140,7 +146,7 @@ export default function Sidebar() {
       </Toolbar>
 
       <List sx={{ px: 1.25, py: 1 }}>
-        {menuItems.map((item) => {
+        {visibleMenuItems.map((item) => {
           const selected = isActivePath(pathname, item.path);
 
           return (
