@@ -17,6 +17,7 @@ import {
 import { alpha } from "@mui/material/styles";
 
 import { notifyAuthChanged } from "@/lib/apiClient";
+import { firstAllowedPage } from "@/lib/permissions";
 
 type LoginResponse = {
   success: boolean;
@@ -28,6 +29,7 @@ type LoginResponse = {
       name?: string;
       email?: string;
       role?: string;
+      allowedPermissions?: string[];
     };
   };
 };
@@ -203,7 +205,10 @@ const [demoNotice, setDemoNotice] = useState("");
       }
 
       notifyAuthChanged("changed");
-      router.replace("/dashboard");
+      router.replace(firstAllowedPage({
+        role: data.data?.user?.role ?? "",
+        allowedPermissions: data.data?.user?.allowedPermissions ?? [],
+      }) ?? "/dashboard");
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
