@@ -27,9 +27,14 @@ export class UserManagementError extends Error {
 }
 
 export function publicUser(record: UserRecord) {
+  // The management editor needs the configured grants even while sign-in is disabled.
+  const allowedPermissions = getPermissions({
+    role: record.role,
+    allowedPermissions: record.allowedPermissions,
+  });
   return {
     id: record._id.toString(), name: record.name, email: record.email, role: record.role,
-    isActive: record.isActive !== false, allowedPermissions: getPermissions(record),
+    isActive: record.isActive !== false, allowedPermissions,
     managedBy: record.managedBy?.toString() ?? null, createdAt: record.createdAt,
     version: record.authVersion ?? 0,
   };

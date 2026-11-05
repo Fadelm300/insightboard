@@ -145,6 +145,22 @@ test("self, protected roles and other managers' teams cannot be modified", async
   await assert.rejects(h.module.saveManagedUser(h.actor, updateInput(), actorId), { status: 404 });
 });
 
+test("editing a disabled account preserves its configured grants without granting access", async () => {
+  const h = harness();
+  const grants = ["projects.read", "projects.financial.read", "projects.update", "projects.financial.manage"];
+  await h.module.saveManagedUser(h.actor, { ...updateInput(), allowedPermissions: grants, isActive: false }, targetId);
+  const row = h.rows.get(targetId);
+  const disabled = h.module.publicUser(row);
+  assert.deepEqual(Array.from(disabled.allowedPermissions).sort(), [...grants].sort());
+  assert.equal(policy.hasPermission(row, "projects.financial.read"), false);
+  assert.equal(policy.hasPermission(row, "projects.financial.manage"), false);
+  const enabled = await h.module.saveManagedUser(h.actor, {
+    ...updateInput(), version: disabled.version, allowedPermissions: disabled.allowedPermissions, isActive: true,
+  }, targetId);
+  assert.deepEqual(Array.from(enabled.allowedPermissions).sort(), [...grants].sort());
+  assert.equal(policy.hasPermission(h.rows.get(targetId), "projects.financial.manage"), true);
+});
+
 test("stale forms and stale authenticated actor state cannot authorize account changes", async () => {
   const h = harness();
   await assert.rejects(h.module.saveManagedUser(h.actor, { ...updateInput(), version: 2 }, targetId), { status: 409 });
