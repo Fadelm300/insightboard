@@ -1,3 +1,4 @@
+import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { hasPermission } from "@/lib/permissions";
 import { projectFinancialInput, canReadProjectFinancials, projectDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -372,10 +373,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (payload.dealId) await ensureProjectDealIndex();
+
     const project = await Project.create(payload);
 
     return successResponse({ project: projectDTO(project, authorization.user!) }, "Project created successfully", 201);
-  } catch {
+  } catch (error) {
+    if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
+    if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);
     return errorResponse("Server error", 500);
   }
 }

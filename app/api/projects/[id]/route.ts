@@ -1,3 +1,4 @@
+import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { canManageProjectFinancials, projectFinancialInput, projectDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
@@ -338,6 +339,8 @@ const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
         ? { $set: setPayload, $unset: unsetPayload }
         : { $set: setPayload };
 
+    if (dealId) await ensureProjectDealIndex();
+
     const project = await Project.findOneAndUpdate(
       { _id: id, isDeleted: { $ne: true } },
       updatePayload,
@@ -354,7 +357,9 @@ const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
     }
 
     return successResponse({ project: projectDTO(project, authorization.user!) }, "Project updated successfully");
-  } catch {
+  } catch (error) {
+    if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
+    if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);
     return errorResponse("Server error", 500);
   }
 }

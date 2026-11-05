@@ -1,3 +1,4 @@
+import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { canManageProjectFinancials, projectDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
@@ -69,8 +70,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const authorization = await authorizeRequest(req, "deals.convert");
     if (authorization.response) return authorization.response;
     if (!canManageProjectFinancials(authorization.user!)) return errorResponse("Project financial permission required", 403);
-const demoBlock = blockIfDemoMode();
-if (demoBlock) return demoBlock;
+    const demoBlock = blockIfDemoMode();
+    if (demoBlock) return demoBlock;
     await connectDB();
 
     const { id } = await context.params;
@@ -114,12 +115,11 @@ if (demoBlock) return demoBlock;
 
     const existingProject = await Project.findOne({
       dealId: deal._id,
-      isDeleted: { $ne: true },
     });
 
     if (existingProject) {
       return errorResponse(
-        "This deal has already been converted to a project",
+        "This deal already has a project, including archived projects",
         409
       );
     }
@@ -138,6 +138,8 @@ if (demoBlock) return demoBlock;
     if (!Number.isFinite(projectPrice) || projectPrice <= 0) {
       return errorResponse("Deal price must be greater than 0", 400);
     }
+
+    await ensureProjectDealIndex();
 
     const project = await Project.create({
       clientId: deal.clientId,
@@ -158,7 +160,9 @@ if (demoBlock) return demoBlock;
       "Deal converted to project successfully",
       201
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
+    if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);
     return errorResponse("Server error", 500);
   }
 }

@@ -141,6 +141,7 @@ function routeFixture(actor, options = {}) {
   };
   const deps = {
     "@/lib/permissions": permissions, "@/lib/crmData": data,
+    "@/lib/projectDealLink": { ensureProjectDealIndex: async () => {}, isProjectDealConflict: () => false, ProjectDealLinkUnavailable: class extends Error {} },
     "@/lib/authorization": { authorizeRequest: async (_req, permission) => permissions.hasPermission(actor, permission) ? { user: actor } : { response: { status: 403 } } },
     "@/lib/mongodb": { __esModule: true, default: async () => {} },
     "@/lib/demoMode": { blockIfDemoMode: () => null },
@@ -218,6 +219,7 @@ for (const [resource, modelName] of [["revenue", "Revenue"], ["expenses", "Expen
     const rows = { populate() { return this; }, sort() { return this; }, skip() { return this; }, limit() { return this; }, then(resolve, reject) { return Promise.resolve([]).then(resolve, reject); } };
     const deps = {
       "@/lib/permissions": permissions, "@/lib/crmData": data,
+    "@/lib/projectDealLink": { ensureProjectDealIndex: async () => {}, isProjectDealConflict: () => false, ProjectDealLinkUnavailable: class extends Error {} },
       "@/lib/authorization": { authorizeRequest: async () => ({ user: actor }) },
       "@/lib/mongodb": { __esModule: true, default: async () => {} },
       "@/lib/demoMode": { blockIfDemoMode: () => null },
