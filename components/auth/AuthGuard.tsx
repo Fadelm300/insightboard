@@ -9,6 +9,8 @@ import { AUTH_CHANGED_EVENT, logout, notifyAuthChanged } from "@/lib/apiClient";
 type SessionView = { expiresAt: string; absoluteExpiresAt: string; serverNow: string; warningSeconds: number };
 type Snapshot = { expires: number; absolute: number; offset: number; warning: number };
 
+const RETRY_DELAYS_MS = [2_000, 4_000, 8_000];
+
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const leaving = useRef(false);
@@ -28,6 +30,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     let inFlight = false;
     let continueRequested = false;
     let channel: BroadcastChannel | undefined;
+    const statusRetry = { failures: 0, nextAttempt: 0 };
+    const renewRetry = { failures: 0, nextAttempt: 0 };
 
     function leave(reason: "expired" | "logout" = "expired") {
       // Several requests and tabs can report the same end concurrently.
@@ -51,8 +55,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       setError("");
     }
 
-    async function request(mode?: "activity" | "continue") {
+    async function request(mode?: "activity" | "continue", manual = false) {
       if (!active || leaving.current) return;
+      const retry = mode ? renewRetry : statusRetry;
+      if (!manual && (retry.failures > RETRY_DELAYS_MS.length || Date.now() < retry.nextAttempt)) return;
       if (inFlight) {
         if (mode === "continue") continueRequested = true;
         return;
@@ -76,11 +82,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         }
         if (!response.ok) throw new Error("تعذر التأكد من الجلسة. حاول مرة ثانية.");
         const data = await response.json();
-        if (active) {
-          if (typeof data.data.user.id !== "string") throw new Error("Invalid user response");
-          setUserId(data.data.user.id);
-          update(data.data.session);
-        }
+        if (!active || leaving.current) return;
+        if (typeof data.data.user.id !== "string") throw new Error("Invalid user response");
+        setUserId(data.data.user.id);
+        update(data.data.session);
+        retry.failures = 0;
+        retry.nextAttempt = 0;
 
         if (mode) {
           lastRenew = Date.now();
@@ -88,7 +95,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           channel?.postMessage("changed");
         }
       } catch {
-        if (active) {
+        if (active && !leaving.current) {
+          retry.failures = Math.min(retry.failures + 1, RETRY_DELAYS_MS.length + 1);
+          retry.nextAttempt = Date.now() + (RETRY_DELAYS_MS[retry.failures - 1] ?? 0);
           setError("تعذر الاتصال للتحقق من الجلسة. حاول مرة ثانية.");
           if (!snapshot || snapshot.expires <= Date.now() + snapshot.offset) setChecking(true);
         }
@@ -97,7 +106,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         if (active) setBusy(false);
         if (continueRequested && active && !leaving.current) {
           continueRequested = false;
-          void request("continue");
+          void request("continue", true);
         }
       }
     }
@@ -122,8 +131,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       if (event.persisted) { setChecking(true); void request(); }
     }
 
-    function continueSession() { void request("continue"); }
-    function retrySession() { void request(); }
+    function continueSession() { void request("continue", true); }
+    function retrySession() { void request(undefined, true); }
 
     if (typeof BroadcastChannel !== "undefined") {
       channel = new BroadcastChannel("insightboard-session");

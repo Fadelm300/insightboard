@@ -15,6 +15,11 @@ function harness(initialUnauthorized = false) {
   const broadcasts = [];
   const fetches = [];
   const pending = [];
+  let now = Date.now();
+  let interval;
+  class TestDate extends Date {
+    static now() { return now; }
+  }
   let refreshes = 0;
   const channels = [];
   const router = { replace: (url) => navigations.push(url), refresh: () => { refreshes += 1; } };
@@ -22,7 +27,7 @@ function harness(initialUnauthorized = false) {
   const fakeWindow = {
     addEventListener: add,
     removeEventListener: (name) => events.delete(name),
-    setInterval: () => 1,
+    setInterval: (callback) => { interval = callback; return 1; },
     clearInterval: () => {},
     dispatchEvent: (event) => events.get(event.type)?.(event),
   };
@@ -56,13 +61,16 @@ function harness(initialUnauthorized = false) {
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const exports = {};
   vm.runInNewContext(compiled, {
-    exports, console, Date, Number, Math, JSON,
+    exports, console, Date: TestDate, Number, Math, JSON,
     window: fakeWindow,
     document: { visibilityState: "visible", addEventListener: add, removeEventListener: (name) => events.delete(name) },
     BroadcastChannel: FakeChannel,
     fetch: (url, options) => {
       fetches.push({ url, options });
-      return new Promise((resolve) => pending.push(resolve));
+      return new Promise((resolve, reject) => {
+        pending.push(resolve);
+        resolve.networkFailure = reject;
+      });
     },
     require: (name) => {
       if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
@@ -71,16 +79,24 @@ function harness(initialUnauthorized = false) {
   });
   exports.default({ children: null });
   const cleanup = effects[0]();
-  const valid = () => ({ status: 200, ok: true, json: async () => ({ data: { user: { id: "test-user" }, session: { expiresAt: new Date(Date.now()+120_000).toISOString(), absoluteExpiresAt: new Date(Date.now()+28_800_000).toISOString(), serverNow: new Date().toISOString(), warningSeconds: 30 } } }) });
+  const valid = () => ({ status: 200, ok: true, json: async () => ({ data: { user: { id: "test-user" }, session: { expiresAt: new Date(now+120_000).toISOString(), absoluteExpiresAt: new Date(now+28_800_000).toISOString(), serverNow: new Date(now).toISOString(), warningSeconds: 30 } } }) });
   return {
     navigations, broadcasts, fetches, pending, cleanup,
     get refreshes() { return refreshes; },
     resolveInitial: () => pending.shift()(initialUnauthorized ? {status:401,ok:false} : valid()),
     resolveNext: () => pending.shift()(valid()),
+    rejectNext: () => pending.shift().networkFailure(new Error("network down")),
+    respond: (status) => pending.shift()({ status, ok: false }),
+    tick: (milliseconds, activity = false) => {
+      now += milliseconds;
+      if (activity) events.get("keydown")?.({ isTrusted: true });
+      interval();
+    },
     auth: (type) => events.get("insightboard-auth-changed")?.({detail:type}),
     broadcast: (type) => channels[0].onmessage?.({data:type}),
     continue: () => events.get("insightboard-session-continue")?.(),
     visible: () => events.get("visibilitychange")?.(),
+    retry: () => events.get("insightboard-session-retry")?.(),
   };
 }
 
@@ -116,5 +132,45 @@ test("explicit continuation is queued behind an in-flight status request", async
   assert.equal(h.fetches[1].url, "/api/auth/renew");
   assert.equal(JSON.parse(h.fetches[1].options.body).mode, "continue");
   h.resolveNext(); await settle();
+  h.cleanup();
+});
+
+test("activity renewals back off after server and network failures and stop after three retries", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  h.tick(1000, true);
+  assert.equal(h.fetches.length, 2);
+  h.respond(503); await settle();
+  for (const [index, delay] of [2000, 4000, 8000].entries()) {
+    h.tick(delay - 1, true);
+    assert.equal(h.fetches.length, index + 2);
+    h.tick(1, true);
+    assert.equal(h.fetches.length, index + 3);
+    h.rejectNext(); await settle();
+  }
+  h.tick(10_000, true);
+  assert.equal(h.fetches.length, 5);
+  h.visible();
+  h.resolveNext(); await settle();
+  h.tick(1000, true);
+  assert.equal(h.fetches.length, 6, "status success does not reset renewal failures");
+  h.continue();
+  h.resolveNext(); await settle();
+  h.tick(11_000, true);
+  assert.equal(h.fetches.length, 8, "successful continuation restores automatic renewal");
+  h.cleanup();
+});
+
+test("expired session checks back off and a manual retry still handles server expiry", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  h.tick(120_000);
+  h.respond(503); await settle();
+  h.visible();
+  h.broadcast("changed");
+  assert.equal(h.fetches.length, 2);
+  h.retry();
+  h.respond(401); await settle();
+  assert.deepEqual(h.navigations, ["/login?reason=session-expired"]);
   h.cleanup();
 });
