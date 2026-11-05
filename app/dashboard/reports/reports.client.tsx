@@ -1,0 +1,2008 @@
+"use client";
+
+import { usePermission } from "@/components/access/PermissionProvider";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Pagination,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import type { SxProps, Theme } from "@mui/material/styles";
+import * as XLSX from "xlsx";
+
+import { apiFetch } from "@/lib/apiClient";
+
+import EmptyTableRow from "./_components/EmptyTableRow";
+import FilteredPrintPanel from "./_components/FilteredPrintPanel";
+import ReportCard from "./_components/ReportCard";
+import ReportTable from "./_components/ReportTable";
+
+import type {
+  ApiResponse,
+  ClientFinance,
+  ClientRecord,
+  Deal,
+  ExpenseRecord,
+  FilteredClientFinance,
+  FilteredProjectFinance,
+  FilteredProjectTypeFinance,
+  FinanceSummary,
+  MonthlyFinance,
+  ProjectFinance,
+  ProjectRecord,
+  ProjectTypeFinance,
+  RevenueRecord,
+} from "./_lib/reportTypes";
+
+import {
+  buildHtmlTable,
+  emptySummary,
+  escapeHtml,
+  extractList,
+  extractObject,
+  formatDateToInputValue,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  getEntityId,
+  getMonthKey,
+  getTodayFileDate,
+  setSheetColumnWidths,
+} from "./_lib/reportUtils";
+
+const REPORT_TABLE_ROWS_PER_PAGE = 7;
+const PROJECT_FINANCE_ROWS_PER_PAGE = REPORT_TABLE_ROWS_PER_PAGE;
+
+function getTableHeadSx(): SxProps<Theme> {
+  return {
+    bgcolor: (theme) =>
+      theme.palette.mode === "dark"
+        ? alpha(theme.palette.primary.main, 0.08)
+        : alpha(theme.palette.primary.main, 0.04),
+  };
+}
+
+function getProfitTextSx(value?: number): SxProps<Theme> {
+  const numberValue = Number(value || 0);
+
+  return {
+    fontWeight: 900,
+    color: numberValue >= 0 ? "success.main" : "error.main",
+  };
+}
+
+function getRevenueTextSx(): SxProps<Theme> {
+  return {
+    fontWeight: 900,
+    color: "success.main",
+  };
+}
+
+function getExpenseTextSx(): SxProps<Theme> {
+  return {
+    fontWeight: 900,
+    color: "error.main",
+  };
+}
+
+function getProgressChipSx(value?: number): SxProps<Theme> {
+  const progress = Number(value || 0);
+  const color =
+    progress >= 100 ? "#10B981" : progress >= 50 ? "#0EA5E9" : "#F59E0B";
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
+
+
+function getTotalPagesFromResponse(response: ApiResponse) {
+  const responseData = (response as { data?: unknown; totalPages?: unknown }).data;
+
+  if (
+    responseData &&
+    typeof responseData === "object" &&
+    !Array.isArray(responseData) &&
+    "totalPages" in responseData
+  ) {
+    const totalPages = Number(
+      (responseData as { totalPages?: unknown }).totalPages,
+    );
+
+    return Number.isFinite(totalPages) && totalPages > 0 ? totalPages : 1;
+  }
+
+  const topLevelTotalPages = Number(
+    (response as { totalPages?: unknown }).totalPages,
+  );
+
+  return Number.isFinite(topLevelTotalPages) && topLevelTotalPages > 0
+    ? topLevelTotalPages
+    : 1;
+}
+
+async function fetchAllPaginatedList<T>(endpoint: string, keys: string[]) {
+  const firstResponse = await apiFetch<ApiResponse>(`${endpoint}?page=1&limit=50`);
+  const firstItems = extractList<T>(firstResponse, keys);
+  const totalPages = getTotalPagesFromResponse(firstResponse);
+
+  if (totalPages <= 1) {
+    return firstItems;
+  }
+
+  const remainingResponses = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => {
+      const page = index + 2;
+      return apiFetch<ApiResponse>(`${endpoint}?page=${page}&limit=50`);
+    }),
+  );
+
+  return [
+    ...firstItems,
+    ...remainingResponses.flatMap((response) => extractList<T>(response, keys)),
+  ];
+}
+
+export default function ReportsPage() {
+  const canPrint = usePermission("reports.print");
+  const canExport = usePermission("reports.export");
+  const [summary, setSummary] = useState<FinanceSummary>(emptySummary);
+  const [monthly, setMonthly] = useState<MonthlyFinance[]>([]);
+  const [projectsFinance, setProjectsFinance] = useState<ProjectFinance[]>([]);
+  const [clientsFinance, setClientsFinance] = useState<ClientFinance[]>([]);
+  const [projectTypesFinance, setProjectTypesFinance] = useState<
+    ProjectTypeFinance[]
+  >([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
+
+  const [clients, setClients] = useState<ClientRecord[]>([]);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [revenueRecords, setRevenueRecords] = useState<RevenueRecord[]>([]);
+  const [expenseRecords, setExpenseRecords] = useState<ExpenseRecord[]>([]);
+
+  const [filterDay, setFilterDay] = useState("");
+  const [filterMonth, setFilterMonth] = useState("");
+  const [filterClientId, setFilterClientId] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [monthlyFinanceSearchQuery, setMonthlyFinanceSearchQuery] =
+    useState("");
+  const [monthlyFinancePage, setMonthlyFinancePage] = useState(1);
+  const [projectFinanceSearchQuery, setProjectFinanceSearchQuery] =
+    useState("");
+  const [projectFinancePage, setProjectFinancePage] = useState(1);
+  const [clientFinanceSearchQuery, setClientFinanceSearchQuery] =
+    useState("");
+  const [clientFinancePage, setClientFinancePage] = useState(1);
+  const [projectTypeFinanceSearchQuery, setProjectTypeFinanceSearchQuery] =
+    useState("");
+  const [projectTypeFinancePage, setProjectTypeFinancePage] = useState(1);
+
+  const fetchReportsData = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [
+        summaryResponse,
+        monthlyResponse,
+        projectsFinanceResponse,
+        clientsFinanceResponse,
+        projectTypesResponse,
+        dealsList,
+        clientsList,
+        projectsList,
+        revenueList,
+        expensesList,
+      ] = await Promise.all([
+        apiFetch<ApiResponse>("/api/finance/summary"),
+        apiFetch<ApiResponse>("/api/finance/monthly"),
+        apiFetch<ApiResponse>("/api/finance/projects"),
+        apiFetch<ApiResponse>("/api/finance/clients"),
+        apiFetch<ApiResponse>("/api/finance/project-types"),
+        fetchAllPaginatedList<Deal>("/api/deals", ["deals", "items", "records"]),
+        fetchAllPaginatedList<ClientRecord>("/api/clients", [
+          "clients",
+          "items",
+          "records",
+        ]),
+        fetchAllPaginatedList<ProjectRecord>("/api/projects", [
+          "projects",
+          "items",
+          "records",
+        ]),
+        fetchAllPaginatedList<RevenueRecord>("/api/revenue", [
+          "revenue",
+          "revenues",
+          "items",
+          "records",
+        ]),
+        fetchAllPaginatedList<ExpenseRecord>("/api/expenses", [
+          "expense",
+          "expenses",
+          "items",
+          "records",
+        ]),
+      ]);
+
+      setSummary(
+        extractObject<FinanceSummary>(
+          summaryResponse,
+          ["summary", "financeSummary"],
+          emptySummary,
+        ),
+      );
+
+      setMonthly(
+        extractList<MonthlyFinance>(monthlyResponse, [
+          "monthly",
+          "monthlyData",
+          "months",
+          "items",
+          "records",
+        ]),
+      );
+
+      setProjectsFinance(
+        extractList<ProjectFinance>(projectsFinanceResponse, [
+          "projects",
+          "projectsFinance",
+          "projectFinance",
+          "items",
+          "records",
+        ]),
+      );
+
+      setClientsFinance(
+        extractList<ClientFinance>(clientsFinanceResponse, [
+          "clients",
+          "clientsFinance",
+          "clientFinance",
+          "items",
+          "records",
+        ]),
+      );
+
+      setProjectTypesFinance(
+        extractList<ProjectTypeFinance>(projectTypesResponse, [
+          "projectTypes",
+          "projectTypesFinance",
+          "types",
+          "items",
+          "records",
+        ]),
+      );
+
+      setDeals(dealsList);
+
+      setClients(clientsList);
+
+      setProjects(projectsList);
+
+      setRevenueRecords(revenueList);
+
+      setExpenseRecords(expensesList);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to load reports";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => {
+    void fetchReportsData();
+  }, 0);
+
+  return () => window.clearTimeout(timeoutId);
+}, [fetchReportsData]);
+
+  const projectMap = useMemo(() => {
+    return new Map(projects.map((project) => [project._id, project]));
+  }, [projects]);
+
+  const clientMap = useMemo(() => {
+    return new Map(clients.map((client) => [client._id, client]));
+  }, [clients]);
+
+  const hasActiveFilters = Boolean(filterDay || filterMonth || filterClientId);
+
+  const filterLabel = useMemo(() => {
+    const labels: string[] = [];
+
+    if (filterDay) {
+      labels.push(`Day: ${filterDay}`);
+    }
+
+    if (filterMonth) {
+      labels.push(`Month: ${filterMonth}`);
+    }
+
+    if (filterClientId) {
+      labels.push(
+        `Client: ${clientMap.get(filterClientId)?.companyName || filterClientId}`,
+      );
+    }
+
+    return labels.length > 0 ? labels.join(" | ") : "No filters selected";
+  }, [clientMap, filterClientId, filterDay, filterMonth]);
+
+const getProjectByValue = useCallback(
+  (value?: ProjectRecord | string) => {
+    const projectId = getEntityId(value);
+    if (!projectId) return undefined;
+
+    if (typeof value === "object") {
+      return projectMap.get(projectId) || value;
+    }
+
+    return projectMap.get(projectId);
+  },
+  [projectMap],
+);
+
+  function getClientIdFromProject(project?: ProjectRecord) {
+    if (!project) return "";
+    return getEntityId(project.clientId);
+  }
+
+    const getRevenueClientId = useCallback(
+      (record: RevenueRecord) => {
+        const directClientId = getEntityId(record.clientId);
+
+        if (directClientId) {
+          return directClientId;
+        }
+
+        return getClientIdFromProject(getProjectByValue(record.projectId));
+      },
+      [getProjectByValue],
+    );
+
+const getExpenseClientId = useCallback(
+  (record: ExpenseRecord) => {
+    return getClientIdFromProject(getProjectByValue(record.projectId));
+  },
+  [getProjectByValue],
+);
+
+const matchesDateFilters = useCallback(
+  (date?: string) => {
+    const inputDate = formatDateToInputValue(date);
+
+    if (!inputDate) return false;
+
+    if (filterDay && inputDate !== filterDay) {
+      return false;
+    }
+
+    if (filterMonth && inputDate.slice(0, 7) !== filterMonth) {
+      return false;
+    }
+
+    return true;
+  },
+  [filterDay, filterMonth],
+);
+
+      const matchesClientFilter = useCallback(
+        (clientId: string) => {
+          if (!filterClientId) return true;
+          return clientId === filterClientId;
+        },
+        [filterClientId],
+      );
+
+  const filteredRevenueRecords = useMemo(() => {
+    return revenueRecords.filter((record) => {
+      return (
+        matchesDateFilters(record.paymentDate) &&
+        matchesClientFilter(getRevenueClientId(record))
+      );
+    });
+}, [getRevenueClientId, matchesClientFilter, matchesDateFilters, revenueRecords]);
+
+  const filteredExpenseRecords = useMemo(() => {
+    return expenseRecords.filter((record) => {
+      return (
+        matchesDateFilters(record.date) &&
+        matchesClientFilter(getExpenseClientId(record))
+      );
+    });
+  }, [expenseRecords, getExpenseClientId, matchesClientFilter, matchesDateFilters]);
+
+  const filteredSummary = useMemo(() => {
+    const totalRevenue = filteredRevenueRecords.reduce((sum, record) => {
+      return sum + Number(record.amount || 0);
+    }, 0);
+
+    const totalExpenses = filteredExpenseRecords.reduce((sum, record) => {
+      return sum + Number(record.amount || 0);
+    }, 0);
+
+    return {
+      totalRevenue,
+      totalExpenses,
+      netProfit: totalRevenue - totalExpenses,
+      revenueCount: filteredRevenueRecords.length,
+      expenseCount: filteredExpenseRecords.length,
+    };
+  }, [filteredExpenseRecords, filteredRevenueRecords]);
+
+  const filteredProjectsFinance = useMemo(() => {
+    const activityProjectIds = new Set<string>();
+
+    for (const record of filteredRevenueRecords) {
+      const projectId = getEntityId(record.projectId);
+      if (projectId) activityProjectIds.add(projectId);
+    }
+
+    for (const record of filteredExpenseRecords) {
+      const projectId = getEntityId(record.projectId);
+      if (projectId) activityProjectIds.add(projectId);
+    }
+
+    const result: FilteredProjectFinance[] = [];
+
+    for (const projectId of activityProjectIds) {
+      const project = projectMap.get(projectId);
+
+      if (!project) continue;
+
+      const projectClientId = getClientIdFromProject(project);
+
+      if (!matchesClientFilter(projectClientId)) continue;
+
+      const projectRevenue = filteredRevenueRecords.filter(
+        (record) => getEntityId(record.projectId) === projectId,
+      );
+
+      const projectExpenses = filteredExpenseRecords.filter(
+        (record) => getEntityId(record.projectId) === projectId,
+      );
+
+      const totalRevenue = projectRevenue.reduce((sum, record) => {
+        return sum + Number(record.amount || 0);
+      }, 0);
+
+      const totalExpenses = projectExpenses.reduce((sum, record) => {
+        return sum + Number(record.amount || 0);
+      }, 0);
+
+      const price = Number(project.price || 0);
+      const paymentProgress =
+        price > 0 ? Number(((totalRevenue / price) * 100).toFixed(1)) : 0;
+
+      result.push({
+        project,
+        totalRevenue,
+        totalExpenses,
+        netProfit: totalRevenue - totalExpenses,
+        remainingBalance: price - totalRevenue,
+        paymentProgress,
+        revenueCount: projectRevenue.length,
+        expenseCount: projectExpenses.length,
+      });
+    }
+
+    return result.sort((a, b) =>
+      (a.project.name || "").localeCompare(b.project.name || ""),
+    );
+    }, [
+      filteredExpenseRecords,
+      filteredRevenueRecords,
+      matchesClientFilter,
+      projectMap,
+    ]);
+
+  const filteredClientsFinance = useMemo(() => {
+    const map = new Map<string, FilteredClientFinance>();
+
+    for (const projectItem of filteredProjectsFinance) {
+      const clientId = getClientIdFromProject(projectItem.project);
+
+      if (!clientId) continue;
+
+      const existing =
+        map.get(clientId) ||
+        ({
+          client: clientMap.get(clientId),
+          totalProjects: 0,
+          totalRevenue: 0,
+          totalExpenses: 0,
+          netProfit: 0,
+          revenueCount: 0,
+          expenseCount: 0,
+        } satisfies FilteredClientFinance);
+
+      existing.totalProjects += 1;
+      existing.totalRevenue += projectItem.totalRevenue;
+      existing.totalExpenses += projectItem.totalExpenses;
+      existing.netProfit = existing.totalRevenue - existing.totalExpenses;
+      existing.revenueCount += projectItem.revenueCount;
+      existing.expenseCount += projectItem.expenseCount;
+
+      map.set(clientId, existing);
+    }
+
+    return Array.from(map.values()).sort(
+      (a, b) => Number(b.totalRevenue || 0) - Number(a.totalRevenue || 0),
+    );
+  }, [clientMap, filteredProjectsFinance]);
+
+  const filteredProjectTypesFinance = useMemo(() => {
+    const map = new Map<string, FilteredProjectTypeFinance>();
+
+    for (const projectItem of filteredProjectsFinance) {
+      const type = projectItem.project.type || "Unknown";
+
+      const existing =
+        map.get(type) ||
+        ({
+          type,
+          projectCount: 0,
+          totalProjectValue: 0,
+          totalRevenue: 0,
+          totalExpenses: 0,
+          netProfit: 0,
+          revenueCount: 0,
+          expenseCount: 0,
+        } satisfies FilteredProjectTypeFinance);
+
+      existing.projectCount += 1;
+      existing.totalProjectValue += Number(projectItem.project.price || 0);
+      existing.totalRevenue += projectItem.totalRevenue;
+      existing.totalExpenses += projectItem.totalExpenses;
+      existing.netProfit = existing.totalRevenue - existing.totalExpenses;
+      existing.revenueCount += projectItem.revenueCount;
+      existing.expenseCount += projectItem.expenseCount;
+
+      map.set(type, existing);
+    }
+
+    return Array.from(map.values()).sort(
+      (a, b) => Number(b.totalRevenue || 0) - Number(a.totalRevenue || 0),
+    );
+  }, [filteredProjectsFinance]);
+
+  const filteredMonthlyFinance = useMemo(() => {
+    const map = new Map<string, MonthlyFinance>();
+
+    function getOrCreateMonth(month: string) {
+      const existing = map.get(month);
+
+      if (existing) return existing;
+
+      const item: MonthlyFinance = {
+        month,
+        revenue: 0,
+        expenses: 0,
+        profit: 0,
+        revenueCount: 0,
+        expenseCount: 0,
+      };
+
+      map.set(month, item);
+      return item;
+    }
+
+    for (const record of filteredRevenueRecords) {
+      const month = getMonthKey(record.paymentDate);
+      if (!month) continue;
+
+      const item = getOrCreateMonth(month);
+      item.revenue += Number(record.amount || 0);
+      item.revenueCount = Number(item.revenueCount || 0) + 1;
+      item.profit = item.revenue - item.expenses;
+    }
+
+    for (const record of filteredExpenseRecords) {
+      const month = getMonthKey(record.date);
+      if (!month) continue;
+
+      const item = getOrCreateMonth(month);
+      item.expenses += Number(record.amount || 0);
+      item.expenseCount = Number(item.expenseCount || 0) + 1;
+      item.profit = item.revenue - item.expenses;
+    }
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.month.localeCompare(b.month),
+    );
+  }, [filteredExpenseRecords, filteredRevenueRecords]);
+
+  const filteredAverageProjectValue = useMemo(() => {
+    if (filteredProjectsFinance.length === 0) return 0;
+
+    const totalValue = filteredProjectsFinance.reduce((sum, item) => {
+      return sum + Number(item.project.price || 0);
+    }, 0);
+
+    return totalValue / filteredProjectsFinance.length;
+  }, [filteredProjectsFinance]);
+
+  const filteredProfitMargin = useMemo(() => {
+    if (!filteredSummary.totalRevenue) return 0;
+    return (filteredSummary.netProfit / filteredSummary.totalRevenue) * 100;
+  }, [filteredSummary]);
+
+  const filteredBestClient = filteredClientsFinance[0];
+  const filteredBestProjectType = filteredProjectTypesFinance[0];
+
+  const salesStats = useMemo(() => {
+    const totalDeals = deals.length;
+    const closedWon = deals.filter(
+      (deal) => deal.status === "Closed Won",
+    ).length;
+    const closedLost = deals.filter(
+      (deal) => deal.status === "Closed Lost",
+    ).length;
+
+    const conversionRate =
+      totalDeals > 0 ? Number(((closedWon / totalDeals) * 100).toFixed(1)) : 0;
+
+    return {
+      totalDeals,
+      closedWon,
+      closedLost,
+      conversionRate,
+    };
+  }, [deals]);
+
+  const averageProjectValue = useMemo(() => {
+    if (projectsFinance.length === 0) return 0;
+
+    const totalValue = projectsFinance.reduce((sum, item) => {
+      return sum + Number(item.project?.price || 0);
+    }, 0);
+
+    return totalValue / projectsFinance.length;
+  }, [projectsFinance]);
+
+  const profitMargin = useMemo(() => {
+    if (!summary.totalRevenue) return 0;
+    return (summary.netProfit / summary.totalRevenue) * 100;
+  }, [summary]);
+
+  const bestClient = useMemo(() => {
+    return [...clientsFinance].sort(
+      (a, b) => Number(b.totalRevenue || 0) - Number(a.totalRevenue || 0),
+    )[0];
+  }, [clientsFinance]);
+
+  const bestProjectType = useMemo(() => {
+    return [...projectTypesFinance].sort(
+      (a, b) => Number(b.totalRevenue || 0) - Number(a.totalRevenue || 0),
+    )[0];
+  }, [projectTypesFinance]);
+
+  const filteredMonthlyFinanceRows = useMemo(() => {
+    const query = monthlyFinanceSearchQuery.trim().toLowerCase();
+
+    if (!query) return monthly;
+
+    return monthly.filter((item) => {
+      const values = [item.month, item.revenue, item.expenses, item.profit];
+
+      return values.some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(query),
+      );
+    });
+  }, [monthly, monthlyFinanceSearchQuery]);
+
+  const monthlyFinanceTotalPages = Math.max(
+    Math.ceil(filteredMonthlyFinanceRows.length / REPORT_TABLE_ROWS_PER_PAGE),
+    1,
+  );
+
+  const paginatedMonthlyFinanceRows = useMemo(() => {
+    const startIndex = (monthlyFinancePage - 1) * REPORT_TABLE_ROWS_PER_PAGE;
+
+    return filteredMonthlyFinanceRows.slice(
+      startIndex,
+      startIndex + REPORT_TABLE_ROWS_PER_PAGE,
+    );
+  }, [filteredMonthlyFinanceRows, monthlyFinancePage]);
+
+  const filteredProjectFinanceRows = useMemo(() => {
+    const query = projectFinanceSearchQuery.trim().toLowerCase();
+
+    if (!query) return projectsFinance;
+
+    return projectsFinance.filter((item) => {
+      const values = [
+        item.project?.name,
+        item.project?.type,
+        item.project?.price,
+        item.totalRevenue,
+        item.totalExpenses,
+        item.netProfit,
+        item.remainingBalance,
+        item.paymentProgress,
+      ];
+
+      return values.some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(query),
+      );
+    });
+  }, [projectFinanceSearchQuery, projectsFinance]);
+
+  const projectFinanceTotalPages = Math.max(
+    Math.ceil(
+      filteredProjectFinanceRows.length / PROJECT_FINANCE_ROWS_PER_PAGE,
+    ),
+    1,
+  );
+
+  const paginatedProjectFinanceRows = useMemo(() => {
+    const startIndex = (projectFinancePage - 1) * PROJECT_FINANCE_ROWS_PER_PAGE;
+
+    return filteredProjectFinanceRows.slice(
+      startIndex,
+      startIndex + PROJECT_FINANCE_ROWS_PER_PAGE,
+    );
+  }, [filteredProjectFinanceRows, projectFinancePage]);
+
+useEffect(() => {
+  if (monthlyFinancePage > monthlyFinanceTotalPages) {
+    const timeoutId = window.setTimeout(() => {
+      setMonthlyFinancePage(monthlyFinanceTotalPages);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }
+
+  return undefined;
+}, [monthlyFinancePage, monthlyFinanceTotalPages]);
+
+  const filteredClientFinanceRows = useMemo(() => {
+    const query = clientFinanceSearchQuery.trim().toLowerCase();
+
+    if (!query) return clientsFinance;
+
+    return clientsFinance.filter((item) => {
+      const values = [
+        item.client?.companyName,
+        item.totalProjects,
+        item.totalRevenue,
+        item.totalExpenses,
+        item.netProfit,
+      ];
+
+      return values.some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(query),
+      );
+    });
+  }, [clientFinanceSearchQuery, clientsFinance]);
+
+  const clientFinanceTotalPages = Math.max(
+    Math.ceil(filteredClientFinanceRows.length / REPORT_TABLE_ROWS_PER_PAGE),
+    1,
+  );
+
+  const paginatedClientFinanceRows = useMemo(() => {
+    const startIndex = (clientFinancePage - 1) * REPORT_TABLE_ROWS_PER_PAGE;
+
+    return filteredClientFinanceRows.slice(
+      startIndex,
+      startIndex + REPORT_TABLE_ROWS_PER_PAGE,
+    );
+  }, [clientFinancePage, filteredClientFinanceRows]);
+
+useEffect(() => {
+  if (clientFinancePage > clientFinanceTotalPages) {
+    const timeoutId = window.setTimeout(() => {
+      setClientFinancePage(clientFinanceTotalPages);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }
+
+  return undefined;
+}, [clientFinancePage, clientFinanceTotalPages]);
+
+  const filteredProjectTypeFinanceRows = useMemo(() => {
+    const query = projectTypeFinanceSearchQuery.trim().toLowerCase();
+
+    if (!query) return projectTypesFinance;
+
+    return projectTypesFinance.filter((item) => {
+      const values = [
+        item.type,
+        item.projectCount,
+        item.totalProjectValue,
+        item.totalRevenue,
+        item.totalExpenses,
+        item.netProfit,
+      ];
+
+      return values.some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(query),
+      );
+    });
+  }, [projectTypeFinanceSearchQuery, projectTypesFinance]);
+
+  const projectTypeFinanceTotalPages = Math.max(
+    Math.ceil(
+      filteredProjectTypeFinanceRows.length / REPORT_TABLE_ROWS_PER_PAGE,
+    ),
+    1,
+  );
+
+  const paginatedProjectTypeFinanceRows = useMemo(() => {
+    const startIndex =
+      (projectTypeFinancePage - 1) * REPORT_TABLE_ROWS_PER_PAGE;
+
+    return filteredProjectTypeFinanceRows.slice(
+      startIndex,
+      startIndex + REPORT_TABLE_ROWS_PER_PAGE,
+    );
+  }, [filteredProjectTypeFinanceRows, projectTypeFinancePage]);
+
+useEffect(() => {
+  if (projectTypeFinancePage > projectTypeFinanceTotalPages) {
+    const timeoutId = window.setTimeout(() => {
+      setProjectTypeFinancePage(projectTypeFinanceTotalPages);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }
+
+  return undefined;
+}, [projectTypeFinancePage, projectTypeFinanceTotalPages]);
+
+  function renderTableSearch(
+    value: string,
+    setValue: Dispatch<SetStateAction<string>>,
+    setPageValue: Dispatch<SetStateAction<number>>,
+    placeholder: string,
+  ) {
+    return (
+      <Box
+        sx={{
+          px: 2,
+          pb: 2,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            setPageValue(1);
+          }}
+          placeholder={placeholder}
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+    );
+  }
+
+  function renderTablePagination(
+    currentPage: number,
+    totalPages: number,
+    totalItems: number,
+    label: string,
+    setPageValue: Dispatch<SetStateAction<number>>,
+  ) {
+    if (totalItems === 0) return null;
+
+    return (
+      <Box
+        sx={{
+          px: 2,
+          py: 2,
+          display: "flex",
+          flexDirection: { xs: "column", sm: "row" },
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 2,
+          borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          Showing page {currentPage} of {totalPages} · {totalItems} {label}
+        </Typography>
+
+        <Pagination
+          count={totalPages}
+          page={currentPage}
+          onChange={(_, value) => setPageValue(value)}
+          color="primary"
+          shape="rounded"
+        />
+      </Box>
+    );
+  }
+
+  function getRowNumber(page: number, index: number) {
+    return (page - 1) * REPORT_TABLE_ROWS_PER_PAGE + index + 1;
+  }
+
+  function getNumberCellSx(): SxProps<Theme> {
+    return {
+      fontWeight: 800,
+      color: "text.secondary",
+    };
+  }
+
+  function getSummaryRows() {
+    return [
+      ["Metric", "Value"],
+      ["Total Revenue", formatNumber(summary.totalRevenue)],
+      ["Total Expenses", formatNumber(summary.totalExpenses)],
+      ["Net Profit", formatNumber(summary.netProfit)],
+      ["Profit Margin", formatPercent(profitMargin)],
+      ["Total Deals", salesStats.totalDeals],
+      ["Closed Won", salesStats.closedWon],
+      ["Closed Lost", salesStats.closedLost],
+      ["Conversion Rate", formatPercent(salesStats.conversionRate)],
+      ["Average Project Value", formatNumber(averageProjectValue)],
+      ["Best Client", bestClient?.client?.companyName || "-"],
+      ["Best Project Type", bestProjectType?.type || "-"],
+    ];
+  }
+
+  function getMonthlyRows() {
+    return monthly.map((item) => [
+      item.month,
+      formatNumber(item.revenue),
+      formatNumber(item.expenses),
+      formatNumber(item.profit),
+    ]);
+  }
+
+  function getProjectRows() {
+    return projectsFinance.map((item) => [
+      item.project?.name || "-",
+      item.project?.type || "-",
+      formatNumber(item.project?.price),
+      formatNumber(item.totalRevenue),
+      formatNumber(item.totalExpenses),
+      formatNumber(item.netProfit),
+      formatNumber(item.remainingBalance),
+      formatPercent(item.paymentProgress),
+    ]);
+  }
+
+  function getClientRows() {
+    return clientsFinance.map((item) => [
+      item.client?.companyName || "-",
+      item.totalProjects,
+      formatNumber(item.totalRevenue),
+      formatNumber(item.totalExpenses),
+      formatNumber(item.netProfit),
+    ]);
+  }
+
+  function getProjectTypeRows() {
+    return projectTypesFinance.map((item) => [
+      item.type,
+      item.projectCount,
+      formatNumber(item.totalProjectValue),
+      formatNumber(item.totalRevenue),
+      formatNumber(item.totalExpenses),
+      formatNumber(item.netProfit),
+    ]);
+  }
+
+  async function authorizeReportAction(action: "print" | "export") {
+    if (!(action === "print" ? canPrint : canExport)) return false;
+    try {
+      await apiFetch(`/api/reports/authorize?action=${action}`, { method: "POST" });
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Report action is unavailable");
+      return false;
+    }
+  }
+
+  async function handleExportExcel() {
+    if (!await authorizeReportAction("export")) return;
+    const workbook = XLSX.utils.book_new();
+
+    const summarySheet = XLSX.utils.aoa_to_sheet(getSummaryRows());
+    setSheetColumnWidths(summarySheet, [28, 24]);
+
+    const monthlySheet = XLSX.utils.aoa_to_sheet([
+      ["Month", "Revenue BHD", "Expenses BHD", "Profit BHD"],
+      ...getMonthlyRows(),
+    ]);
+    setSheetColumnWidths(monthlySheet, [16, 18, 18, 18]);
+
+    const projectsSheet = XLSX.utils.aoa_to_sheet([
+      [
+        "Project",
+        "Type",
+        "Price BHD",
+        "Revenue BHD",
+        "Expenses BHD",
+        "Net Profit BHD",
+        "Remaining BHD",
+        "Payment",
+      ],
+      ...getProjectRows(),
+    ]);
+    setSheetColumnWidths(projectsSheet, [32, 22, 16, 16, 16, 18, 18, 14]);
+
+    const clientsSheet = XLSX.utils.aoa_to_sheet([
+      ["Client", "Projects", "Revenue BHD", "Expenses BHD", "Net Profit BHD"],
+      ...getClientRows(),
+    ]);
+    setSheetColumnWidths(clientsSheet, [28, 14, 18, 18, 18]);
+
+    const projectTypesSheet = XLSX.utils.aoa_to_sheet([
+      [
+        "Type",
+        "Projects",
+        "Total Value BHD",
+        "Revenue BHD",
+        "Expenses BHD",
+        "Net Profit BHD",
+      ],
+      ...getProjectTypeRows(),
+    ]);
+    setSheetColumnWidths(projectTypesSheet, [24, 14, 20, 18, 18, 18]);
+
+    XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+    XLSX.utils.book_append_sheet(workbook, monthlySheet, "Monthly");
+    XLSX.utils.book_append_sheet(workbook, projectsSheet, "Projects");
+    XLSX.utils.book_append_sheet(workbook, clientsSheet, "Clients");
+    XLSX.utils.book_append_sheet(workbook, projectTypesSheet, "Project Types");
+
+    XLSX.writeFile(workbook, `insightboard-reports-${getTodayFileDate()}.xlsx`);
+  }
+
+  async function handlePrintPdf() {
+    if (!await authorizeReportAction("print")) return;
+    const reportWindow = window.open("", "_blank", "width=1100,height=800");
+
+    if (!reportWindow) {
+      setError("Popup blocked. Allow popups to print or save PDF.");
+      return;
+    }
+
+    const summaryRows = [
+      ["Total Revenue", formatMoney(summary.totalRevenue)],
+      ["Total Expenses", formatMoney(summary.totalExpenses)],
+      ["Net Profit", formatMoney(summary.netProfit)],
+      ["Profit Margin", formatPercent(profitMargin)],
+      ["Total Deals", salesStats.totalDeals],
+      ["Closed Won", salesStats.closedWon],
+      ["Closed Lost", salesStats.closedLost],
+      ["Conversion Rate", formatPercent(salesStats.conversionRate)],
+      ["Average Project Value", formatMoney(averageProjectValue)],
+      ["Best Client", bestClient?.client?.companyName || "-"],
+      ["Best Project Type", bestProjectType?.type || "-"],
+    ];
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>InsightBoard Reports</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              color: #111827;
+              padding: 24px;
+            }
+
+            h1 {
+              margin-bottom: 4px;
+            }
+
+            .subtitle {
+              color: #6b7280;
+              margin-bottom: 24px;
+            }
+
+            section {
+              margin-bottom: 28px;
+              page-break-inside: avoid;
+            }
+
+            h2 {
+              font-size: 18px;
+              margin-bottom: 10px;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 12px;
+            }
+
+            th,
+            td {
+              border: 1px solid #d1d5db;
+              padding: 8px;
+              text-align: left;
+              vertical-align: top;
+            }
+
+            th {
+              background: #f3f4f6;
+              font-weight: 700;
+            }
+
+            @media print {
+              button {
+                display: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>InsightBoard Reports</h1>
+          <div class="subtitle">
+            Generated at ${escapeHtml(new Date().toLocaleString())}
+          </div>
+
+          ${buildHtmlTable("Summary", ["Metric", "Value"], summaryRows)}
+
+          ${buildHtmlTable(
+            "Monthly Finance",
+            ["Month", "Revenue", "Expenses", "Profit"],
+            monthly.map((item) => [
+              item.month,
+              formatMoney(item.revenue),
+              formatMoney(item.expenses),
+              formatMoney(item.profit),
+            ]),
+          )}
+
+          ${buildHtmlTable(
+            "Project Finance Report",
+            [
+              "Project",
+              "Type",
+              "Price",
+              "Revenue",
+              "Expenses",
+              "Net Profit",
+              "Remaining",
+              "Payment",
+            ],
+            projectsFinance.map((item) => [
+              item.project?.name || "-",
+              item.project?.type || "-",
+              formatMoney(item.project?.price),
+              formatMoney(item.totalRevenue),
+              formatMoney(item.totalExpenses),
+              formatMoney(item.netProfit),
+              formatMoney(item.remainingBalance),
+              formatPercent(item.paymentProgress),
+            ]),
+          )}
+
+          ${buildHtmlTable(
+            "Client Finance Report",
+            ["Client", "Projects", "Revenue", "Expenses", "Net Profit"],
+            clientsFinance.map((item) => [
+              item.client?.companyName || "-",
+              item.totalProjects,
+              formatMoney(item.totalRevenue),
+              formatMoney(item.totalExpenses),
+              formatMoney(item.netProfit),
+            ]),
+          )}
+
+          ${buildHtmlTable(
+            "Project Type Report",
+            [
+              "Type",
+              "Projects",
+              "Total Value",
+              "Revenue",
+              "Expenses",
+              "Net Profit",
+            ],
+            projectTypesFinance.map((item) => [
+              item.type,
+              item.projectCount,
+              formatMoney(item.totalProjectValue),
+              formatMoney(item.totalRevenue),
+              formatMoney(item.totalExpenses),
+              formatMoney(item.netProfit),
+            ]),
+          )}
+        </body>
+      </html>
+    `;
+
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+    reportWindow.focus();
+
+    setTimeout(() => {
+      reportWindow.print();
+    }, 300);
+  }
+
+  async function handlePrintFilteredPdf() {
+    if (!await authorizeReportAction("print")) return;
+    if (!hasActiveFilters) {
+      setError("Select at least one filter before printing filtered report.");
+      return;
+    }
+
+    const reportWindow = window.open("", "_blank", "width=1100,height=800");
+
+    if (!reportWindow) {
+      setError("Popup blocked. Allow popups to print or save PDF.");
+      return;
+    }
+
+    const summaryRows = [
+      ["Applied Filters", filterLabel],
+      ["Total Revenue", formatMoney(filteredSummary.totalRevenue)],
+      ["Total Expenses", formatMoney(filteredSummary.totalExpenses)],
+      ["Net Profit", formatMoney(filteredSummary.netProfit)],
+      ["Profit Margin", formatPercent(filteredProfitMargin)],
+      ["Revenue Records", filteredSummary.revenueCount],
+      ["Expense Records", filteredSummary.expenseCount],
+      ["Projects With Activity", filteredProjectsFinance.length],
+      ["Average Project Value", formatMoney(filteredAverageProjectValue)],
+      ["Best Client", filteredBestClient?.client?.companyName || "-"],
+      ["Best Project Type", filteredBestProjectType?.type || "-"],
+    ];
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>InsightBoard Filtered Report</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              color: #111827;
+              padding: 24px;
+            }
+
+            h1 {
+              margin-bottom: 4px;
+            }
+
+            .subtitle {
+              color: #6b7280;
+              margin-bottom: 24px;
+            }
+
+            .filter-box {
+              padding: 12px;
+              background: #f9fafb;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              margin-bottom: 24px;
+              font-size: 13px;
+            }
+
+            section {
+              margin-bottom: 28px;
+              page-break-inside: avoid;
+            }
+
+            h2 {
+              font-size: 18px;
+              margin-bottom: 10px;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 12px;
+            }
+
+            th,
+            td {
+              border: 1px solid #d1d5db;
+              padding: 8px;
+              text-align: left;
+              vertical-align: top;
+            }
+
+            th {
+              background: #f3f4f6;
+              font-weight: 700;
+            }
+
+            @media print {
+              button {
+                display: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>InsightBoard Filtered Report</h1>
+          <div class="subtitle">
+            Generated at ${escapeHtml(new Date().toLocaleString())}
+          </div>
+
+          <div class="filter-box">
+            <strong>Filters:</strong> ${escapeHtml(filterLabel)}
+          </div>
+
+          ${buildHtmlTable("Filtered Summary", ["Metric", "Value"], summaryRows)}
+
+          ${buildHtmlTable(
+            "Filtered Monthly Finance",
+            ["Month", "Revenue", "Expenses", "Profit"],
+            filteredMonthlyFinance.map((item) => [
+              item.month,
+              formatMoney(item.revenue),
+              formatMoney(item.expenses),
+              formatMoney(item.profit),
+            ]),
+          )}
+
+          ${buildHtmlTable(
+            "Filtered Project Finance Report",
+            [
+              "Project",
+              "Type",
+              "Price",
+              "Revenue",
+              "Expenses",
+              "Net Profit",
+              "Remaining",
+              "Payment",
+            ],
+            filteredProjectsFinance.map((item) => [
+              item.project.name || "-",
+              item.project.type || "-",
+              formatMoney(item.project.price),
+              formatMoney(item.totalRevenue),
+              formatMoney(item.totalExpenses),
+              formatMoney(item.netProfit),
+              formatMoney(item.remainingBalance),
+              formatPercent(item.paymentProgress),
+            ]),
+          )}
+
+          ${buildHtmlTable(
+            "Filtered Client Finance Report",
+            ["Client", "Projects", "Revenue", "Expenses", "Net Profit"],
+            filteredClientsFinance.map((item) => [
+              item.client?.companyName || "-",
+              item.totalProjects,
+              formatMoney(item.totalRevenue),
+              formatMoney(item.totalExpenses),
+              formatMoney(item.netProfit),
+            ]),
+          )}
+
+          ${buildHtmlTable(
+            "Filtered Project Type Report",
+            [
+              "Type",
+              "Projects",
+              "Total Value",
+              "Revenue",
+              "Expenses",
+              "Net Profit",
+            ],
+            filteredProjectTypesFinance.map((item) => [
+              item.type,
+              item.projectCount,
+              formatMoney(item.totalProjectValue),
+              formatMoney(item.totalRevenue),
+              formatMoney(item.totalExpenses),
+              formatMoney(item.netProfit),
+            ]),
+          )}
+        </body>
+      </html>
+    `;
+
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+    reportWindow.focus();
+
+    setTimeout(() => {
+      reportWindow.print();
+    }, 300);
+  }
+
+  function handleClearFilters() {
+    setFilterDay("");
+    setFilterMonth("");
+    setFilterClientId("");
+    setError("");
+  }
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          minHeight: "60vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: { xs: "stretch", md: "flex-start" },
+          flexDirection: { xs: "column", md: "row" },
+          gap: 2,
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+            }}
+          >
+            Reports
+          </Typography>
+
+          <Typography color="text.secondary" sx={{ mt: 0.5, maxWidth: 820 }}>
+            Business performance reports based on revenue, expenses, projects,
+            clients, and sales conversion.
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            display: "flex",
+            gap: 1,
+            flexWrap: "wrap",
+            justifyContent: { xs: "stretch", md: "flex-end" },
+          }}
+        >
+          <Button
+            variant="contained"
+            onClick={handleExportExcel}
+            disabled={!canExport}
+            sx={{
+              height: 44,
+              borderRadius: 2,
+              fontWeight: 800,
+              px: 2.5,
+              flex: { xs: "1 1 auto", sm: "0 0 auto" },
+            }}
+          >
+            Export Excel
+          </Button>
+
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={handlePrintPdf}
+            disabled={!canPrint}
+            sx={{
+              height: 44,
+              borderRadius: 2,
+              fontWeight: 800,
+              px: 2.5,
+              flex: { xs: "1 1 auto", sm: "0 0 auto" },
+            }}
+          >
+            Print / PDF
+          </Button>
+        </Box>
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
+          {error}
+        </Alert>
+      )}
+
+      <FilteredPrintPanel
+        clients={clients}
+        filterDay={filterDay}
+        filterMonth={filterMonth}
+        filterClientId={filterClientId}
+        hasActiveFilters={hasActiveFilters}
+        filterLabel={filterLabel}
+        filteredSummary={filteredSummary}
+        setFilterDay={setFilterDay}
+        setFilterMonth={setFilterMonth}
+        setFilterClientId={setFilterClientId}
+        onPrintFilteredPdf={handlePrintFilteredPdf}
+        onClearFilters={handleClearFilters}
+      />
+
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "1fr 1fr",
+            lg: "repeat(4, 1fr)",
+          },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        <ReportCard
+          title="Total Revenue"
+          value={formatMoney(summary.totalRevenue)}
+        />
+        <ReportCard
+          title="Total Expenses"
+          value={formatMoney(summary.totalExpenses)}
+        />
+        <ReportCard title="Net Profit" value={formatMoney(summary.netProfit)} />
+        <ReportCard title="Profit Margin" value={formatPercent(profitMargin)} />
+        <ReportCard title="Total Deals" value={salesStats.totalDeals} />
+        <ReportCard title="Closed Won" value={salesStats.closedWon} />
+        <ReportCard
+          title="Conversion Rate"
+          value={formatPercent(salesStats.conversionRate)}
+        />
+        <ReportCard
+          title="Avg Project Value"
+          value={formatMoney(averageProjectValue)}
+        />
+      </Box>
+
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        <Card
+          sx={{
+            borderRadius: 4,
+            border: (theme) => `1px solid ${theme.palette.divider}`,
+            bgcolor: "background.paper",
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
+              Best Client
+            </Typography>
+
+            {bestClient ? (
+              <>
+                <Typography sx={{ fontWeight: 800 }}>
+                  {bestClient.client?.companyName || "-"}
+                </Typography>
+                <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+                  Revenue: {formatMoney(bestClient.totalRevenue)}
+                </Typography>
+                <Typography color="text.secondary">
+                  Net Profit: {formatMoney(bestClient.netProfit)}
+                </Typography>
+              </>
+            ) : (
+              <Typography color="text.secondary">
+                No client finance data.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card
+          sx={{
+            borderRadius: 4,
+            border: (theme) => `1px solid ${theme.palette.divider}`,
+            bgcolor: "background.paper",
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
+              Best Project Type
+            </Typography>
+
+            {bestProjectType ? (
+              <>
+                <Typography sx={{ fontWeight: 800 }}>
+                  {bestProjectType.type}
+                </Typography>
+                <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+                  Revenue: {formatMoney(bestProjectType.totalRevenue)}
+                </Typography>
+                <Typography color="text.secondary">
+                  Projects: {bestProjectType.projectCount}
+                </Typography>
+              </>
+            ) : (
+              <Typography color="text.secondary">
+                No project type finance data.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+
+      <ReportTable title="Monthly Finance">
+        {renderTableSearch(
+          monthlyFinanceSearchQuery,
+          setMonthlyFinanceSearchQuery,
+          setMonthlyFinancePage,
+          "Search by month, revenue, expenses, or profit...",
+        )}
+
+        <Table>
+          <TableHead>
+            <TableRow sx={getTableHeadSx()}>
+              <TableCell align="center" sx={{ width: 56 }}>
+                #
+              </TableCell>
+              <TableCell>Month</TableCell>
+              <TableCell>Revenue</TableCell>
+              <TableCell>Expenses</TableCell>
+              <TableCell>Profit</TableCell>
+            </TableRow>
+          </TableHead>
+
+          <TableBody>
+            {filteredMonthlyFinanceRows.length === 0 ? (
+              <EmptyTableRow
+                colSpan={5}
+                message={
+                  monthly.length === 0
+                    ? "No monthly finance data."
+                    : "No matching monthly finance data."
+                }
+              />
+            ) : (
+              paginatedMonthlyFinanceRows.map((item, index) => (
+                <TableRow key={item.month} hover>
+                  <TableCell align="center" sx={getNumberCellSx()}>
+                    {getRowNumber(monthlyFinancePage, index)}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>{item.month}</TableCell>
+                  <TableCell sx={getRevenueTextSx()}>
+                    {formatMoney(item.revenue)}
+                  </TableCell>
+                  <TableCell sx={getExpenseTextSx()}>
+                    {formatMoney(item.expenses)}
+                  </TableCell>
+                  <TableCell sx={getProfitTextSx(item.profit)}>
+                    {formatMoney(item.profit)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        {renderTablePagination(
+          monthlyFinancePage,
+          monthlyFinanceTotalPages,
+          filteredMonthlyFinanceRows.length,
+          "months",
+          setMonthlyFinancePage,
+        )}
+      </ReportTable>
+
+      <ReportTable title="Project Finance Report">
+        <Box
+          sx={{
+            px: 2,
+            pb: 2,
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <TextField
+            size="small"
+            value={projectFinanceSearchQuery}
+            onChange={(event) => {
+              setProjectFinanceSearchQuery(event.target.value);
+              setProjectFinancePage(1);
+            }}
+            placeholder="Search by project, type, value, revenue, expenses, profit, or payment..."
+            sx={{
+              width: { xs: "100%", sm: 520, md: 620 },
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "background.paper",
+              },
+            }}
+          />
+        </Box>
+
+        <Table>
+          <TableHead>
+            <TableRow sx={getTableHeadSx()}>
+              <TableCell align="center" sx={{ width: 56 }}>
+                #
+              </TableCell>
+              <TableCell>Project</TableCell>
+              <TableCell>Price</TableCell>
+              <TableCell>Revenue</TableCell>
+              <TableCell>Expenses</TableCell>
+              <TableCell>Net Profit</TableCell>
+              <TableCell>Remaining</TableCell>
+              <TableCell>Payment Status</TableCell>
+            </TableRow>
+          </TableHead>
+
+          <TableBody>
+            {filteredProjectFinanceRows.length === 0 ? (
+              <EmptyTableRow
+                colSpan={8}
+                message={
+                  projectsFinance.length === 0
+                    ? "No project finance data."
+                    : "No matching project finance data."
+                }
+              />
+            ) : (
+              paginatedProjectFinanceRows.map((item, index) => (
+                <TableRow
+                  key={`${
+                    item.project?._id || item.project?.name || "project"
+                  }-${index}`}
+                  hover
+                >
+                  <TableCell
+                    align="center"
+                    sx={{ fontWeight: 800, color: "text.secondary" }}
+                  >
+                    {(projectFinancePage - 1) * PROJECT_FINANCE_ROWS_PER_PAGE +
+                      index +
+                      1}
+                  </TableCell>
+                  <TableCell>
+                    <Typography sx={{ fontWeight: 800 }}>
+                      {item.project?.name || "-"}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {item.project?.type || "-"}
+                    </Typography>
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {formatMoney(item.project?.price)}
+                  </TableCell>
+                  <TableCell sx={getRevenueTextSx()}>
+                    {formatMoney(item.totalRevenue)}
+                  </TableCell>
+                  <TableCell sx={getExpenseTextSx()}>
+                    {formatMoney(item.totalExpenses)}
+                  </TableCell>
+                  <TableCell sx={getProfitTextSx(item.netProfit)}>
+                    {formatMoney(item.netProfit)}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {formatMoney(item.remainingBalance)}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={formatPercent(item.paymentProgress)}
+                      size="small"
+                      sx={getProgressChipSx(item.paymentProgress)}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        {filteredProjectFinanceRows.length > 0 && (
+          <Box
+            sx={{
+              px: 2,
+              py: 2,
+              display: "flex",
+              flexDirection: { xs: "column", sm: "row" },
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 2,
+              borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Showing page {projectFinancePage} of {projectFinanceTotalPages} ·{" "}
+              {filteredProjectFinanceRows.length} projects
+            </Typography>
+
+            <Pagination
+              count={projectFinanceTotalPages}
+              page={projectFinancePage}
+              onChange={(_, value) => setProjectFinancePage(value)}
+              color="primary"
+              shape="rounded"
+            />
+          </Box>
+        )}
+      </ReportTable>
+
+      <ReportTable title="Client Finance Report">
+        {renderTableSearch(
+          clientFinanceSearchQuery,
+          setClientFinanceSearchQuery,
+          setClientFinancePage,
+          "Search by client, projects, revenue, expenses, or profit...",
+        )}
+
+        <Table>
+          <TableHead>
+            <TableRow sx={getTableHeadSx()}>
+              <TableCell align="center" sx={{ width: 56 }}>
+                #
+              </TableCell>
+              <TableCell>Client</TableCell>
+              <TableCell>Projects</TableCell>
+              <TableCell>Revenue</TableCell>
+              <TableCell>Expenses</TableCell>
+              <TableCell>Net Profit</TableCell>
+            </TableRow>
+          </TableHead>
+
+          <TableBody>
+            {filteredClientFinanceRows.length === 0 ? (
+              <EmptyTableRow
+                colSpan={6}
+                message={
+                  clientsFinance.length === 0
+                    ? "No client finance data."
+                    : "No matching client finance data."
+                }
+              />
+            ) : (
+              paginatedClientFinanceRows.map((item, index) => (
+                <TableRow
+                  key={`${
+                    item.client?._id || item.client?.companyName || "client"
+                  }-${index}`}
+                  hover
+                >
+                  <TableCell align="center" sx={getNumberCellSx()}>
+                    {getRowNumber(clientFinancePage, index)}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>
+                    {item.client?.companyName || "-"}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {item.totalProjects}
+                  </TableCell>
+                  <TableCell sx={getRevenueTextSx()}>
+                    {formatMoney(item.totalRevenue)}
+                  </TableCell>
+                  <TableCell sx={getExpenseTextSx()}>
+                    {formatMoney(item.totalExpenses)}
+                  </TableCell>
+                  <TableCell sx={getProfitTextSx(item.netProfit)}>
+                    {formatMoney(item.netProfit)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        {renderTablePagination(
+          clientFinancePage,
+          clientFinanceTotalPages,
+          filteredClientFinanceRows.length,
+          "clients",
+          setClientFinancePage,
+        )}
+      </ReportTable>
+
+      <ReportTable title="Project Type Report">
+        {renderTableSearch(
+          projectTypeFinanceSearchQuery,
+          setProjectTypeFinanceSearchQuery,
+          setProjectTypeFinancePage,
+          "Search by type, projects, value, revenue, expenses, or profit...",
+        )}
+
+        <Table>
+          <TableHead>
+            <TableRow sx={getTableHeadSx()}>
+              <TableCell align="center" sx={{ width: 56 }}>
+                #
+              </TableCell>
+              <TableCell>Type</TableCell>
+              <TableCell>Projects</TableCell>
+              <TableCell>Total Value</TableCell>
+              <TableCell>Revenue</TableCell>
+              <TableCell>Expenses</TableCell>
+              <TableCell>Net Profit</TableCell>
+            </TableRow>
+          </TableHead>
+
+          <TableBody>
+            {filteredProjectTypeFinanceRows.length === 0 ? (
+              <EmptyTableRow
+                colSpan={7}
+                message={
+                  projectTypesFinance.length === 0
+                    ? "No project type data."
+                    : "No matching project type data."
+                }
+              />
+            ) : (
+              paginatedProjectTypeFinanceRows.map((item, index) => (
+                <TableRow key={item.type} hover>
+                  <TableCell align="center" sx={getNumberCellSx()}>
+                    {getRowNumber(projectTypeFinancePage, index)}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>{item.type}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {item.projectCount}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {formatMoney(item.totalProjectValue)}
+                  </TableCell>
+                  <TableCell sx={getRevenueTextSx()}>
+                    {formatMoney(item.totalRevenue)}
+                  </TableCell>
+                  <TableCell sx={getExpenseTextSx()}>
+                    {formatMoney(item.totalExpenses)}
+                  </TableCell>
+                  <TableCell sx={getProfitTextSx(item.netProfit)}>
+                    {formatMoney(item.netProfit)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        {renderTablePagination(
+          projectTypeFinancePage,
+          projectTypeFinanceTotalPages,
+          filteredProjectTypeFinanceRows.length,
+          "types",
+          setProjectTypeFinancePage,
+        )}
+      </ReportTable>
+    </Box>
+  );
+}

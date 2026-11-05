@@ -1,3 +1,4 @@
+import { usePermission } from "@/components/access/PermissionProvider";
 import {
   Box,
   Button,
@@ -42,6 +43,7 @@ export default function FilteredPrintPanel({
   onPrintFilteredPdf,
   onClearFilters,
 }: FilteredPrintPanelProps) {
+  const canPrint = usePermission("reports.print");
   return (
     <Card sx={{ borderRadius: 3, mb: 3 }}>
       <CardContent>
@@ -117,7 +119,7 @@ export default function FilteredPrintPanel({
               variant="contained"
               color="secondary"
               onClick={onPrintFilteredPdf}
-              disabled={!hasActiveFilters}
+              disabled={!hasActiveFilters || !canPrint}
             >
               Print Filtered PDF
             </Button>
