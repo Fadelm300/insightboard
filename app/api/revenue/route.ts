@@ -1,5 +1,5 @@
 import { hasPermission } from "@/lib/permissions";
-import { canReadProjectFinancials, revenueDTO } from "@/lib/crmData";
+import { canReadProjectFinancials, revenueDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -33,8 +33,6 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   "Other",
 ];
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
-
 const UNSAFE_TEXT_PATTERN =
   /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
 
@@ -53,15 +51,6 @@ function cleanText(value: unknown) {
 
 function hasUnsafeText(value: string) {
   return UNSAFE_TEXT_PATTERN.test(value);
-}
-
-function isValidMoney(value: unknown) {
-  const stringValue = getString(value);
-  return MONEY_PATTERN.test(stringValue);
-}
-
-function parseMoney(value: unknown) {
-  return Number(getString(value));
 }
 
 function isValidDate(value: string) {
@@ -110,11 +99,10 @@ function validateRevenuePayload(
     return { error: "Amount is required" };
   }
 
-  if (!isValidMoney(body.amount)) {
-    return { error: "Amount must be a valid number with up to 2 decimals" };
+  const amount = parseCrmMoney(body.amount);
+  if (amount === null) {
+    return { error: "Amount must have up to 2 decimals and be within the supported range" };
   }
-
-  const amount = parseMoney(body.amount);
 
   if (amount <= 0) {
     return { error: "Amount must be greater than 0" };

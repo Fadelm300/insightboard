@@ -100,6 +100,22 @@ export function expenseDTO(value: unknown, actor: PermissionSubject) {
 
 const PROJECT_INPUT_FIELDS = ["clientId", "dealId", "name", "type", "deadline", "status", "description", "notes", "price", "cost", "paymentStatus"];
 const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
+export function parseCrmMoney(value: unknown): number | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const text = String(value).trim();
+  if (!MONEY_PATTERN.test(text)) return null;
+
+  const amount = Number(text);
+  if (!Number.isFinite(amount) || amount > Number.MAX_SAFE_INTEGER / 100) return null;
+
+  // Reject decimal strings whose cents change when converted to a Number.
+  const [whole, fraction = ""] = text.split(".");
+  const normalized = whole.replace(/^0+(?=\d)/, "") + "." + fraction.padEnd(2, "0");
+  const [storedWhole, storedFraction = ""] = String(amount).split(".");
+  const storedDecimal = storedWhole + "." + storedFraction.padEnd(2, "0");
+  return amount.toFixed(2) === normalized && storedDecimal === normalized ? amount : null;
+}
+
 const PAYMENT_STATUSES = ["Unpaid", "Partially Paid", "Paid"];
 type FinancialData = { price: number | null; cost: number | null; profit: number | null; paymentStatus: string };
 type InputResult = { data: FinancialData; error?: never; status?: never } | { error: string; status: number; data?: never };
@@ -125,13 +141,8 @@ export function projectFinancialInput(actor: PermissionSubject, body: unknown, c
     return { data: { price: null, cost: null, profit: null, paymentStatus: "Unpaid" } };
   }
   const rawCost = input.cost === undefined ? previous.cost ?? 0 : input.cost;
-  function money(value: unknown) {
-    if (typeof value !== "string" && typeof value !== "number") return null;
-    const text = String(value).trim();
-    const number = Number(text);
-    return MONEY_PATTERN.test(text) && Number.isFinite(number) && number <= Number.MAX_SAFE_INTEGER / 100 ? number : null;
-  }
-  const price = money(rawPrice), cost = money(rawCost);
+  const price = parseCrmMoney(rawPrice);
+  const cost = parseCrmMoney(rawCost);
   if (price === null || price <= 0 || cost === null || cost < 0) return { error: "Invalid project amount", status: 400 };
   const paymentStatus = input.paymentStatus ?? previous.paymentStatus ?? "Unpaid";
   if (typeof paymentStatus !== "string" || !PAYMENT_STATUSES.includes(paymentStatus)) return { error: "Invalid payment status", status: 400 };

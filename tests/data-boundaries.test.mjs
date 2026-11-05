@@ -21,6 +21,68 @@ function load(file, dependencies = {}) {
 const permissions = load("lib/permissions.ts");
 const data = load("lib/crmData.ts", { "@/lib/permissions": permissions });
 const plain = (value) => JSON.parse(JSON.stringify(value));
+
+test("CRM money preserves cents and rejects unsupported values", () => {
+  for (const value of ["0x10", "1e3", "1.001", -1, Infinity, "9".repeat(400), "90071992547409.91", "90071992547409.92", true]) {
+    assert.equal(data.parseCrmMoney(value), null, String(value));
+  }
+  assert.equal(data.parseCrmMoney(" 0012.30 "), 12.3);
+  assert.equal(data.parseCrmMoney(0), 0);
+});
+
+for (const [resource, model, fields, payload] of [
+  ["deals", "Deal", ["estimatedBudget", "finalPrice"], { title: "Test deal", estimatedBudget: 15, finalPrice: 0, status: "Lead", probability: 50 }],
+  ["revenue", "Revenue", ["amount"], { amount: 15, paymentDate: "2024-01-01", paymentMethod: "Cash" }],
+  ["expenses", "Expense", ["amount"], { title: "Test expense", amount: 15, date: "2024-01-01", category: "Other" }],
+]) {
+  test(`${resource} rejects invalid create and update amounts before writing`, async () => {
+    const id = "a".repeat(24);
+    let stored = { ...payload, _id: id, clientId: id, projectId: id };
+    let writes = 0;
+    const save = async (...args) => {
+      writes++;
+      stored = { ...stored, ...args.at(-1) };
+      return stored;
+    };
+    const populate = (result) => ({ populate: () => populate(result), then: result.then.bind(result) });
+    const repository = {
+      findOne: async () => stored,
+      findById: () => populate(Promise.resolve(stored)),
+      create: save,
+      findByIdAndUpdate: (_id, update) => populate(save(update)),
+      findOneAndUpdate: (_query, update) => populate(save(update)),
+    };
+    const deps = {
+      "@/lib/crmData": data, "@/lib/permissions": permissions,
+      "@/lib/authorization": { authorizeRequest: async () => ({ user: { role: "admin" } }) },
+      "@/lib/demoMode": { blockIfDemoMode: () => null },
+      "@/lib/mongodb": async () => {},
+      "@/lib/apiResponse": { errorResponse: (message, status) => ({ message, status }), successResponse: (body, message, status = 200) => ({ body, message, status }) },
+      "@/models/Client": { findOne: async () => ({ _id: id }) },
+      "@/models/Project": { findOne: async () => ({ _id: id, clientId: id }) },
+      [`@/models/${model}`]: repository,
+      mongoose: { Types: { ObjectId: { isValid: () => true } } },
+    };
+    const collection = load(`app/api/${resource}/route.ts`, deps);
+    const item = load(`app/api/${resource}/[id]/route.ts`, deps);
+    const context = { params: Promise.resolve({ id }) };
+    for (const field of fields) {
+      for (const value of [-1, "1.001", "9".repeat(400), "90071992547409.92"]) {
+        const req = { json: async () => ({ ...stored, [field]: value }) };
+        assert.equal((await collection.POST(req)).status, 400, `POST ${field}`);
+        assert.equal((await item.PUT(req, context)).status, 400, `PUT ${field}`);
+      }
+    }
+    assert.equal(writes, 0);
+    assert.equal(stored[fields[0]], 15);
+    const valid = { json: async () => ({ ...stored, [fields[0]]: "15.25" }) };
+    assert.equal((await collection.POST(valid)).status, 201);
+    assert.equal(stored[fields[0]], 15.25);
+    const update = { json: async () => ({ ...stored, [fields[0]]: 16.75 }) };
+    assert.equal((await item.PUT(update, context)).status, 200);
+    assert.equal(stored[fields[0]], 16.75);
+  });
+}
 const employee = { id: "a".repeat(24), role: "employee", allowedPermissions: ["projects.read", "projects.create", "projects.update", "settings.read"] };
 const reader = { ...employee, allowedPermissions: [...employee.allowedPermissions, "projects.financial.read"] };
 const writer = { ...reader, allowedPermissions: [...reader.allowedPermissions, "projects.financial.manage"] };

@@ -1,5 +1,5 @@
 import { hasPermission } from "@/lib/permissions";
-import { canReadProjectFinancials, expenseDTO } from "@/lib/crmData";
+import { canReadProjectFinancials, expenseDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -28,8 +28,6 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Other",
 ];
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
-
 const UNSAFE_TEXT_PATTERN =
   /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[<>{}\[\]`$|\\]/i;
 
@@ -48,14 +46,6 @@ function cleanText(value: unknown) {
 
 function hasUnsafeText(value: string) {
   return UNSAFE_TEXT_PATTERN.test(value);
-}
-
-function isValidMoney(value: unknown) {
-  return MONEY_PATTERN.test(getString(value));
-}
-
-function parseMoney(value: unknown) {
-  return Number(getString(value));
 }
 
 function isValidDate(value: string) {
@@ -204,14 +194,13 @@ export async function POST(req: NextRequest) {
       return errorResponse("Title contains invalid characters", 400);
     }
 
-    if (!isValidMoney(amountValue)) {
+    const amount = parseCrmMoney(amountValue);
+    if (amount === null) {
       return errorResponse(
-        "Amount must be a valid number with up to 2 decimals",
+        "Amount must have up to 2 decimals and be within the supported range",
         400
       );
     }
-
-    const amount = parseMoney(amountValue);
 
     if (amount <= 0) {
       return errorResponse("Amount must be greater than 0", 400);

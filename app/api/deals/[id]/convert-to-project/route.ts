@@ -1,5 +1,5 @@
 import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
-import { canManageProjectFinancials, projectDTO } from "@/lib/crmData";
+import { canManageProjectFinancials, projectDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -133,10 +133,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return errorResponse("Client not found", 404);
     }
 
-    const projectPrice = Number(deal.finalPrice || deal.estimatedBudget || 0);
+    const sourcePrice = deal.finalPrice == null || deal.finalPrice === 0
+      ? deal.estimatedBudget
+      : deal.finalPrice;
+    const projectPrice = parseCrmMoney(sourcePrice);
 
-    if (!Number.isFinite(projectPrice) || projectPrice <= 0) {
-      return errorResponse("Deal price must be greater than 0", 400);
+    if (projectPrice === null || projectPrice <= 0) {
+      return errorResponse("Deal price must be a positive amount with up to 2 decimals within the supported range", 400);
     }
 
     await ensureProjectDealIndex();

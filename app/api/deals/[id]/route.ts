@@ -1,4 +1,4 @@
-import { dealDTO } from "@/lib/crmData";
+import { dealDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -206,8 +206,8 @@ function validateDealPayload(
   try {
     const clientId = getStringField(data, "clientId");
     const title = cleanSingleLineText(getStringField(data, "title"));
-    const estimatedBudget = getNumberField(data, "estimatedBudget");
-    const finalPrice = getNumberField(data, "finalPrice");
+    const estimatedBudget = parseCrmMoney(data.estimatedBudget);
+    const finalPrice = parseCrmMoney(data.finalPrice === "" ? 0 : data.finalPrice ?? 0);
     const status = (getStringField(data, "status") || "Lead") as DealStatus;
     const probability = getNumberField(data, "probability");
     const expectedCloseDateValue = getStringField(data, "expectedCloseDate");
@@ -224,17 +224,17 @@ function validateDealPayload(
       return { values: null, error: titleError };
     }
 
-    if (estimatedBudget <= 0) {
+    if (estimatedBudget === null || estimatedBudget <= 0) {
       return {
         values: null,
-        error: "Estimated budget must be greater than 0",
+        error: "Estimated budget must be a positive amount with up to 2 decimals within the supported range",
       };
     }
 
-    if (finalPrice < 0) {
+    if (finalPrice === null) {
       return {
         values: null,
-        error: "Final price cannot be negative",
+        error: "Final price must be a non-negative amount with up to 2 decimals within the supported range",
       };
     }
 
