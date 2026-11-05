@@ -1,3 +1,4 @@
+import { dealDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -324,7 +325,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Deal not found", 404);
     }
 
-    return successResponse({ deal }, "Deal fetched successfully");
+    return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -388,7 +389,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Deal not found", 404);
     }
 
-    return successResponse({ deal }, "Deal updated successfully");
+    return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal updated successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

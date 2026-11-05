@@ -4,6 +4,7 @@ export const PERMISSIONS = [
   "clients.read", "clients.create", "clients.update", "clients.delete",
   "deals.read", "deals.create", "deals.update", "deals.delete", "deals.convert",
   "projects.read", "projects.create", "projects.update", "projects.delete",
+  "projects.financial.read", "projects.financial.manage",
   "revenue.read", "revenue.create", "revenue.update", "revenue.delete",
   "expenses.read", "expenses.create", "expenses.update", "expenses.delete",
   "finance.read", "reports.read", "reports.print", "reports.export",
@@ -34,6 +35,8 @@ const READ_PERMISSIONS = BUSINESS_PERMISSIONS.filter(
 );
 
 export function permissionDependencies(permission: Permission): readonly Permission[] {
+  if (permission === "projects.financial.read") return ["projects.read"];
+  if (permission === "projects.financial.manage") return ["projects.financial.read"];
   if (permission === "dashboard.read") return ["clients.read", "deals.read", "projects.read", "finance.read"];
   if (permission === "reports.read") return ["clients.read", "deals.read", "projects.read", "revenue.read", "expenses.read", "finance.read"];
   if (permission === "reports.print" || permission === "reports.export") return ["reports.read"];

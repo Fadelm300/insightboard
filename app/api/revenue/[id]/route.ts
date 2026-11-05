@@ -1,3 +1,4 @@
+import { revenueDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -100,7 +101,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Revenue record not found", 404);
     }
 
-    return successResponse({ revenue }, "Revenue record fetched successfully");
+    return successResponse({ revenue: revenueDTO(revenue, authorization.user!) }, "Revenue record fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -211,7 +212,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Revenue record not found", 404);
     }
 
-    return successResponse({ revenue }, "Revenue record updated successfully");
+    return successResponse({ revenue: revenueDTO(revenue, authorization.user!) }, "Revenue record updated successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

@@ -67,9 +67,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const expenseCount = expenseSummary[0]?.expenseCount || 0;
 
     const netProfit = totalRevenue - totalExpenses;
-    const remainingBalance = project.price - totalRevenue;
+    const remainingBalance = project.price === null ? null : project.price - totalRevenue;
 
-    const paymentProgress =
+    const paymentProgress = project.price === null ? null :
       project.price > 0 ? Math.round((totalRevenue / project.price) * 100) : 0;
 
     return successResponse(

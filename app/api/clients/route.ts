@@ -1,3 +1,4 @@
+import { clientDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
@@ -300,7 +301,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(
       {
-        clients,
+        clients: clients.map((record) => clientDTO(record)),
         total,
         page,
         limit,
@@ -330,7 +331,7 @@ export async function POST(req: NextRequest) {
 
     const client = await Client.create(values);
 
-    return successResponse({ client }, "Client created successfully", 201);
+    return successResponse({ client: clientDTO(client) }, "Client created successfully", 201);
   } catch {
     return errorResponse("Server error", 500);
   }

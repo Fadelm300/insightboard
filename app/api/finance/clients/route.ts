@@ -1,3 +1,4 @@
+import { clientLabelDTO } from "@/lib/crmData";
 import { logServerError } from "@/lib/serverLogger";
 import { NextRequest } from "next/server";
 
@@ -145,7 +146,7 @@ export async function GET(req: NextRequest) {
     );
 
     return successResponse(
-      { clients },
+      { clients: clients.map((item) => ({ ...item, client: clientLabelDTO(item.client, authorization.user!) })) },
       "Clients finance summary fetched successfully"
     );
   } catch {

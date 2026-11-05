@@ -1,3 +1,5 @@
+import { hasPermission } from "@/lib/permissions";
+import { canReadProjectFinancials, revenueDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -184,9 +186,11 @@ export async function GET(req: NextRequest) {
         isDeleted: { $ne: true },
         $or: [
           { name: { $regex: search, $options: "i" } },
-          { type: { $regex: search, $options: "i" } },
-          { status: { $regex: search, $options: "i" } },
-          { paymentStatus: { $regex: search, $options: "i" } },
+          ...(hasPermission(authorization.user!, "projects.read") ? [
+            { type: { $regex: search, $options: "i" } },
+            { status: { $regex: search, $options: "i" } },
+          ] : []),
+          ...(canReadProjectFinancials(authorization.user!) ? [{ paymentStatus: { $regex: search, $options: "i" } }] : []),
         ],
       }).select("_id");
 
@@ -194,8 +198,10 @@ export async function GET(req: NextRequest) {
         isDeleted: { $ne: true },
         $or: [
           { companyName: { $regex: search, $options: "i" } },
-          { contactPerson: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
+          ...(hasPermission(authorization.user!, "clients.read") ? [
+            { contactPerson: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ] : []),
         ],
       }).select("_id");
 
@@ -241,7 +247,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(
       {
-        revenues,
+        revenues: revenues.map((record) => revenueDTO(record, authorization.user!)),
         total,
         page,
         limit,
@@ -291,7 +297,7 @@ export async function POST(req: NextRequest) {
     });
 
     return successResponse(
-      { revenue },
+      { revenue: revenueDTO(revenue, authorization.user!) },
       "Revenue record created successfully",
       201
     );

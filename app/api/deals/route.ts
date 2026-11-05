@@ -1,3 +1,5 @@
+import { hasPermission } from "@/lib/permissions";
+import { dealDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -298,8 +300,10 @@ export async function GET(req: NextRequest) {
         isDeleted: { $ne: true },
         $or: [
           { companyName: { $regex: search, $options: "i" } },
-          { contactPerson: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
+          ...(hasPermission(authorization.user!, "clients.read") ? [
+            { contactPerson: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ] : []),
         ],
       }).select("_id");
 
@@ -331,7 +335,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(
       {
-        deals,
+        deals: deals.map((record) => dealDTO(record, authorization.user!)),
         total,
         page,
         limit,
@@ -375,7 +379,7 @@ if (demoBlock) return demoBlock;
       "companyName contactPerson email status"
     );
 
-    return successResponse({ deal }, "Deal created successfully", 201);
+    return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal created successfully", 201);
   } catch {
     return errorResponse("Server error", 500);
   }

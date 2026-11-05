@@ -87,9 +87,9 @@ export async function GET(req: NextRequest) {
       const expenseCount = expenseData?.expenseCount || 0;
 
       const netProfit = totalRevenue - totalExpenses;
-      const remainingBalance = Math.max(project.price - totalRevenue, 0);
+      const remainingBalance = project.price === null ? null : Math.max(project.price - totalRevenue, 0);
 
-      const paymentProgress =
+      const paymentProgress = project.price === null ? null :
         project.price > 0
           ? Math.min(Math.round((totalRevenue / project.price) * 100), 100)
           : 0;

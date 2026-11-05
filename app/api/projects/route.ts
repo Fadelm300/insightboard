@@ -1,3 +1,5 @@
+import { hasPermission } from "@/lib/permissions";
+import { projectFinancialInput, canReadProjectFinancials, projectDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -30,9 +32,9 @@ type ProjectPayload = {
   dealId?: string | null;
   name: string;
   type: ProjectType;
-  price: number;
-  cost: number;
-  profit: number;
+  price: number | null;
+  cost: number | null;
+  profit: number | null;
   deadline?: string;
   status: ProjectStatus;
   paymentStatus: PaymentStatus;
@@ -63,7 +65,6 @@ const PAYMENT_STATUSES: PaymentStatus[] = [
   "Paid",
 ];
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 const UNSAFE_TEXT_PATTERN =
   /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
@@ -85,10 +86,6 @@ function hasUnsafeText(value: string) {
   return UNSAFE_TEXT_PATTERN.test(value);
 }
 
-function isValidMoney(value: unknown) {
-  const stringValue = getString(value);
-  return MONEY_PATTERN.test(stringValue);
-}
 
 function parseMoney(value: unknown) {
   return Number(getString(value));
@@ -174,30 +171,8 @@ function validateProjectPayload(body: unknown):
     return { error: "Invalid project type" };
   }
 
-  if (!isValidMoney(body.price)) {
-    return { error: "Price must be a valid number with up to 2 decimals" };
-  }
-
-  const price = parseMoney(body.price);
-
-  if (price <= 0) {
-    return { error: "Price must be greater than 0" };
-  }
-
-  const costValue =
-    body.cost === undefined || body.cost === null || body.cost === ""
-      ? 0
-      : body.cost;
-
-  if (!isValidMoney(costValue)) {
-    return { error: "Cost must be a valid number with up to 2 decimals" };
-  }
-
-  const cost = parseMoney(costValue);
-
-  if (cost < 0) {
-    return { error: "Cost cannot be negative" };
-  }
+  const price = body.price === null ? null : parseMoney(body.price);
+  const cost = body.cost === null ? null : parseMoney(body.cost);
 
   if (deadline && isPastDate(deadline)) {
     return { error: "Deadline cannot be in the past" };
@@ -235,7 +210,7 @@ function validateProjectPayload(body: unknown):
       type,
       price,
       cost,
-      profit: price - cost,
+      profit: price === null || cost === null ? null : price - cost,
       deadline: deadline || undefined,
       status,
       paymentStatus,
@@ -272,18 +247,20 @@ export async function GET(req: NextRequest) {
         isDeleted: { $ne: true },
         $or: [
           { companyName: { $regex: search, $options: "i" } },
-          { contactPerson: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
+          ...(hasPermission(authorization.user!, "clients.read") ? [
+            { contactPerson: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ] : []),
         ],
       }).select("_id");
 
-      const matchingDeals = await Deal.find({
+      const matchingDeals = hasPermission(authorization.user!, "deals.read") ? await Deal.find({
         isDeleted: { $ne: true },
         $or: [
           { title: { $regex: search, $options: "i" } },
           { status: { $regex: search, $options: "i" } },
         ],
-      }).select("_id");
+      }).select("_id") : [];
 
       const matchingClientIds = matchingClients.map((client) => client._id);
       const matchingDealIds = matchingDeals.map((deal) => deal._id);
@@ -292,14 +269,14 @@ export async function GET(req: NextRequest) {
         { name: { $regex: search, $options: "i" } },
         { type: { $regex: search, $options: "i" } },
         { status: { $regex: search, $options: "i" } },
-        { paymentStatus: { $regex: search, $options: "i" } },
+        ...(canReadProjectFinancials(authorization.user!) ? [{ paymentStatus: { $regex: search, $options: "i" } }] : []),
         { description: { $regex: search, $options: "i" } },
         { notes: { $regex: search, $options: "i" } },
       ];
 
       const amount = Number(search);
 
-      if (Number.isFinite(amount)) {
+      if (canReadProjectFinancials(authorization.user!) && Number.isFinite(amount)) {
         searchConditions.push({ price: amount });
         searchConditions.push({ cost: amount });
         searchConditions.push({ profit: amount });
@@ -332,7 +309,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(
       {
-        projects,
+        projects: projects.map((record) => projectDTO(record, authorization.user!)),
         total,
         page,
         limit,
@@ -354,7 +331,9 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     const body = await req.json().catch(() => null);
-    const validation = validateProjectPayload(body);
+    const financial = projectFinancialInput(authorization.user!, body);
+    if (financial.error) return errorResponse(financial.error, financial.status);
+    const validation = validateProjectPayload({ ...body, ...financial.data });
 
     if ("error" in validation) {
       return errorResponse(validation.error, 400);
@@ -395,7 +374,7 @@ export async function POST(req: NextRequest) {
 
     const project = await Project.create(payload);
 
-    return successResponse({ project }, "Project created successfully", 201);
+    return successResponse({ project: projectDTO(project, authorization.user!) }, "Project created successfully", 201);
   } catch {
     return errorResponse("Server error", 500);
   }

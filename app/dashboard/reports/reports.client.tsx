@@ -100,7 +100,7 @@ function getExpenseTextSx(): SxProps<Theme> {
   };
 }
 
-function getProgressChipSx(value?: number): SxProps<Theme> {
+function getProgressChipSx(value?: number | null): SxProps<Theme> {
   const progress = Number(value || 0);
   const color =
     progress >= 100 ? "#10B981" : progress >= 50 ? "#0EA5E9" : "#F59E0B";
@@ -494,7 +494,7 @@ const matchesDateFilters = useCallback(
       }, 0);
 
       const price = Number(project.price || 0);
-      const paymentProgress =
+      const paymentProgress = project.price === null ? null :
         price > 0 ? Number(((totalRevenue / price) * 100).toFixed(1)) : 0;
 
       result.push({
@@ -502,7 +502,7 @@ const matchesDateFilters = useCallback(
         totalRevenue,
         totalExpenses,
         netProfit: totalRevenue - totalExpenses,
-        remainingBalance: price - totalRevenue,
+        remainingBalance: project.price === null ? null : price - totalRevenue,
         paymentProgress,
         revenueCount: projectRevenue.length,
         expenseCount: projectExpenses.length,
@@ -1175,6 +1175,7 @@ useEffect(() => {
         </head>
         <body>
           <h1>InsightBoard Reports</h1>
+          ${projects.some((project) => project.price === null) ? "<p>Some projects are awaiting pricing. Project-value totals include priced projects only.</p>" : ""}
           <div class="subtitle">
             Generated at ${escapeHtml(new Date().toLocaleString())}
           </div>
@@ -1494,6 +1495,7 @@ useEffect(() => {
             Business performance reports based on revenue, expenses, projects,
             clients, and sales conversion.
           </Typography>
+          {projects.some((project) => project.price === null) && <Alert severity="info" sx={{ mt: 1 }}>Some projects are awaiting pricing. Project-value totals include priced projects only; their price-dependent balances remain pending.</Alert>}
         </Box>
 
         <Box

@@ -63,15 +63,18 @@ export function extractObject<T>(
   return fallback;
 }
 
-export function formatMoney(value?: number) {
+export function formatMoney(value?: number | null) {
+  if (value === null) return "Pending pricing";
   return `${Number(value || 0).toFixed(2)} BHD`;
 }
 
-export function formatNumber(value?: number) {
+export function formatNumber(value?: number | null) {
+  if (value === null) return "Pending pricing";
   return Number(value || 0).toFixed(2);
 }
 
-export function formatPercent(value?: number) {
+export function formatPercent(value?: number | null) {
+  if (value === null) return "Pending pricing";
   return `${Number(value || 0).toFixed(1)}%`;
 }
 

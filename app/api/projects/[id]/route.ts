@@ -1,3 +1,4 @@
+import { canManageProjectFinancials, projectFinancialInput, projectDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -27,7 +28,6 @@ type ProjectStatus =
   | "Completed"
   | "Cancelled";
 
-type PaymentStatus = "Unpaid" | "Partially Paid" | "Paid";
 
 const PROJECT_TYPES: ProjectType[] = [
   "Landing Page",
@@ -46,13 +46,7 @@ const PROJECT_STATUSES: ProjectStatus[] = [
   "Cancelled",
 ];
 
-const PAYMENT_STATUSES: PaymentStatus[] = [
-  "Unpaid",
-  "Partially Paid",
-  "Paid",
-];
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const UNSAFE_TEXT_PATTERN =
@@ -75,14 +69,7 @@ function hasUnsafeText(value: string) {
   return UNSAFE_TEXT_PATTERN.test(value);
 }
 
-function isValidMoney(value: unknown) {
-  const stringValue = getString(value);
-  return MONEY_PATTERN.test(stringValue);
-}
 
-function parseMoney(value: unknown) {
-  return Number(getString(value));
-}
 
 function parseDateInput(value: string) {
   if (!DATE_PATTERN.test(value)) return null;
@@ -153,7 +140,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Project not found", 404);
     }
 
-    return successResponse({ project }, "Project fetched successfully");
+    return successResponse({ project: projectDTO(project, authorization.user!) }, "Project fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -188,6 +175,9 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid request body", 400);
     }
 
+    const financial = projectFinancialInput(authorization.user!, body, existingProject);
+    if (financial.error) return errorResponse(financial.error, financial.status);
+
     const clientId =
       body.clientId === undefined || body.clientId === null
         ? String(existingProject.clientId)
@@ -219,11 +209,6 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       body.status === undefined || body.status === null
         ? (existingProject.status as ProjectStatus)
         : (getString(body.status) as ProjectStatus);
-
-    const paymentStatus =
-      body.paymentStatus === undefined || body.paymentStatus === null
-        ? (existingProject.paymentStatus as PaymentStatus)
-        : (getString(body.paymentStatus) as PaymentStatus);
 
     const description =
       body.description === undefined || body.description === null
@@ -271,52 +256,12 @@ const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
       return errorResponse("Invalid project type", 400);
     }
 
-    const priceValue =
-      body.price === undefined || body.price === null
-        ? existingProject.price
-        : body.price;
-
-    if (!isValidMoney(priceValue)) {
-      return errorResponse(
-        "Price must be a valid number with up to 2 decimals",
-        400
-      );
-    }
-
-    const price = parseMoney(priceValue);
-
-    if (price <= 0) {
-      return errorResponse("Price must be greater than 0", 400);
-    }
-
-    const costValue =
-      body.cost === undefined || body.cost === null || body.cost === ""
-        ? existingProject.cost || 0
-        : body.cost;
-
-    if (!isValidMoney(costValue)) {
-      return errorResponse(
-        "Cost must be a valid number with up to 2 decimals",
-        400
-      );
-    }
-
-    const cost = parseMoney(costValue);
-
-    if (cost < 0) {
-      return errorResponse("Cost cannot be negative", 400);
-    }
-
     if (deadline && deadlineChanged && isPastDate(deadline)) {
   return errorResponse("Deadline cannot be in the past", 400);
 }
 
     if (!PROJECT_STATUSES.includes(status)) {
       return errorResponse("Invalid project status", 400);
-    }
-
-    if (!PAYMENT_STATUSES.includes(paymentStatus)) {
-      return errorResponse("Invalid payment status", 400);
     }
 
     if (description.length > 1000) {
@@ -370,11 +315,8 @@ const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
       clientId,
       name,
       type,
-      price,
-      cost,
-      profit: price - cost,
+      ...(canManageProjectFinancials(authorization.user!) && ["price", "cost", "paymentStatus"].some((key) => Object.hasOwn(body, key)) ? financial.data : {}),
       status,
-      paymentStatus,
       description,
       notes,
       ...(deadline ? { deadline } : {}),
@@ -411,7 +353,7 @@ const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
       return errorResponse("Project not found", 404);
     }
 
-    return successResponse({ project }, "Project updated successfully");
+    return successResponse({ project: projectDTO(project, authorization.user!) }, "Project updated successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

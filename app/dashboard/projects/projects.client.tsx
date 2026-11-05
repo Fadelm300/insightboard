@@ -76,12 +76,12 @@ type Project = {
   dealId?: ProjectDeal;
   name: string;
   type: ProjectType;
-  price: number;
-  cost: number;
-  profit: number;
+  price?: number | null;
+  cost?: number | null;
+  profit?: number | null;
   deadline?: string;
   status: ProjectStatus;
-  paymentStatus: PaymentStatus;
+  paymentStatus?: PaymentStatus;
   description?: string;
   notes?: string;
   createdAt?: string;
@@ -406,6 +406,7 @@ function isPastDate(value: string) {
 function validateProjectForm(
   formData: ProjectFormData,
   editingProject?: Project | null,
+  manageFinancials = false,
 ):
   | {
       isValid: true;
@@ -447,18 +448,13 @@ function validateProjectForm(
     errors.type = "Invalid project type";
   }
 
-  if (!cleanedValues.price) {
-    errors.price = "Price is required";
-  } else if (!isValidMoney(cleanedValues.price)) {
-    errors.price = "Price must be a valid number with up to 2 decimals";
-  } else if (Number(cleanedValues.price) <= 0) {
-    errors.price = "Price must be greater than 0";
-  }
-
-  if (!isValidMoney(cleanedValues.cost)) {
-    errors.cost = "Cost must be a valid number with up to 2 decimals";
-  } else if (Number(cleanedValues.cost) < 0) {
-    errors.cost = "Cost cannot be negative";
+  if (manageFinancials && cleanedValues.price) {
+    if (!isValidMoney(cleanedValues.price) || !Number.isFinite(Number(cleanedValues.price)) || Number(cleanedValues.price) <= 0) {
+      errors.price = "Enter a valid positive price";
+    }
+    if (!isValidMoney(cleanedValues.cost) || !Number.isFinite(Number(cleanedValues.cost)) || Number(cleanedValues.cost) < 0) {
+      errors.cost = "Enter a valid non-negative cost";
+    }
   }
 
 const originalDeadline = editingProject
@@ -479,7 +475,7 @@ if (
     errors.status = "Invalid project status";
   }
 
-  if (!PAYMENT_STATUSES.includes(cleanedValues.paymentStatus)) {
+  if (manageFinancials && cleanedValues.price && !PAYMENT_STATUSES.includes(cleanedValues.paymentStatus)) {
     errors.paymentStatus = "Invalid payment status";
   }
 
@@ -557,22 +553,27 @@ function getProjectInitial(name: string) {
   return name.trim().charAt(0).toUpperCase() || "P";
 }
 
-function formatBHD(value?: number) {
+function formatBHD(value?: number | null) {
+  if (value === null || value === undefined) return "Pending pricing";
   return `${Number(value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })} BHD`;
 }
 
-function getProfitSx(profit: number) {
+function getProfitSx(profit?: number | null) {
   return {
     fontWeight: 900,
-    color: profit >= 0 ? "success.main" : "error.main",
+    color: (profit ?? 0) >= 0 ? "success.main" : "error.main",
   } satisfies SxProps<Theme>;
 }
 
 export default function ProjectsPage() {
   const canCreate = usePermission("projects.create");
+  const financialRead = usePermission("projects.financial.read");
+  const financeRead = usePermission("finance.read");
+  const canReadFinancials = financialRead || financeRead;
+  const canManageFinancials = usePermission("projects.financial.manage");
   const canUpdate = usePermission("projects.update");
   const canDelete = usePermission("projects.delete");
   const [projects, setProjects] = useState<Project[]>([]);
@@ -816,7 +817,7 @@ export default function ProjectsPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-const validation = validateProjectForm(formData, editingProject);
+const validation = validateProjectForm(formData, editingProject, canManageFinancials);
 
 if (!validation.isValid) {
       setFormErrors(validation.errors);
@@ -836,11 +837,13 @@ if (!validation.isValid) {
       dealId: values.dealId,
       name: values.name,
       type: values.type,
-      price: Number(values.price),
-      cost: Number(values.cost || 0),
+      ...(canManageFinancials && values.price ? {
+        price: Number(values.price),
+        cost: Number(values.cost || 0),
+        paymentStatus: values.paymentStatus,
+      } : {}),
       deadline: values.deadline,
       status: values.status,
-      paymentStatus: values.paymentStatus,
       description: values.description,
       notes: values.notes,
     };
@@ -922,7 +925,7 @@ if (!validation.isValid) {
           </Typography>
 
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Manage active website projects, costs, profit, and delivery status.
+            Manage website projects and delivery. Financial fields require a separate permission.
           </Typography>
         </Box>
 
@@ -1093,7 +1096,7 @@ if (!validation.isValid) {
                       Deadline
                     </TableCell>
 
-                    <TableCell
+                    {canReadFinancials && (<TableCell
                       sx={{
                         ...tableHeaderCellSx,
                         ...hideUntilLargeSx,
@@ -1101,9 +1104,9 @@ if (!validation.isValid) {
                       }}
                     >
                       Price
-                    </TableCell>
+                    </TableCell>)}
 
-                    <TableCell
+                    {canReadFinancials && (<TableCell
                       sx={{
                         ...tableHeaderCellSx,
                         ...hideUntilExtraLargeSx,
@@ -1111,9 +1114,9 @@ if (!validation.isValid) {
                       }}
                     >
                       Cost
-                    </TableCell>
+                    </TableCell>)}
 
-                    <TableCell
+                    {canReadFinancials && (<TableCell
                       sx={{
                         ...tableHeaderCellSx,
                         width: {
@@ -1126,7 +1129,7 @@ if (!validation.isValid) {
                       }}
                     >
                       Profit
-                    </TableCell>
+                    </TableCell>)}
 
                     <TableCell
                       sx={{
@@ -1138,7 +1141,7 @@ if (!validation.isValid) {
                       Status
                     </TableCell>
 
-                    <TableCell
+                    {canReadFinancials && (<TableCell
                       sx={{
                         ...tableHeaderCellSx,
                         ...hideUntilLargeSx,
@@ -1146,7 +1149,7 @@ if (!validation.isValid) {
                       }}
                     >
                       Payment
-                    </TableCell>
+                    </TableCell>)}
 
                     <TableCell
                       align="center"
@@ -1301,7 +1304,7 @@ if (!validation.isValid) {
                         {formatDate(project.deadline)}
                       </TableCell>
 
-                      <TableCell
+                      {canReadFinancials && (<TableCell
                         sx={{
                           ...tableBodyCellSx,
                           ...hideUntilLargeSx,
@@ -1311,9 +1314,9 @@ if (!validation.isValid) {
                         }}
                       >
                         {formatBHD(project.price)}
-                      </TableCell>
+                      </TableCell>)}
 
-                      <TableCell
+                      {canReadFinancials && (<TableCell
                         sx={{
                           ...tableBodyCellSx,
                           ...hideUntilExtraLargeSx,
@@ -1323,9 +1326,9 @@ if (!validation.isValid) {
                         }}
                       >
                         {formatBHD(project.cost)}
-                      </TableCell>
+                      </TableCell>)}
 
-                      <TableCell
+                      {canReadFinancials && (<TableCell
                         sx={{
                           ...tableBodyCellSx,
                           ...getProfitSx(project.profit),
@@ -1341,7 +1344,7 @@ if (!validation.isValid) {
                         }}
                       >
                         {formatBHD(project.profit)}
-                      </TableCell>
+                      </TableCell>)}
 
                       <TableCell
                         sx={{
@@ -1357,7 +1360,7 @@ if (!validation.isValid) {
                         />
                       </TableCell>
 
-                      <TableCell
+                      {canReadFinancials && (<TableCell
                         sx={{
                           ...tableBodyCellSx,
                           ...hideUntilLargeSx,
@@ -1367,9 +1370,9 @@ if (!validation.isValid) {
                         <Chip
                           label={project.paymentStatus}
                           size="small"
-                          sx={getPaymentStatusChipSx(project.paymentStatus)}
+                          sx={getPaymentStatusChipSx(project.paymentStatus ?? "Unpaid")}
                         />
-                      </TableCell>
+                      </TableCell>)}
 
                       <TableCell
                         align="right"
@@ -1566,29 +1569,29 @@ if (!validation.isValid) {
                 gap: 2,
               }}
             >
-              <TextField
+              {canReadFinancials && (<TextField
                 label="Price"
                 fullWidth
                 value={formatBHD(viewProject?.price)}
                 sx={readonlyTextFieldSx}
                 slotProps={{ input: { readOnly: true } }}
-              />
+              />)}
 
-              <TextField
+              {canReadFinancials && (<TextField
                 label="Cost"
                 fullWidth
                 value={formatBHD(viewProject?.cost)}
                 sx={readonlyTextFieldSx}
                 slotProps={{ input: { readOnly: true } }}
-              />
+              />)}
 
-              <TextField
+              {canReadFinancials && (<TextField
                 label="Profit"
                 fullWidth
                 value={formatBHD(viewProject?.profit)}
                 sx={readonlyTextFieldSx}
                 slotProps={{ input: { readOnly: true } }}
-              />
+              />)}
             </Box>
 
             <Box
@@ -1615,13 +1618,13 @@ if (!validation.isValid) {
                 slotProps={{ input: { readOnly: true } }}
               />
 
-              <TextField
+              {canReadFinancials && (<TextField
                 label="Payment Status"
                 fullWidth
                 value={viewProject?.paymentStatus || "-"}
                 sx={readonlyTextFieldSx}
                 slotProps={{ input: { readOnly: true } }}
-              />
+              />)}
             </Box>
 
             <TextField
@@ -1697,6 +1700,7 @@ if (!validation.isValid) {
           <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
             {editingProject ? "Edit Project" : "Add Project"}
           </DialogTitle>
+            {!canManageFinancials && <Alert severity="info" sx={{ mx: 3, mt: 1 }}>Project details can be saved. An authorized colleague will complete pricing.</Alert>}
 
           <DialogContent>
             <Box
@@ -1777,10 +1781,9 @@ if (!validation.isValid) {
                   gap: 2,
                 }}
               >
-                <TextField
+                {canManageFinancials && (<TextField
                   label="Price"
                   type="number"
-                  required
                   fullWidth
                   value={formData.price}
                   error={Boolean(formErrors.price)}
@@ -1794,9 +1797,9 @@ if (!validation.isValid) {
                       min: "0",
                     },
                   }}
-                />
+                />)}
 
-                <TextField
+                {canManageFinancials && (<TextField
                   label="Cost"
                   type="number"
                   fullWidth
@@ -1812,7 +1815,7 @@ if (!validation.isValid) {
                       min: "0",
                     },
                   }}
-                />
+                />)}
               </Box>
 
               <Box
@@ -1843,7 +1846,7 @@ if (!validation.isValid) {
                   ))}
                 </TextField>
 
-                <TextField
+                {canManageFinancials && (<TextField
                   select
                   label="Payment Status"
                   fullWidth
@@ -1862,7 +1865,7 @@ if (!validation.isValid) {
                       {status}
                     </MenuItem>
                   ))}
-                </TextField>
+                </TextField>)}
               </Box>
 
               <TextField

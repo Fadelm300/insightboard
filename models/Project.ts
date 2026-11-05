@@ -50,19 +50,29 @@ const ProjectSchema = new Schema(
 
     price: {
       type: Number,
-      required: [true, "Price is required"],
+      default: null,
+      max: Number.MAX_SAFE_INTEGER / 100,
+      validate: {
+        validator: (value: number | null) => value === null || Number.isFinite(value),
+        message: "Amount must be finite",
+      },
       min: [0.01, "Price must be greater than 0"],
     },
 
     cost: {
       type: Number,
-      default: 0,
+      default: null,
+      max: Number.MAX_SAFE_INTEGER / 100,
+      validate: {
+        validator: (value: number | null) => value === null || Number.isFinite(value),
+        message: "Amount must be finite",
+      },
       min: [0, "Cost cannot be negative"],
     },
 
     profit: {
       type: Number,
-      default: 0,
+      default: null,
     },
 
     deadline: {
@@ -104,10 +114,9 @@ const ProjectSchema = new Schema(
 );
 
 ProjectSchema.pre("save", function () {
-  const price = typeof this.price === "number" ? this.price : 0;
-  const cost = typeof this.cost === "number" ? this.cost : 0;
-
-  this.profit = price - cost;
+  this.profit = typeof this.price === "number" && typeof this.cost === "number"
+    ? this.price - this.cost
+    : null;
 });
 
 const Project = models.Project || model("Project", ProjectSchema);

@@ -1,3 +1,4 @@
+import { expenseDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -102,7 +103,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Expense record not found", 404);
     }
 
-    return successResponse({ expense }, "Expense record fetched successfully");
+    return successResponse({ expense: expenseDTO(expense, authorization.user!) }, "Expense record fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -206,7 +207,7 @@ if (demoBlock) return demoBlock;
       return errorResponse("Expense record not found", 404);
     }
 
-    return successResponse({ expense }, "Expense record updated successfully");
+    return successResponse({ expense: expenseDTO(expense, authorization.user!) }, "Expense record updated successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

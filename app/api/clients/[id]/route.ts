@@ -1,3 +1,4 @@
+import { clientDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 
@@ -274,7 +275,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Client not found", 404);
     }
 
-    return successResponse({ client }, "Client fetched successfully");
+    return successResponse({ client: clientDTO(client) }, "Client fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -317,7 +318,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Client not found", 404);
     }
 
-    return successResponse({ client }, "Client updated successfully");
+    return successResponse({ client: clientDTO(client) }, "Client updated successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

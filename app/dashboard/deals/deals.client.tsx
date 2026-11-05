@@ -548,7 +548,9 @@ export default function DealsPage() {
   const canCreate = usePermission("deals.create");
   const canUpdate = usePermission("deals.update");
   const canDelete = usePermission("deals.delete");
-  const canConvert = usePermission("deals.convert");
+  const hasConvert = usePermission("deals.convert");
+  const financialManage = usePermission("projects.financial.manage");
+  const canConvert = hasConvert && financialManage;
   const [deals, setDeals] = useState<Deal[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);

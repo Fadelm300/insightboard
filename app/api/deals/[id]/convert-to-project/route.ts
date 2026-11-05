@@ -1,3 +1,4 @@
+import { canManageProjectFinancials, projectDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const authorization = await authorizeRequest(req, "deals.convert");
     if (authorization.response) return authorization.response;
+    if (!canManageProjectFinancials(authorization.user!)) return errorResponse("Project financial permission required", 403);
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
@@ -152,7 +154,7 @@ if (demoBlock) return demoBlock;
     });
 
     return successResponse(
-      { project },
+      { project: projectDTO(project, authorization.user!) },
       "Deal converted to project successfully",
       201
     );

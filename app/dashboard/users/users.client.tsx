@@ -185,7 +185,7 @@ export default function UsersClient({ actorRole, actorPermissions }: {
               <Box sx={{ display: "flex", flexWrap: "wrap" }}>
                 {options.filter((permission) => permission.startsWith(resource + ".")).map((permission) => <FormControlLabel key={permission}
                   control={<Checkbox checked={form.allowedPermissions.includes(permission)} onChange={(event) => togglePermission(permission, event.target.checked)} />}
-                  label={permission.slice(resource.length + 1)} />)}
+                  label={permission === "projects.financial.read" ? "View project financial details" : permission === "projects.financial.manage" ? "Set and update project financial details" : permission.slice(resource.length + 1)} />)}
               </Box>
             </Box>)}
           </Stack>
