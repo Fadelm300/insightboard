@@ -53,6 +53,7 @@ for (const [resource, model, fields, payload] of [
       findOneAndUpdate: (_query, update) => populate(save(update)),
     };
     const deps = {
+      "@/lib/financialArchive": { changeFinancialArchive: async () => { throw Error("Unexpected archive"); } },
       "@/lib/crmData": data, "@/lib/permissions": permissions,
       "@/lib/authorization": { authorizeRequest: async () => ({ user: { role: "admin" } }) },
       "@/lib/demoMode": { blockIfDemoMode: () => null },

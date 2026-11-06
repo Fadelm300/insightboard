@@ -1,3 +1,4 @@
+import { changeFinancialArchive } from "@/lib/financialArchive";
 import { expenseDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
@@ -216,12 +217,9 @@ if (demoBlock) return demoBlock;
       return errorResponse("Invalid expense ID", 400);
     }
 
-    const expense = await Expense.findOneAndUpdate(
-      { _id: id, isDeleted: { $ne: true } },
-      { $set: { isDeleted: true, deletedAt: new Date() } }
-    );
+    const result = await changeFinancialArchive("expenses", id, authorization.user!.id, "archive");
 
-    if (!expense) {
+    if (result !== "changed") {
       return errorResponse("Expense record not found", 404);
     }
 

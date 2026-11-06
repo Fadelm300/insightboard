@@ -1,3 +1,4 @@
+import { changeFinancialArchive } from "@/lib/financialArchive";
 import { revenueDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
@@ -220,12 +221,9 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid revenue ID", 400);
     }
 
-    const revenue = await Revenue.findOneAndUpdate(
-      { _id: id, isDeleted: { $ne: true } },
-      { $set: { isDeleted: true, deletedAt: new Date() } }
-    );
+    const result = await changeFinancialArchive("revenue", id, authorization.user!.id, "archive");
 
-    if (!revenue) {
+    if (result !== "changed") {
       return errorResponse("Revenue record not found", 404);
     }
 
