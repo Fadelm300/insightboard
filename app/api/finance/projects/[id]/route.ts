@@ -33,6 +33,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const revenueSummary = await Revenue.aggregate([
       {
         $match: {
+          isDeleted: { $ne: true },
           projectId: project._id,
         },
       },
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const expenseSummary = await Expense.aggregate([
       {
         $match: {
+          isDeleted: { $ne: true },
           projectId: project._id,
         },
       },

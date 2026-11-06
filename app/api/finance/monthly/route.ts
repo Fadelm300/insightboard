@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const revenueMonthly = await Revenue.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
       {
         $group: {
           _id: {
@@ -44,6 +45,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const expenseMonthly = await Expense.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
       {
         $group: {
           _id: {

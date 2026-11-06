@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const revenueSummary = await Revenue.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
       {
         $group: {
           _id: null,
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const expenseSummary = await Expense.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
       {
         $group: {
           _id: null,

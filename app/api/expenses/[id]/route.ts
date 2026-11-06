@@ -84,7 +84,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid expense ID", 400);
     }
 
-    const expense = await Expense.findById(id).populate(
+    const expense = await Expense.findOne({ _id: id, isDeleted: { $ne: true } }).populate(
       "projectId",
       "name type price cost profit status paymentStatus"
     );
@@ -187,7 +187,7 @@ if (demoBlock) return demoBlock;
       notes,
     };
 
-    const expense = await Expense.findByIdAndUpdate(id, updateData, {
+    const expense = await Expense.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, {
       returnDocument: "after",
       runValidators: true,
     }).populate("projectId", "name type price cost profit status paymentStatus");
@@ -216,7 +216,10 @@ if (demoBlock) return demoBlock;
       return errorResponse("Invalid expense ID", 400);
     }
 
-    const expense = await Expense.findByIdAndDelete(id);
+    const expense = await Expense.findOneAndUpdate(
+      { _id: id, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true, deletedAt: new Date() } }
+    );
 
     if (!expense) {
       return errorResponse("Expense record not found", 404);

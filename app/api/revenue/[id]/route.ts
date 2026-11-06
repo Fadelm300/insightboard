@@ -82,7 +82,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid revenue ID", 400);
     }
 
-    const revenue = await Revenue.findById(id)
+    const revenue = await Revenue.findOne({ _id: id, isDeleted: { $ne: true } })
       .populate("projectId", "name type price status paymentStatus")
       .populate("clientId", "companyName contactPerson email");
 
@@ -189,7 +189,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       updateData.notes = notes;
     }
 
-    const revenue = await Revenue.findByIdAndUpdate(id, updateData, {
+    const revenue = await Revenue.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, {
       returnDocument: "after",
       runValidators: true,
     })
@@ -220,7 +220,10 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid revenue ID", 400);
     }
 
-    const revenue = await Revenue.findByIdAndDelete(id);
+    const revenue = await Revenue.findOneAndUpdate(
+      { _id: id, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true, deletedAt: new Date() } }
+    );
 
     if (!revenue) {
       return errorResponse("Revenue record not found", 404);
