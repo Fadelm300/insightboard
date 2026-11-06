@@ -120,6 +120,7 @@ export const PAGE_PERMISSIONS = {
   "/dashboard/revenue": "revenue.read",
   "/dashboard/expenses": "expenses.read",
   "/dashboard/reports": "reports.read",
+  "/dashboard/financial-archive": "financialArchive.read",
   "/dashboard/settings": "settings.read",
   "/dashboard/users": "users.read",
 } satisfies Record<string, Permission>;

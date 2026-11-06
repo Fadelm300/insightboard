@@ -38,6 +38,7 @@ const menuItems = [
   { text: "Revenue", icon: <PaymentsIcon />, path: "/dashboard/revenue" },
   { text: "Expenses", icon: <ReceiptLongIcon />, path: "/dashboard/expenses" },
   { text: "Reports", icon: <AssessmentIcon />, path: "/dashboard/reports" },
+  { text: "Financial Archive", icon: <AssessmentIcon />, path: "/dashboard/financial-archive" },
   { text: "Settings", icon: <SettingsIcon />, path: "/dashboard/settings" },
 ];
 
