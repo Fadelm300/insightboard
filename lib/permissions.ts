@@ -7,7 +7,7 @@ export const PERMISSIONS = [
   "projects.financial.read", "projects.financial.manage",
   "revenue.read", "revenue.create", "revenue.update", "revenue.delete",
   "expenses.read", "expenses.create", "expenses.update", "expenses.delete",
-  "financialArchive.read", "financialArchive.restore",
+  "financialArchive.read", "financialArchive.restore", "crmArchive.read", "crmArchive.restore",
   "finance.read", "reports.read", "reports.print", "reports.export",
   "settings.read", "users.read", "users.manage", "system.diagnose",
 ] as const;
@@ -26,7 +26,7 @@ export type PermissionSubject = {
 };
 
 const BUSINESS_PERMISSIONS = PERMISSIONS.filter(
-  (permission) => !permission.startsWith("users.") && !permission.startsWith("financialArchive.") && permission !== "system.diagnose",
+  (permission) => !permission.startsWith("users.") && !permission.startsWith("financialArchive.") && !permission.startsWith("crmArchive.") && permission !== "system.diagnose",
 );
 const NON_DELETE_PERMISSIONS = BUSINESS_PERMISSIONS.filter(
   (permission) => !permission.endsWith(".delete"),
@@ -36,6 +36,7 @@ const READ_PERMISSIONS = BUSINESS_PERMISSIONS.filter(
 );
 
 export function permissionDependencies(permission: Permission): readonly Permission[] {
+  if (permission === "crmArchive.restore") return ["crmArchive.read"];
   if (permission === "financialArchive.restore") return ["financialArchive.read"];
   if (permission === "projects.financial.read") return ["projects.read"];
   if (permission === "projects.financial.manage") return ["projects.financial.read"];
