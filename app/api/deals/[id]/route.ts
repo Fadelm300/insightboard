@@ -1,3 +1,4 @@
+import { archiveCrmRecord } from "@/lib/crmArchive";
 import { dealDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
@@ -409,24 +410,13 @@ if (demoBlock) return demoBlock;
       return errorResponse("Invalid deal id", 400);
     }
 
-    const deal = await Deal.findOneAndUpdate(
-      {
-        _id: id,
-        isDeleted: { $ne: true },
-      },
-      {
-        isDeleted: true,
-      },
-      {
-        returnDocument: "after",
-      }
-    );
-
-    if (!deal) {
-      return errorResponse("Deal not found", 404);
+    const result = await archiveCrmRecord("deals", id, authorization.user!.id);
+    if (result === "missing") return errorResponse("Deal not found", 404);
+    if (result === "active-dependants") {
+      return errorResponse("Archive the linked project before archiving this deal", 409);
     }
 
-    return successResponse({}, "Deal deleted successfully");
+    return successResponse({}, "Deal archived successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

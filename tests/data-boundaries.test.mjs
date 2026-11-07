@@ -53,6 +53,7 @@ for (const [resource, model, fields, payload] of [
       findOneAndUpdate: (_query, update) => populate(save(update)),
     };
     const deps = {
+    "@/lib/crmArchive": { archiveCrmRecord: async () => { throw Error("Unexpected archive"); } },
       "@/lib/financialArchive": { changeFinancialArchive: async () => { throw Error("Unexpected archive"); } },
       "@/lib/crmData": data, "@/lib/permissions": permissions,
       "@/lib/authorization": { authorizeRequest: async () => ({ user: { role: "admin" } }) },
@@ -203,6 +204,7 @@ function routeFixture(actor, options = {}) {
     findOneAndUpdate(_filter, update) { calls.writes++; calls.updates.push(update); stored = { ...stored, ...update.$set }; return chain(stored); },
   };
   const deps = {
+    "@/lib/crmArchive": { archiveCrmRecord: async () => { throw Error("Unexpected archive"); } },
     "@/lib/permissions": permissions, "@/lib/crmData": data,
     "@/lib/projectDealLink": { ensureProjectDealIndex: async () => {}, isProjectDealConflict: () => false, ProjectDealLinkUnavailable: class extends Error {} },
     "@/lib/authorization": { authorizeRequest: async (_req, permission) => permissions.hasPermission(actor, permission) ? { user: actor } : { response: { status: 403 } } },
@@ -281,6 +283,7 @@ for (const [resource, modelName] of [["revenue", "Revenue"], ["expenses", "Expen
     const actor = { role: "employee", allowedPermissions: [`${resource}.read`] };
     const rows = { populate() { return this; }, sort() { return this; }, skip() { return this; }, limit() { return this; }, then(resolve, reject) { return Promise.resolve([]).then(resolve, reject); } };
     const deps = {
+    "@/lib/crmArchive": { archiveCrmRecord: async () => { throw Error("Unexpected archive"); } },
       "@/lib/permissions": permissions, "@/lib/crmData": data,
     "@/lib/projectDealLink": { ensureProjectDealIndex: async () => {}, isProjectDealConflict: () => false, ProjectDealLinkUnavailable: class extends Error {} },
       "@/lib/authorization": { authorizeRequest: async () => ({ user: actor }) },

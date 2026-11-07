@@ -799,12 +799,13 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
         method: "DELETE",
       });
 
-      setSuccess("Deal deleted successfully");
+      setSuccess("Deal archived successfully");
       setDeleteDeal(null);
       await fetchData(page, searchQuery);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Failed to delete deal";
+        err instanceof Error ? err.message : "Failed to archive deal";
+      setDeleteDeal(null);
       setError(message);
     } finally {
       setSaving(false);
@@ -1424,7 +1425,7 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
           <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
             ×
           </Box>
-          Delete
+          Archive
         </MenuItem>
       </Menu>
 
@@ -1807,11 +1808,11 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>Delete Deal</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>Archive Deal</DialogTitle>
 
         <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           <Typography color="text.secondary">
-            Are you sure you want to delete{" "}
+            Are you sure you want to archive{" "}
             <Box
               component="span"
               sx={{ color: "text.primary", fontWeight: 900 }}
@@ -1833,7 +1834,7 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
             onClick={handleDeleteConfirm}
             disabled={(saving) || !canDelete}
           >
-            {saving ? "Deleting..." : "Delete"}
+            {saving ? "Archiving..." : "Archive"}
           </Button>
         </DialogActions>
       </Dialog>

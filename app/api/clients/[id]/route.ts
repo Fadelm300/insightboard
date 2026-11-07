@@ -1,3 +1,4 @@
+import { archiveCrmRecord } from "@/lib/crmArchive";
 import { clientDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
@@ -338,20 +339,13 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid client id", 400);
     }
 
-    const client = await Client.findOneAndUpdate(
-      {
-        _id: id,
-        isDeleted: { $ne: true },
-      },
-      { isDeleted: true },
-      { returnDocument: "after" }
-    );
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
+    const result = await archiveCrmRecord("clients", id, authorization.user!.id);
+    if (result === "missing") return errorResponse("Client not found", 404);
+    if (result === "active-dependants") {
+      return errorResponse("Archive linked deals, projects, and revenue before archiving this client", 409);
     }
 
-    return successResponse({}, "Client deleted successfully");
+    return successResponse({}, "Client archived successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

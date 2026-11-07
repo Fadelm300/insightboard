@@ -59,6 +59,7 @@ function setup(options = {}) {
   const actor = options.actor || { id: "c".repeat(24), role: "manager" };
   const deal = { _id: id, clientId, title: "Synthetic won deal", status: "Closed Won", finalPrice: 900 };
   const deps = {
+    "@/lib/crmArchive": { archiveCrmRecord: async () => { throw Error("Unexpected archive"); } },
     "@/lib/projectDealLink": link,
     "@/lib/crmData": data,
     "@/lib/permissions": permissions,

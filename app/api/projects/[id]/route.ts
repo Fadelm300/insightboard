@@ -1,3 +1,4 @@
+import { archiveCrmRecord } from "@/lib/crmArchive";
 import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { canManageProjectFinancials, projectFinancialInput, projectDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -378,20 +379,13 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid project ID", 400);
     }
 
-    const project = await Project.findOneAndUpdate(
-      {
-        _id: id,
-        isDeleted: { $ne: true },
-      },
-      { isDeleted: true },
-      { returnDocument: "after" }
-    );
-
-    if (!project) {
-      return errorResponse("Project not found", 404);
+    const result = await archiveCrmRecord("projects", id, authorization.user!.id);
+    if (result === "missing") return errorResponse("Project not found", 404);
+    if (result === "active-dependants") {
+      return errorResponse("Archive linked revenue and expenses before archiving this project", 409);
     }
 
-    return successResponse({}, "Project deleted successfully");
+    return successResponse({}, "Project archived successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

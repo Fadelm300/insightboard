@@ -889,12 +889,13 @@ if (!validation.isValid) {
         method: "DELETE",
       });
 
-      setSuccess("Project deleted successfully");
+      setSuccess("Project archived successfully");
       setDeleteProject(null);
       await fetchData(page, searchQuery);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Failed to delete project";
+        err instanceof Error ? err.message : "Failed to archive project";
+      setDeleteProject(null);
       setError(message);
     } finally {
       setSaving(false);
@@ -1488,7 +1489,7 @@ if (!validation.isValid) {
           <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
             ×
           </Box>
-          Delete
+          Archive
         </MenuItem>
       </Menu>
 
@@ -1948,11 +1949,11 @@ if (!validation.isValid) {
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>Delete Project</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>Archive Project</DialogTitle>
 
         <DialogContent>
           <Typography color="text.secondary">
-            Are you sure you want to delete{" "}
+            Are you sure you want to archive{" "}
             <Box
               component="span"
               sx={{ color: "text.primary", fontWeight: 900 }}
@@ -1974,7 +1975,7 @@ if (!validation.isValid) {
             onClick={handleDeleteConfirm}
             disabled={(saving) || !canDelete}
           >
-            {saving ? "Deleting..." : "Delete"}
+            {saving ? "Archiving..." : "Archive"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -614,12 +614,13 @@ useEffect(() => {
         method: "DELETE",
       });
 
-      setSuccess("Client deleted successfully");
+      setSuccess("Client archived successfully");
       setDeleteClient(null);
       await fetchClients(page, searchQuery);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Failed to delete client";
+        err instanceof Error ? err.message : "Failed to archive client";
+      setDeleteClient(null);
       setError(message);
     } finally {
       setSaving(false);
@@ -1131,7 +1132,7 @@ useEffect(() => {
           <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
             ×
           </Box>
-          Delete
+          Archive
         </MenuItem>
       </Menu>
 
@@ -1456,11 +1457,11 @@ useEffect(() => {
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 800 }}>Delete Client</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800 }}>Archive Client</DialogTitle>
 
         <DialogContent>
           <Typography color="text.secondary">
-            Are you sure you want to delete{" "}
+            Are you sure you want to archive{" "}
             <Box
               component="span"
               sx={{ color: "text.primary", fontWeight: 800 }}
@@ -1482,7 +1483,7 @@ useEffect(() => {
             onClick={handleDeleteConfirm}
             disabled={(saving) || !canDelete}
           >
-            {saving ? "Deleting..." : "Delete"}
+            {saving ? "Archiving..." : "Archive"}
           </Button>
         </DialogActions>
       </Dialog>
