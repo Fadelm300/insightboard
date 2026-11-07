@@ -27,8 +27,8 @@ const policy = load("lib/sessionPolicy.ts");
 const permissions = load("lib/permissions.ts");
 const headers = (origin = "https://crm.example", custom = "1") => new Headers({ origin, "x-insightboard-request": custom });
 
-test("idle policy is 2 minutes locally, 20 in production, with an 8-hour absolute cap", () => {
-  assert.equal(policy.sessionIdleMs({ NODE_ENV: "development" }), 120_000);
+test("idle policy is 10 minutes locally, 20 in production, with an 8-hour absolute cap", () => {
+  assert.equal(policy.sessionIdleMs({ NODE_ENV: "development" }), 600_000);
   assert.equal(policy.sessionIdleMs({ NODE_ENV: "production" }), 1_200_000);
   assert.equal(policy.SESSION_ABSOLUTE_MS, 28_800_000);
   assert.equal(policy.SESSION_WARNING_MS, 30_000);

@@ -8,7 +8,7 @@ import ts from "typescript";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-function harness(initialUnauthorized = false) {
+function harness(initialUnauthorized = false, idleMs = 600_000) {
   const effects = [];
   const events = new Map();
   const navigations = [];
@@ -79,7 +79,7 @@ function harness(initialUnauthorized = false) {
   });
   exports.default({ children: null });
   const cleanup = effects[0]();
-  const valid = () => ({ status: 200, ok: true, json: async () => ({ data: { user: { id: "test-user" }, session: { expiresAt: new Date(now+120_000).toISOString(), absoluteExpiresAt: new Date(now+28_800_000).toISOString(), serverNow: new Date(now).toISOString(), warningSeconds: 30 } } }) });
+  const valid = () => ({ status: 200, ok: true, json: async () => ({ data: { user: { id: "test-user" }, session: { expiresAt: new Date(now+idleMs).toISOString(), absoluteExpiresAt: new Date(now+28_800_000).toISOString(), serverNow: new Date(now).toISOString(), warningSeconds: 30 } } }) });
   return {
     navigations, broadcasts, fetches, pending, cleanup,
     get refreshes() { return refreshes; },
@@ -92,6 +92,7 @@ function harness(initialUnauthorized = false) {
       if (activity) events.get("keydown")?.({ isTrusted: true });
       interval();
     },
+    pointer: () => events.get("pointermove")?.({ type: "pointermove", isTrusted: true }),
     auth: (type) => events.get("insightboard-auth-changed")?.({detail:type}),
     broadcast: (type) => channels[0].onmessage?.({data:type}),
     continue: () => events.get("insightboard-session-continue")?.(),
@@ -138,7 +139,7 @@ test("explicit continuation is queued behind an in-flight status request", async
 test("activity renewals back off after server and network failures and stop after three retries", async () => {
   const h = harness();
   h.resolveInitial(); await settle();
-  h.tick(1000, true);
+  h.tick(120_000, true);
   assert.equal(h.fetches.length, 2);
   h.respond(503); await settle();
   for (const [index, delay] of [2000, 4000, 8000].entries()) {
@@ -156,7 +157,7 @@ test("activity renewals back off after server and network failures and stop afte
   assert.equal(h.fetches.length, 6, "status success does not reset renewal failures");
   h.continue();
   h.resolveNext(); await settle();
-  h.tick(11_000, true);
+  h.tick(120_000, true);
   assert.equal(h.fetches.length, 8, "successful continuation restores automatic renewal");
   h.cleanup();
 });
@@ -164,7 +165,7 @@ test("activity renewals back off after server and network failures and stop afte
 test("expired session checks back off and a manual retry still handles server expiry", async () => {
   const h = harness();
   h.resolveInitial(); await settle();
-  h.tick(120_000);
+  h.tick(600_000);
   h.respond(503); await settle();
   h.visible();
   h.broadcast("changed");
@@ -172,5 +173,48 @@ test("expired session checks back off and a manual retry still handles server ex
   h.retry();
   h.respond(401); await settle();
   assert.deepEqual(h.navigations, ["/login?reason=session-expired"]);
+  h.cleanup();
+});
+
+
+test("typing renews at most once every two minutes and idle time never renews", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  for (let i = 0; i < 119; i++) h.tick(1000, true);
+  assert.equal(h.fetches.length, 1);
+  h.tick(1000, true);
+  assert.equal(h.fetches.length, 2);
+  h.resolveNext(); await settle();
+  for (let i = 0; i < 119; i++) h.tick(1000, true);
+  assert.equal(h.fetches.length, 2);
+  h.tick(1000, true);
+  assert.equal(h.fetches.length, 3);
+  h.resolveNext(); await settle();
+  h.tick(120_000);
+  assert.equal(h.fetches.length, 3, "no renewal without recent user activity");
+  h.cleanup();
+});
+
+test("active older short sessions renew before their warning window", async () => {
+  const h = harness(false, 120_000);
+  h.resolveInitial(); await settle();
+  h.tick(1000);
+  h.pointer();
+  h.tick(1000);
+  assert.equal(h.fetches.length, 2);
+  assert.equal(h.fetches[1].url, "/api/auth/renew");
+  h.resolveNext(); await settle();
+  h.cleanup();
+});
+
+test("pointer activity keeps a session alive at the bounded renewal interval", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  h.tick(119_000);
+  h.pointer();
+  h.tick(1000);
+  assert.equal(h.fetches.length, 2);
+  assert.equal(h.fetches[1].url, "/api/auth/renew");
+  h.resolveNext(); await settle();
   h.cleanup();
 });

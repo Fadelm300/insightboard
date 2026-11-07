@@ -73,6 +73,7 @@ test("delegation is bounded by actor grants and protected accounts cannot be ass
 test("request authorization distinguishes missing identity, CSRF and resource denial", async () => {
   let user = null, trusted = true, lookups = 0;
   const authorization = load("lib/authorization.ts", {
+    "next/server": { NextResponse: { redirect: (url) => ({ status: 307, location: url.href }) } },
     "next/navigation": { redirect() { throw new Error("redirect"); } },
     "@/lib/auth": { getAuthUser: async () => { lookups++; return user; }, getCurrentUser: async () => user },
     "@/lib/permissions": permissions,
@@ -137,3 +138,50 @@ for (const [file, expected] of routeCases) {
     }
   });
 }
+
+test("denied document navigation opens the access page while API clients keep JSON errors", async () => {
+  let user = employee;
+  const authorization = load("lib/authorization.ts", {
+    "next/server": { NextResponse: { redirect: (url) => ({ status: 307, location: url.href }) } },
+    "next/navigation": { redirect() { throw new Error("redirect"); } },
+    "@/lib/auth": { getAuthUser: async () => user, getCurrentUser: async () => user },
+    "@/lib/permissions": permissions,
+    "@/lib/apiResponse": { errorResponse: (message, status) => ({ message, status }) },
+    "@/lib/sessionPolicy": { isTrustedMutation: () => true },
+  });
+  const documentRequest = {
+    method: "GET",
+    url: "http://localhost:3000/api/financial-archive/revenue",
+    headers: { get: (name) => ({ "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" })[name] ?? null },
+  };
+  const denied = await authorization.authorizeRequest(documentRequest, "financialArchive.read");
+  assert.equal(denied.response.location, "http://localhost:3000/access-denied");
+  assert.equal(denied.response.status, 307);
+  const apiRequest = { ...documentRequest, headers: { get: () => null } };
+  const apiDenied = await authorization.authorizeRequest(apiRequest, "financialArchive.read");
+  assert.equal(apiDenied.response.status, 403);
+  assert.equal(apiDenied.response.message, "Forbidden");
+  user = null;
+  const expired = await authorization.authorizeRequest(documentRequest, "financialArchive.read");
+  assert.equal(expired.response.location, "http://localhost:3000/login?reason=session-expired");
+  const apiExpired = await authorization.authorizeRequest(apiRequest, "financialArchive.read");
+  assert.equal(apiExpired.response.status, 401);
+});
+
+test("protected pages redirect denied accounts outside the dashboard shell", async () => {
+  let user = employee;
+  const authorization = load("lib/authorization.ts", {
+    "next/server": {},
+    "next/navigation": { redirect: (url) => { throw new Error("REDIRECT " + url); } },
+    "@/lib/auth": { getAuthUser: async () => user, getCurrentUser: async () => user },
+    "@/lib/permissions": permissions,
+    "@/lib/apiResponse": { errorResponse: (message, status) => ({ message, status }) },
+    "@/lib/sessionPolicy": { isTrustedMutation: () => true },
+  });
+  await assert.rejects(authorization.authorizePage("financialArchive.read"), /REDIRECT \/access-denied/);
+  const permitted = await authorization.authorizePage("projects.read");
+  assert.equal(permitted.allowed, true);
+  assert.equal(permitted.home, "/dashboard/projects");
+  user = null;
+  await assert.rejects(authorization.authorizePage("projects.read"), /REDIRECT \/login/);
+});

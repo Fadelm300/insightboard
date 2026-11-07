@@ -9,6 +9,8 @@ import { AUTH_CHANGED_EVENT, logout, notifyAuthChanged } from "@/lib/apiClient";
 type SessionView = { expiresAt: string; absoluteExpiresAt: string; serverNow: string; warningSeconds: number };
 type Snapshot = { expires: number; absolute: number; offset: number; warning: number };
 
+const ACTIVITY_RENEW_INTERVAL_MS = 2 * 60 * 1000;
+
 const RETRY_DELAYS_MS = [2_000, 4_000, 8_000];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -25,6 +27,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     let active = true;
     let snapshot: Snapshot | null = null;
     let lastActivity = 0;
+    let lastPointerActivity = 0;
     let lastRenew = 0;
     let lastCheck = 0;
     let inFlight = false;
@@ -86,6 +89,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         if (typeof data.data.user.id !== "string") throw new Error("Invalid user response");
         setUserId(data.data.user.id);
         update(data.data.session);
+        if (lastRenew === 0) lastRenew = Date.now();
         retry.failures = 0;
         retry.nextAttempt = 0;
 
@@ -112,8 +116,14 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     function recordActivity(event: Event) {
-      // Background polling and mouse movement do not count as user activity.
-      if (event.isTrusted && document.visibilityState === "visible") lastActivity = Date.now();
+      // Background requests never count as activity; pointer input is throttled.
+      if (!event.isTrusted || document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (event.type === "pointermove") {
+        if (now - lastPointerActivity < 1000) return;
+        lastPointerActivity = now;
+      }
+      lastActivity = now;
     }
 
     function authChanged(event: Event) {
@@ -142,7 +152,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       };
     }
 
-    const activityEvents = ["pointerdown", "keydown", "wheel"];
+    const activityEvents = ["pointerdown", "pointermove", "keydown", "wheel"];
     for (const type of activityEvents) window.addEventListener(type, recordActivity, { passive: true });
     window.addEventListener(AUTH_CHANGED_EVENT, authChanged);
     window.addEventListener("pageshow", pageRestored);
@@ -161,7 +171,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       if (millis <= 0) {
         setChecking(true);
         if (Date.now() - lastCheck > 3000) { lastCheck = Date.now(); void request(); }
-      } else if (millis > snapshot.warning && lastActivity > lastRenew && Date.now() - lastActivity < 5000 && Date.now() - lastRenew > 10_000) {
+      } else if (millis > snapshot.warning && lastActivity > lastRenew && Date.now() - lastActivity < 5000 && (Date.now() - lastRenew >= ACTIVITY_RENEW_INTERVAL_MS || millis <= ACTIVITY_RENEW_INTERVAL_MS + snapshot.warning)) {
         void request("activity");
       }
     }, 1000);

@@ -2,7 +2,7 @@ export const SESSION_WARNING_MS = 30_000;
 export const SESSION_ABSOLUTE_MS = 8 * 60 * 60 * 1000;
 
 export function sessionIdleMs(environment = process.env) {
-  return environment.NODE_ENV === "development" ? 120_000 : 20 * 60 * 1000;
+  return environment.NODE_ENV === "development" ? 10 * 60 * 1000 : 20 * 60 * 1000;
 }
 
 export function sessionCookieName(environment = process.env) {
