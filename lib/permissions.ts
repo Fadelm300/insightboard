@@ -122,6 +122,7 @@ export const PAGE_PERMISSIONS = {
   "/dashboard/expenses": "expenses.read",
   "/dashboard/reports": "reports.read",
   "/dashboard/financial-archive": "financialArchive.read",
+  "/dashboard/crm-archive": "crmArchive.read",
   "/dashboard/settings": "settings.read",
   "/dashboard/users": "users.read",
 } satisfies Record<string, Permission>;

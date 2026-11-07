@@ -185,3 +185,13 @@ test("protected pages redirect denied accounts outside the dashboard shell", asy
   user = null;
   await assert.rejects(authorization.authorizePage("projects.read"), /REDIRECT \/login/);
 });
+
+
+test("CRM archive page is limited to archive readers and remains outside delegated role ceilings", () => {
+  assert.equal(permissions.PAGE_PERMISSIONS["/dashboard/crm-archive"], "crmArchive.read");
+  assert.equal(permissions.firstAllowedPage({ role: "admin", allowedPermissions: ["crmArchive.read"] }), "/dashboard/crm-archive");
+  for (const role of ["manager", "administration", "senior", "employee", "viewer", "programmer"]) {
+    assert.equal(permissions.hasPermission({ role, allowedPermissions: ["crmArchive.read", "crmArchive.restore"] }, "crmArchive.read"), false, role);
+  }
+  assert.equal(permissions.hasPermission({ role: "admin", allowedPermissions: ["crmArchive.read"] }, "crmArchive.restore"), false);
+});
