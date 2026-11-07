@@ -15,6 +15,9 @@ import {
   Tab,
   Tabs,
   Typography,
+  TextField,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 import { apiFetch } from "@/lib/apiClient";
 
@@ -40,7 +43,13 @@ const labels: Record<Resource, string> = {
   projects: "Project",
 };
 
-export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }) {
+export default function CrmArchiveClient({
+  canRestore,
+  canPurge,
+}: {
+  canRestore: boolean;
+  canPurge: boolean;
+}) {
   const [resource, setResource] = useState<Resource>("clients");
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
@@ -51,6 +60,14 @@ export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }
   }>();
   const [selection, setSelection] = useState<Selection>();
   const [restoring, setRestoring] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const [purgeSelection, setPurgeSelection] = useState<Selection>();
+  const [confirmation, setConfirmation] = useState("");
+  const [purgeAcknowledged, setPurgeAcknowledged] = useState(false);
+  const busy = restoring || purging;
+  const expectedConfirmation = purgeSelection
+    ? purgeSelection.row.label || purgeSelection.row._id
+    : "";
   const inFlight = useRef(false);
   const [message, setMessage] = useState<{
     severity: "success" | "error";
@@ -124,6 +141,34 @@ export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }
     }
   }
 
+  async function permanentlyDelete() {
+    if (!purgeSelection || inFlight.current || !canPurge ||
+        confirmation !== expectedConfirmation || !purgeAcknowledged) return;
+
+    inFlight.current = true;
+    setPurging(true);
+    setMessage(undefined);
+    try {
+      await apiFetch(
+        `/api/crm-archive/${purgeSelection.resource}/${purgeSelection.row._id}`,
+        { method: "DELETE", body: JSON.stringify({ confirmation }) },
+      );
+      setMessage({ severity: "success", text: "Record permanently deleted. It can no longer be restored from the archive." });
+      if (page > 1 && current?.data?.records.length === 1) setPage(page - 1);
+    } catch (error) {
+      setMessage({ severity: "error", text: error instanceof Error
+        ? error.message
+        : "Unable to confirm deletion. Check the refreshed archive before trying again." });
+    } finally {
+      inFlight.current = false;
+      setPurging(false);
+      setPurgeSelection(undefined);
+      setConfirmation("");
+      setPurgeAcknowledged(false);
+      setRefresh((value) => value + 1);
+    }
+  }
+
   return (
     <Stack spacing={2} sx={{ minWidth: 0 }}>
       <Box>
@@ -142,12 +187,15 @@ export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }
           setResource(value);
           setPage(1);
           setSelection(undefined);
+          setPurgeSelection(undefined);
+          setConfirmation("");
+          setPurgeAcknowledged(false);
           setMessage(undefined);
         }}
       >
-        <Tab label="Clients" value="clients" disabled={restoring} />
-        <Tab label="Deals" value="deals" disabled={restoring} />
-        <Tab label="Projects" value="projects" disabled={restoring} />
+        <Tab label="Clients" value="clients" disabled={busy} />
+        <Tab label="Deals" value="deals" disabled={busy} />
+        <Tab label="Projects" value="projects" disabled={busy} />
       </Tabs>
 
       {message && <Alert severity={message.severity}>{message.text}</Alert>}
@@ -250,10 +298,11 @@ export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }
                       </Box>
                     </Box>
 
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ flexShrink: 0 }}>
                     {canRestore && (
                       <Button
                         variant="outlined"
-                        disabled={restoring}
+                        disabled={busy}
                         aria-label={`Restore ${row.label || labels[resource]}`}
                         onClick={() => setSelection({ resource, row })}
                         sx={{ flexShrink: 0 }}
@@ -261,6 +310,22 @@ export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }
                         Restore
                       </Button>
                     )}
+                      {canPurge && (
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          disabled={busy}
+                          aria-label={`Permanently delete ${row.label || labels[resource]}`}
+                          onClick={() => {
+                            setPurgeSelection({ resource, row });
+                            setConfirmation("");
+                            setPurgeAcknowledged(false);
+                          }}
+                        >
+                          Delete permanently
+                        </Button>
+                      )}
+                    </Stack>
                   </Stack>
                 </Paper>
               ))}
@@ -269,14 +334,14 @@ export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }
 
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <Button
-              disabled={page === 1 || restoring}
+              disabled={page === 1 || busy}
               onClick={() => setPage(page - 1)}
             >
               Previous
             </Button>
             <Typography aria-live="polite">Page {page}</Typography>
             <Button
-              disabled={!current.data.hasMore || page >= 400 || restoring}
+              disabled={!current.data.hasMore || page >= 400 || busy}
               onClick={() => setPage(page + 1)}
             >
               Next
@@ -287,7 +352,7 @@ export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }
 
       <Dialog
         open={Boolean(selection)}
-        onClose={restoring ? undefined : () => setSelection(undefined)}
+        onClose={busy ? undefined : () => setSelection(undefined)}
         fullWidth
         maxWidth="sm"
         aria-labelledby="crm-restore-title"
@@ -308,13 +373,70 @@ export default function CrmArchiveClient({ canRestore }: { canRestore: boolean }
         </DialogContent>
         <DialogActions>
           <Button
-            disabled={restoring}
+            disabled={busy}
             onClick={() => setSelection(undefined)}
           >
             Cancel
           </Button>
-          <Button variant="contained" disabled={restoring} onClick={restore}>
+          <Button variant="contained" disabled={busy} onClick={restore}>
             {restoring ? "Restoring…" : "Restore record"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(purgeSelection)}
+        onClose={busy ? undefined : () => {
+          setPurgeSelection(undefined);
+          setConfirmation("");
+          setPurgeAcknowledged(false);
+        }}
+        fullWidth
+        maxWidth="sm"
+        aria-labelledby="crm-purge-title"
+        aria-describedby="crm-purge-description"
+      >
+        <DialogTitle id="crm-purge-title">Permanently delete this record?</DialogTitle>
+        <DialogContent sx={{ overflowWrap: "anywhere" }}>
+          <Alert severity="error" id="crm-purge-description" sx={{ mb: 2 }}>
+            This permanently removes the record. It cannot be restored from the archive.
+            Linked records, including archived records, block deletion.
+          </Alert>
+          <Typography sx={{ fontWeight: 700, mb: 2 }}>
+            {expectedConfirmation}
+          </Typography>
+          <FormControlLabel
+            control={<Checkbox
+              checked={purgeAcknowledged}
+              disabled={busy}
+              onChange={(event) => setPurgeAcknowledged(event.target.checked)}
+            />}
+            label="I understand this deletion is permanent and cannot be restored from the archive."
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            label="Type the exact record name to confirm"
+            value={confirmation}
+            disabled={busy}
+            autoComplete="off"
+            onChange={(event) => setConfirmation(event.target.value)}
+            helperText="The name must match exactly. For an unnamed record, type its reference ID."
+            slotProps={{ htmlInput: { maxLength: 120 } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={busy} onClick={() => {
+            setPurgeSelection(undefined);
+            setConfirmation("");
+            setPurgeAcknowledged(false);
+          }}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={busy || !purgeAcknowledged || !expectedConfirmation || confirmation !== expectedConfirmation}
+            onClick={permanentlyDelete}
+          >
+            {purging ? "Deleting…" : "Delete permanently"}
           </Button>
         </DialogActions>
       </Dialog>
