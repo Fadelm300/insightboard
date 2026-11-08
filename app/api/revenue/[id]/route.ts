@@ -1,3 +1,4 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { changeFinancialArchive } from "@/lib/financialArchive";
 import { revenueDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -190,18 +191,20 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       updateData.notes = notes;
     }
 
-    const revenue = await Revenue.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, {
-      returnDocument: "after",
-      runValidators: true,
-    })
-      .populate("projectId", "name type price status paymentStatus")
-      .populate("clientId", "companyName contactPerson email");
+    return await withCrmWriteTransaction(async (session) => {
+      const revenue = await Revenue.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, { session,
+        returnDocument: "after",
+        runValidators: true,
+      })
+        .populate("projectId", "name type price status paymentStatus")
+        .populate("clientId", "companyName contactPerson email");
 
-    if (!revenue) {
-      return errorResponse("Revenue record not found", 404);
-    }
+      if (!revenue) {
+        return errorResponse("Revenue record not found", 404);
+      }
 
-    return successResponse({ revenue: revenueDTO(revenue, authorization.user!) }, "Revenue record updated successfully");
+      return successResponse({ revenue: revenueDTO(revenue, authorization.user!) }, "Revenue record updated successfully");
+    });
   } catch {
     return errorResponse("Server error", 500);
   }

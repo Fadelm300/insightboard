@@ -56,7 +56,14 @@ function fixture({ resource = "clients", dependant, archived = false, missing = 
       },
     };
   }
-  const deps = { mongoose: { startSession: async () => session } };
+  const deps = {
+    "@/lib/crmWriteTransaction": {
+      withCrmWriteTransaction: async (operation) => {
+        try { return await session.withTransaction(() => operation(session)); }
+        finally { await session.endSession(); }
+      },
+    },
+  };
   for (const [name, model] of Object.entries(models)) deps[`@/models/${name}`] = model;
   deps["@/models/CrmArchiveEvent"] = {
     async create(events, options) {
@@ -130,6 +137,7 @@ for (const resource of ["clients", "deals", "projects"]) {
     let denial = { status: 403 }, demo = null, connected = 0, invoked = 0, outcome = "archived", valid = true;
     const actor = { id: actorId };
     const deps = {
+      "@/lib/crmWriteTransaction": { withCrmWriteTransaction: async (operation) => operation() },
       mongoose: { Types: { ObjectId: { isValid: () => valid } } },
       "@/lib/authorization": { authorizeRequest: async (_req, permission) => {
         assert.equal(permission, `${resource}.delete`);
@@ -145,7 +153,7 @@ for (const resource of ["clients", "deals", "projects"]) {
       } },
       "@/lib/crmData": {},
       "@/lib/projectDealLink": { ProjectDealLinkUnavailable: class extends Error {} },
-      "@/models/Client": {}, "@/models/Deal": {}, "@/models/Project": {},
+      "@/models/Client": {}, "@/models/Deal": {}, "@/models/Project": {}, "@/models/Revenue": {},
     };
     const route = load(`app/api/${resource}/[id]/route.ts`, deps);
     const run = () => route.DELETE({}, { params: Promise.resolve({ id }) });

@@ -1,3 +1,5 @@
+import Project from "@/models/Project";
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { archiveCrmRecord } from "@/lib/crmArchive";
 import { dealDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -347,50 +349,54 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     }
     const body = await req.json().catch(() => null);
 
-    const existingDeal = await Deal.findOne({
-      _id: id,
-      isDeleted: { $ne: true },
-    });
-
-    if (!existingDeal) {
-      return errorResponse("Deal not found", 404);
-    }
-
-    const { values, error } = validateDealPayload(
-      body,
-      existingDeal.expectedCloseDate
-    );
-
-    if (!values) {
-      return errorResponse(error, 400);
-    }
-
-    const client = await Client.findOne({
-      _id: values.clientId,
-      isDeleted: { $ne: true },
-    });
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    const deal = await Deal.findOneAndUpdate(
-      {
+    return await withCrmWriteTransaction(async (session) => {
+      const existingDeal = await Deal.findOne({
         _id: id,
         isDeleted: { $ne: true },
-      },
-      values,
-      {
-        returnDocument: "after",
-        runValidators: true,
+      }, null, { session });
+
+      if (!existingDeal) {
+        return errorResponse("Deal not found", 404);
       }
-    ).populate("clientId", "companyName contactPerson email status");
 
-    if (!deal) {
-      return errorResponse("Deal not found", 404);
-    }
+      const { values, error } = validateDealPayload(
+        body,
+        existingDeal.expectedCloseDate
+      );
 
-    return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal updated successfully");
+      if (!values) {
+        return errorResponse(error, 400);
+      }
+
+      const client = await Client.findOne({
+        _id: values.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!client) {
+        return errorResponse("Client not found", 404);
+      }
+
+      if ((String(existingDeal.clientId) !== values.clientId || values.status !== "Closed Won") &&
+          await Project.exists({ dealId: id }).session(session)) {
+        return errorResponse("A linked project requires this deal to remain Closed Won for the same client", 409);
+      }
+
+      const deal = await Deal.findOneAndUpdate({
+          _id: id,
+          isDeleted: { $ne: true },
+        }, values, { session,
+          returnDocument: "after",
+          runValidators: true,
+        }
+      ).populate("clientId", "companyName contactPerson email status");
+
+      if (!deal) {
+        return errorResponse("Deal not found", 404);
+      }
+
+      return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal updated successfully");
+    });
   } catch {
     return errorResponse("Server error", 500);
   }

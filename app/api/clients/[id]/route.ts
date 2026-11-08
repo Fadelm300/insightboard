@@ -1,3 +1,4 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { archiveCrmRecord } from "@/lib/crmArchive";
 import { clientDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -303,23 +304,22 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse(error, 400);
     }
 
-    const client = await Client.findOneAndUpdate(
-      {
-        _id: id,
-        isDeleted: { $ne: true },
-      },
-      values,
-      {
-        returnDocument: "after",
-        runValidators: true,
+    return await withCrmWriteTransaction(async (session) => {
+      const client = await Client.findOneAndUpdate({
+          _id: id,
+          isDeleted: { $ne: true },
+        }, values, { session,
+          returnDocument: "after",
+          runValidators: true,
+        }
+      );
+
+      if (!client) {
+        return errorResponse("Client not found", 404);
       }
-    );
 
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    return successResponse({ client: clientDTO(client) }, "Client updated successfully");
+      return successResponse({ client: clientDTO(client) }, "Client updated successfully");
+    });
   } catch {
     return errorResponse("Server error", 500);
   }

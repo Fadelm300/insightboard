@@ -1,3 +1,5 @@
+import Revenue from "@/models/Revenue";
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { archiveCrmRecord } from "@/lib/crmArchive";
 import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { canManageProjectFinancials, projectFinancialInput, projectDTO } from "@/lib/crmData";
@@ -162,202 +164,207 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid project ID", 400);
     }
 
-    const existingProject = await Project.findOne({
-      _id: id,
-      isDeleted: { $ne: true },
-    });
-
-    if (!existingProject) {
-      return errorResponse("Project not found", 404);
-    }
-
     const body = await req.json().catch(() => null);
 
-    if (!isPlainObject(body)) {
-      return errorResponse("Invalid request body", 400);
-    }
+    await ensureProjectDealIndex();
 
-    const financial = projectFinancialInput(authorization.user!, body, existingProject);
-    if (financial.error) return errorResponse(financial.error, financial.status);
-
-    const clientId =
-      body.clientId === undefined || body.clientId === null
-        ? String(existingProject.clientId)
-        : getString(body.clientId);
-
-    const hasDealIdField = Object.prototype.hasOwnProperty.call(body, "dealId");
-    const hasDeadlineField = Object.prototype.hasOwnProperty.call(
-      body,
-      "deadline"
-    );
-
-    const dealId = hasDealIdField
-      ? getString(body.dealId)
-      : existingProject.dealId
-        ? String(existingProject.dealId)
-        : "";
-
-    const name =
-      body.name === undefined || body.name === null
-        ? cleanText(existingProject.name)
-        : cleanText(body.name);
-
-    const type =
-      body.type === undefined || body.type === null
-        ? (existingProject.type as ProjectType)
-        : (getString(body.type) as ProjectType);
-
-    const status =
-      body.status === undefined || body.status === null
-        ? (existingProject.status as ProjectStatus)
-        : (getString(body.status) as ProjectStatus);
-
-    const description =
-      body.description === undefined || body.description === null
-        ? cleanText(existingProject.description || "")
-        : cleanText(body.description);
-
-    const notes =
-      body.notes === undefined || body.notes === null
-        ? cleanText(existingProject.notes || "")
-        : cleanText(body.notes);
-
-   const existingDeadlineInput = getDateInputValue(existingProject.deadline);
-
-const deadline = hasDeadlineField
-  ? getString(body.deadline)
-  : existingDeadlineInput;
-
-const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
-
-    if (!clientId) {
-      return errorResponse("Client is required", 400);
-    }
-
-    if (!Types.ObjectId.isValid(clientId)) {
-      return errorResponse("Invalid client ID", 400);
-    }
-
-    if (dealId && !Types.ObjectId.isValid(dealId)) {
-      return errorResponse("Invalid deal ID", 400);
-    }
-
-    if (!name) {
-      return errorResponse("Project name is required", 400);
-    }
-
-    if (name.length > 120) {
-      return errorResponse("Project name cannot exceed 120 characters", 400);
-    }
-
-    if (hasUnsafeText(name)) {
-      return errorResponse("Project name contains invalid characters", 400);
-    }
-
-    if (!PROJECT_TYPES.includes(type)) {
-      return errorResponse("Invalid project type", 400);
-    }
-
-    if (deadline && deadlineChanged && isPastDate(deadline)) {
-  return errorResponse("Deadline cannot be in the past", 400);
-}
-
-    if (!PROJECT_STATUSES.includes(status)) {
-      return errorResponse("Invalid project status", 400);
-    }
-
-    if (description.length > 1000) {
-      return errorResponse("Description cannot exceed 1000 characters", 400);
-    }
-
-    if (description && hasUnsafeText(description)) {
-      return errorResponse("Description contains invalid characters", 400);
-    }
-
-    if (notes.length > 1000) {
-      return errorResponse("Notes cannot exceed 1000 characters", 400);
-    }
-
-    if (notes && hasUnsafeText(notes)) {
-      return errorResponse("Notes contain invalid characters", 400);
-    }
-
-    const client = await Client.findOne({
-      _id: clientId,
-      isDeleted: { $ne: true },
-    });
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    if (dealId) {
-      const deal = await Deal.findOne({
-        _id: dealId,
+    return await withCrmWriteTransaction(async (session) => {
+      const existingProject = await Project.findOne({
+        _id: id,
         isDeleted: { $ne: true },
-      });
+      }, null, { session });
 
-      if (!deal) {
-        return errorResponse("Deal not found", 404);
+      if (!existingProject) {
+        return errorResponse("Project not found", 404);
       }
 
-      if (deal.status !== "Closed Won") {
-        return errorResponse(
-          "Project can only be linked to a Closed Won deal",
-          400
-        );
+
+      if (!isPlainObject(body)) {
+        return errorResponse("Invalid request body", 400);
       }
 
-      if (String(deal.clientId) !== clientId) {
-        return errorResponse("Selected deal does not belong to this client", 400);
+      const financial = projectFinancialInput(authorization.user!, body, existingProject);
+      if (financial.error) return errorResponse(financial.error, financial.status);
+
+      const clientId =
+        body.clientId === undefined || body.clientId === null
+          ? String(existingProject.clientId)
+          : getString(body.clientId);
+
+      const hasDealIdField = Object.prototype.hasOwnProperty.call(body, "dealId");
+      const hasDeadlineField = Object.prototype.hasOwnProperty.call(
+        body,
+        "deadline"
+      );
+
+      const dealId = hasDealIdField
+        ? getString(body.dealId)
+        : existingProject.dealId
+          ? String(existingProject.dealId)
+          : "";
+
+      const name =
+        body.name === undefined || body.name === null
+          ? cleanText(existingProject.name)
+          : cleanText(body.name);
+
+      const type =
+        body.type === undefined || body.type === null
+          ? (existingProject.type as ProjectType)
+          : (getString(body.type) as ProjectType);
+
+      const status =
+        body.status === undefined || body.status === null
+          ? (existingProject.status as ProjectStatus)
+          : (getString(body.status) as ProjectStatus);
+
+      const description =
+        body.description === undefined || body.description === null
+          ? cleanText(existingProject.description || "")
+          : cleanText(body.description);
+
+      const notes =
+        body.notes === undefined || body.notes === null
+          ? cleanText(existingProject.notes || "")
+          : cleanText(body.notes);
+
+     const existingDeadlineInput = getDateInputValue(existingProject.deadline);
+
+  const deadline = hasDeadlineField
+    ? getString(body.deadline)
+    : existingDeadlineInput;
+
+  const deadlineChanged = hasDeadlineField && deadline !== existingDeadlineInput;
+
+      if (!clientId) {
+        return errorResponse("Client is required", 400);
       }
-    }
 
-    const setPayload = {
-      clientId,
-      name,
-      type,
-      ...(canManageProjectFinancials(authorization.user!) && ["price", "cost", "paymentStatus"].some((key) => Object.hasOwn(body, key)) ? financial.data : {}),
-      status,
-      description,
-      notes,
-      ...(deadline ? { deadline } : {}),
-      ...(dealId ? { dealId } : {}),
-    };
-
-    const unsetPayload: Record<string, string> = {};
-
-    if (hasDealIdField && !dealId) {
-      unsetPayload.dealId = "";
-    }
-
-    if (hasDeadlineField && !deadline) {
-      unsetPayload.deadline = "";
-    }
-
-    const updatePayload =
-      Object.keys(unsetPayload).length > 0
-        ? { $set: setPayload, $unset: unsetPayload }
-        : { $set: setPayload };
-
-    if (dealId) await ensureProjectDealIndex();
-
-    const project = await Project.findOneAndUpdate(
-      { _id: id, isDeleted: { $ne: true } },
-      updatePayload,
-      {
-        returnDocument: "after",
-        runValidators: true,
+      if (!Types.ObjectId.isValid(clientId)) {
+        return errorResponse("Invalid client ID", 400);
       }
-    )
-      .populate("clientId", "companyName contactPerson email")
-      .populate("dealId", "title status finalPrice estimatedBudget");
 
-    if (!project) {
-      return errorResponse("Project not found", 404);
-    }
+      if (dealId && !Types.ObjectId.isValid(dealId)) {
+        return errorResponse("Invalid deal ID", 400);
+      }
 
-    return successResponse({ project: projectDTO(project, authorization.user!) }, "Project updated successfully");
+      if (!name) {
+        return errorResponse("Project name is required", 400);
+      }
+
+      if (name.length > 120) {
+        return errorResponse("Project name cannot exceed 120 characters", 400);
+      }
+
+      if (hasUnsafeText(name)) {
+        return errorResponse("Project name contains invalid characters", 400);
+      }
+
+      if (!PROJECT_TYPES.includes(type)) {
+        return errorResponse("Invalid project type", 400);
+      }
+
+      if (deadline && deadlineChanged && isPastDate(deadline)) {
+    return errorResponse("Deadline cannot be in the past", 400);
+  }
+
+      if (!PROJECT_STATUSES.includes(status)) {
+        return errorResponse("Invalid project status", 400);
+      }
+
+      if (description.length > 1000) {
+        return errorResponse("Description cannot exceed 1000 characters", 400);
+      }
+
+      if (description && hasUnsafeText(description)) {
+        return errorResponse("Description contains invalid characters", 400);
+      }
+
+      if (notes.length > 1000) {
+        return errorResponse("Notes cannot exceed 1000 characters", 400);
+      }
+
+      if (notes && hasUnsafeText(notes)) {
+        return errorResponse("Notes contain invalid characters", 400);
+      }
+
+      const client = await Client.findOne({
+        _id: clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!client) {
+        return errorResponse("Client not found", 404);
+      }
+
+      if (dealId) {
+        const deal = await Deal.findOne({
+          _id: dealId,
+          isDeleted: { $ne: true },
+        }, null, { session });
+
+        if (!deal) {
+          return errorResponse("Deal not found", 404);
+        }
+
+        if (deal.status !== "Closed Won") {
+          return errorResponse(
+            "Project can only be linked to a Closed Won deal",
+            400
+          );
+        }
+
+        if (String(deal.clientId) !== clientId) {
+          return errorResponse("Selected deal does not belong to this client", 400);
+        }
+      }
+
+      if (String(existingProject.clientId) !== clientId && await Revenue.exists({ projectId: id }).session(session)) {
+        return errorResponse("A project with revenue cannot be moved to another client", 409);
+      }
+
+      const setPayload = {
+        clientId,
+        name,
+        type,
+        ...(canManageProjectFinancials(authorization.user!) && ["price", "cost", "paymentStatus"].some((key) => Object.hasOwn(body, key)) ? financial.data : {}),
+        status,
+        description,
+        notes,
+        ...(deadline ? { deadline } : {}),
+        ...(dealId ? { dealId } : {}),
+      };
+
+      const unsetPayload: Record<string, string> = {};
+
+      if (hasDealIdField && !dealId) {
+        unsetPayload.dealId = "";
+      }
+
+      if (hasDeadlineField && !deadline) {
+        unsetPayload.deadline = "";
+      }
+
+      const updatePayload =
+        Object.keys(unsetPayload).length > 0
+          ? { $set: setPayload, $unset: unsetPayload }
+          : { $set: setPayload };
+
+
+      const project = await Project.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updatePayload, { session,
+          returnDocument: "after",
+          runValidators: true,
+        }
+      )
+        .populate("clientId", "companyName contactPerson email")
+        .populate("dealId", "title status finalPrice estimatedBudget");
+
+      if (!project) {
+        return errorResponse("Project not found", 404);
+      }
+
+      return successResponse({ project: projectDTO(project, authorization.user!) }, "Project updated successfully");
+    });
   } catch (error) {
     if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
     if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);

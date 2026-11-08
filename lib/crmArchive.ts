@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import Client from "@/models/Client";
 import Deal from "@/models/Deal";
 import CrmArchiveEvent from "@/models/CrmArchiveEvent";
@@ -31,9 +31,7 @@ export async function listCrmArchive(resource: CrmArchiveResource, page: number)
 }
 
 export async function restoreCrmRecord(resource: CrmArchiveResource, id: string, actorId: string) {
-  const session = await mongoose.startSession();
-  try {
-    return await session.withTransaction(async () => {
+  return withCrmWriteTransaction(async (session) => {
       const model = models[resource];
       const filter = { _id: id, isDeleted: true };
       const record = await model.findOne(filter).select("clientId dealId").session(session);
@@ -60,10 +58,7 @@ export async function restoreCrmRecord(resource: CrmArchiveResource, id: string,
         { session },
       );
       return "restored";
-    });
-  } finally {
-    await session.endSession();
-  }
+  });
 }
 
 
@@ -73,9 +68,7 @@ export async function archiveCrmRecord(
   id: string,
   actorId: string,
 ) {
-  const session = await mongoose.startSession();
-  try {
-    return await session.withTransaction(async () => {
+  return withCrmWriteTransaction(async (session) => {
       const model = models[resource];
       const filter = { _id: id, isDeleted: { $ne: true } };
       const record = await model.findOne(filter).select("_id").session(session);
@@ -102,8 +95,5 @@ export async function archiveCrmRecord(
         { session },
       );
       return "archived";
-    });
-  } finally {
-    await session.endSession();
-  }
+  });
 }

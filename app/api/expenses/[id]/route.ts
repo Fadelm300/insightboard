@@ -1,3 +1,4 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { changeFinancialArchive } from "@/lib/financialArchive";
 import { expenseDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -188,16 +189,18 @@ if (demoBlock) return demoBlock;
       notes,
     };
 
-    const expense = await Expense.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, {
-      returnDocument: "after",
-      runValidators: true,
-    }).populate("projectId", "name type price cost profit status paymentStatus");
+    return await withCrmWriteTransaction(async (session) => {
+      const expense = await Expense.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, { session,
+        returnDocument: "after",
+        runValidators: true,
+      }).populate("projectId", "name type price cost profit status paymentStatus");
 
-    if (!expense) {
-      return errorResponse("Expense record not found", 404);
-    }
+      if (!expense) {
+        return errorResponse("Expense record not found", 404);
+      }
 
-    return successResponse({ expense: expenseDTO(expense, authorization.user!) }, "Expense record updated successfully");
+      return successResponse({ expense: expenseDTO(expense, authorization.user!) }, "Expense record updated successfully");
+    });
   } catch {
     return errorResponse("Server error", 500);
   }

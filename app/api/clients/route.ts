@@ -1,3 +1,4 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { clientDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 
@@ -329,9 +330,11 @@ export async function POST(req: NextRequest) {
       return errorResponse(error, 400);
     }
 
-    const client = await Client.create(values);
+    return await withCrmWriteTransaction(async (session) => {
+      const [client] = await Client.create([values], { session, ordered: true });
 
-    return successResponse({ client: clientDTO(client) }, "Client created successfully", 201);
+      return successResponse({ client: clientDTO(client) }, "Client created successfully", 201);
+    });
   } catch {
     return errorResponse("Server error", 500);
   }

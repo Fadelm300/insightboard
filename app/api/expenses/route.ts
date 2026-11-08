@@ -1,3 +1,5 @@
+import Client from "@/models/Client";
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { hasPermission } from "@/lib/permissions";
 import { canReadProjectFinancials, expenseDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -234,30 +236,38 @@ export async function POST(req: NextRequest) {
       return errorResponse("Notes contain invalid characters", 400);
     }
 
-    const project = await Project.findOne({
-      _id: projectId,
-      isDeleted: { $ne: true },
+    return await withCrmWriteTransaction(async (session) => {
+      const project = await Project.findOne({
+        _id: projectId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!project) {
+        return errorResponse("Project not found", 404);
+      }
+
+      const linkedClient = await Client.findOne({
+        _id: project.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+      if (!linkedClient) return errorResponse("Client not found", 404);
+
+      const [expense] = await Expense.create([{
+        projectId: project._id,
+        title,
+        amount,
+        category,
+        date: date || new Date(),
+        description,
+        notes,
+      }], { session, ordered: true });
+
+      return successResponse(
+        { expense: expenseDTO(expense, authorization.user!) },
+        "Expense record created successfully",
+        201
+      );
     });
-
-    if (!project) {
-      return errorResponse("Project not found", 404);
-    }
-
-    const expense = await Expense.create({
-      projectId: project._id,
-      title,
-      amount,
-      category,
-      date: date || new Date(),
-      description,
-      notes,
-    });
-
-    return successResponse(
-      { expense: expenseDTO(expense, authorization.user!) },
-      "Expense record created successfully",
-      201
-    );
   } catch {
     return errorResponse("Server error", 500);
   }

@@ -1,3 +1,4 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { hasPermission } from "@/lib/permissions";
 import { projectFinancialInput, canReadProjectFinancials, projectDTO } from "@/lib/crmData";
@@ -342,42 +343,45 @@ export async function POST(req: NextRequest) {
 
     const payload = validation.data;
 
-    const client = await Client.findOne({
-      _id: payload.clientId,
-      isDeleted: { $ne: true },
-    });
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    if (payload.dealId) {
-      const deal = await Deal.findOne({
-        _id: payload.dealId,
-        isDeleted: { $ne: true },
-      });
-
-      if (!deal) {
-        return errorResponse("Deal not found", 404);
-      }
-
-      if (deal.status !== "Closed Won") {
-        return errorResponse(
-          "Project can only be linked to a Closed Won deal",
-          400
-        );
-      }
-
-      if (String(deal.clientId) !== payload.clientId) {
-        return errorResponse("Selected deal does not belong to this client", 400);
-      }
-    }
-
     if (payload.dealId) await ensureProjectDealIndex();
 
-    const project = await Project.create(payload);
+    return await withCrmWriteTransaction(async (session) => {
+      const client = await Client.findOne({
+        _id: payload.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
 
-    return successResponse({ project: projectDTO(project, authorization.user!) }, "Project created successfully", 201);
+      if (!client) {
+        return errorResponse("Client not found", 404);
+      }
+
+      if (payload.dealId) {
+        const deal = await Deal.findOne({
+          _id: payload.dealId,
+          isDeleted: { $ne: true },
+        }, null, { session });
+
+        if (!deal) {
+          return errorResponse("Deal not found", 404);
+        }
+
+        if (deal.status !== "Closed Won") {
+          return errorResponse(
+            "Project can only be linked to a Closed Won deal",
+            400
+          );
+        }
+
+        if (String(deal.clientId) !== payload.clientId) {
+          return errorResponse("Selected deal does not belong to this client", 400);
+        }
+      }
+
+
+      const [project] = await Project.create([payload], { session, ordered: true });
+
+      return successResponse({ project: projectDTO(project, authorization.user!) }, "Project created successfully", 201);
+    });
   } catch (error) {
     if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
     if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);

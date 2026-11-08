@@ -1,3 +1,4 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { hasPermission } from "@/lib/permissions";
 import { dealDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -363,23 +364,25 @@ if (demoBlock) return demoBlock;
       return errorResponse(error, 400);
     }
 
-    const client = await Client.findOne({
-      _id: values.clientId,
-      isDeleted: { $ne: true },
+    return await withCrmWriteTransaction(async (session) => {
+      const client = await Client.findOne({
+        _id: values.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!client) {
+        return errorResponse("Client not found", 404);
+      }
+
+      const [createdDeal] = await Deal.create([values], { session, ordered: true });
+
+      const deal = await Deal.findById(createdDeal._id, null, { session }).populate(
+        "clientId",
+        "companyName contactPerson email status"
+      );
+
+      return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal created successfully", 201);
     });
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    const createdDeal = await Deal.create(values);
-
-    const deal = await Deal.findById(createdDeal._id).populate(
-      "clientId",
-      "companyName contactPerson email status"
-    );
-
-    return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal created successfully", 201);
   } catch {
     return errorResponse("Server error", 500);
   }

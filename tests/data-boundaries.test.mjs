@@ -46,13 +46,15 @@ for (const [resource, model, fields, payload] of [
     };
     const populate = (result) => ({ populate: () => populate(result), then: result.then.bind(result) });
     const repository = {
+      exists: () => ({ session: async () => null }),
       findOne: async () => stored,
       findById: () => populate(Promise.resolve(stored)),
-      create: save,
+      create: async (rows) => [await save(rows[0])],
       findByIdAndUpdate: (_id, update) => populate(save(update)),
       findOneAndUpdate: (_query, update) => populate(save(update)),
     };
     const deps = {
+    "@/lib/crmWriteTransaction": { withCrmWriteTransaction: async (operation) => operation() },
     "@/lib/crmArchive": { archiveCrmRecord: async () => { throw Error("Unexpected archive"); } },
       "@/lib/financialArchive": { changeFinancialArchive: async () => { throw Error("Unexpected archive"); } },
       "@/lib/crmData": data, "@/lib/permissions": permissions,
@@ -61,7 +63,7 @@ for (const [resource, model, fields, payload] of [
       "@/lib/mongodb": async () => {},
       "@/lib/apiResponse": { errorResponse: (message, status) => ({ message, status }), successResponse: (body, message, status = 200) => ({ body, message, status }) },
       "@/models/Client": { findOne: async () => ({ _id: id }) },
-      "@/models/Project": { findOne: async () => ({ _id: id, clientId: id }) },
+      "@/models/Project": { findOne: async () => ({ _id: id, clientId: id }), exists: () => ({ session: async () => null }) },
       [`@/models/${model}`]: repository,
       mongoose: { Types: { ObjectId: { isValid: () => true } } },
     };
@@ -200,10 +202,11 @@ function routeFixture(actor, options = {}) {
     find(filter) { calls.filters.push(filter); return chain([stored]); },
     countDocuments: async () => 1,
     findOne: () => chain(stored),
-    create: async (payload) => { calls.writes++; stored = { ...payload, _id: project._id }; return stored; },
+    create: async (rows) => { calls.writes++; stored = { ...rows[0], _id: project._id }; return [stored]; },
     findOneAndUpdate(_filter, update) { calls.writes++; calls.updates.push(update); stored = { ...stored, ...update.$set }; return chain(stored); },
   };
   const deps = {
+    "@/lib/crmWriteTransaction": { withCrmWriteTransaction: async (operation) => operation() },
     "@/lib/crmArchive": { archiveCrmRecord: async () => { throw Error("Unexpected archive"); } },
     "@/lib/permissions": permissions, "@/lib/crmData": data,
     "@/lib/projectDealLink": { ensureProjectDealIndex: async () => {}, isProjectDealConflict: () => false, ProjectDealLinkUnavailable: class extends Error {} },
@@ -211,8 +214,9 @@ function routeFixture(actor, options = {}) {
     "@/lib/mongodb": { __esModule: true, default: async () => {} },
     "@/lib/demoMode": { blockIfDemoMode: () => null },
     "@/lib/apiResponse": { successResponse: (body, message, status = 200) => ({ status, data: body, message }), errorResponse: (message, status) => ({ status, message }) },
-    "@/models/Project": { __esModule: true, default: Project },
+    "@/models/Project": { __esModule: true, default: { ...Project, exists: () => ({ session: async () => null }) } },
     "@/models/Client": { __esModule: true, default: { find: (query) => { calls.clientQueries.push(query); return { select: async () => [] }; }, findOne: async () => ({ _id: project.clientId._id }) } },
+    "@/models/Revenue": { exists: () => ({ session: async () => null }) },
     "@/models/Deal": { __esModule: true, default: { find: () => { calls.dealQueries++; return { select: async () => [] }; } } },
     mongoose: { Types: { ObjectId: { isValid: (id) => typeof id === "string" && /^[a-f0-9]{24}$/i.test(id) } } },
   };
@@ -283,6 +287,7 @@ for (const [resource, modelName] of [["revenue", "Revenue"], ["expenses", "Expen
     const actor = { role: "employee", allowedPermissions: [`${resource}.read`] };
     const rows = { populate() { return this; }, sort() { return this; }, skip() { return this; }, limit() { return this; }, then(resolve, reject) { return Promise.resolve([]).then(resolve, reject); } };
     const deps = {
+    "@/lib/crmWriteTransaction": { withCrmWriteTransaction: async (operation) => operation() },
     "@/lib/crmArchive": { archiveCrmRecord: async () => { throw Error("Unexpected archive"); } },
       "@/lib/permissions": permissions, "@/lib/crmData": data,
     "@/lib/projectDealLink": { ensureProjectDealIndex: async () => {}, isProjectDealConflict: () => false, ProjectDealLinkUnavailable: class extends Error {} },

@@ -19,7 +19,6 @@ function load(file, deps) {
   return exports;
 }
 const id = "a".repeat(24), clientId = "b".repeat(24);
-const plain = (value) => JSON.parse(JSON.stringify(value));
 const query = (fn) => ({ populate() { return this; }, then(resolve, reject) { return Promise.resolve().then(fn).then(resolve, reject); } });
 function setup(options = {}) {
   const rows = [...(options.rows || [])];
@@ -27,22 +26,24 @@ function setup(options = {}) {
   let indexEnabled = false;
   const duplicate = () => Object.assign(new Error("synthetic index conflict"), { code: 11000, keyPattern: { dealId: 1 } });
   const Project = {
-    collection: { createIndex: async (keys, config) => {
-      calls.index.push(plain({ keys, config }));
+    collection: { listIndexes: () => ({ toArray: async () => {
+      calls.index.push("listIndexes");
       if (options.indexError) throw options.indexError;
+      if (options.indexDefinition === null) return [];
       indexEnabled = true;
-      return config.name;
-    } },
+      return [options.indexDefinition ?? { name: "unique_project_deal_link", key: { dealId: 1 }, unique: true, partialFilterExpression: { dealId: { $type: "objectId" } } }];
+    } }) },
     findOne: (filter) => query(() => rows.find((row) => filter.dealId
       ? row.dealId === filter.dealId && (!filter.isDeleted || !row.isDeleted)
       : row._id === filter._id && !row.isDeleted) || null),
-    create: async (payload) => {
+    create: async (documents) => {
+      const payload = documents[0];
       await Promise.resolve();
       if (options.writeError) throw options.writeError;
       if (indexEnabled && payload.dealId && rows.some((r) => r.dealId === payload.dealId)) throw duplicate();
       const row = { _id: (rows.length + 1).toString(16).padStart(24, "0"), ...payload };
       rows.push(row); calls.writes++;
-      return row;
+      return [row];
     },
     findOneAndUpdate: (filter, update) => query(() => {
       const row = rows.find((r) => r._id === filter._id && !r.isDeleted);
@@ -53,12 +54,13 @@ function setup(options = {}) {
       return row;
     }),
   };
-  const link = load("lib/projectDealLink.ts", { "@/models/Project": { __esModule: true, default: Project } });
+  const link = load("lib/projectDealLink.ts", { "@/models/Project": { __esModule: true, default: { ...Project, exists: () => ({ session: async () => null }) } } });
   const permissions = load("lib/permissions.ts", {});
   const data = load("lib/crmData.ts", { "@/lib/permissions": permissions });
   const actor = options.actor || { id: "c".repeat(24), role: "manager" };
   const deal = { _id: id, clientId, title: "Synthetic won deal", status: "Closed Won", finalPrice: 900 };
   const deps = {
+    "@/lib/crmWriteTransaction": { withCrmWriteTransaction: async (operation) => operation() },
     "@/lib/crmArchive": { archiveCrmRecord: async () => { throw Error("Unexpected archive"); } },
     "@/lib/projectDealLink": link,
     "@/lib/crmData": data,
@@ -67,7 +69,8 @@ function setup(options = {}) {
     "@/lib/demoMode": { blockIfDemoMode: () => null },
     "@/lib/mongodb": { __esModule: true, default: async () => {} },
     "@/lib/apiResponse": { errorResponse: (message, status) => ({ message, status }), successResponse: (data, message, status = 200) => ({ data, message, status }) },
-    "@/models/Project": { __esModule: true, default: Project },
+    "@/models/Project": { __esModule: true, default: { ...Project, exists: () => ({ session: async () => null }) } },
+    "@/models/Revenue": { exists: () => ({ session: async () => null }) },
     "@/models/Deal": { __esModule: true, default: { findOne: async () => deal } },
     "@/models/Client": { __esModule: true, default: { findOne: async () => ({ _id: clientId }) } },
     mongoose: { Types: { ObjectId: { isValid: (value) => /^[a-f\d]{24}$/i.test(String(value)) } } },
@@ -83,7 +86,7 @@ test("database deal constraint is shared, partial only for ObjectIds, and includ
   const s = setup();
   await Promise.all(Array.from({ length: 12 }, () => s.link.ensureProjectDealIndex()));
   assert.equal(s.calls.index.length, 1);
-  assert.deepEqual(s.calls.index[0], { keys: { dealId: 1 }, config: { name: "unique_project_deal_link", unique: true, partialFilterExpression: { dealId: { $type: "objectId" } } } });
+  assert.equal(s.calls.index[0], "listIndexes");
 });
 
 test("failed index verification fails closed, hides database error details and allows a later retry", async () => {
@@ -155,4 +158,14 @@ test("financially unauthorized conversion cannot build indexes or write a projec
   const s = setup({ actor: { role: "employee", allowedPermissions: ["deals.read", "projects.read", "projects.create", "deals.convert"] } });
   assert.equal((await s.conversion.POST(request(), context())).status, 403);
   assert.equal(s.calls.index.length, 0); assert.equal(s.calls.writes, 0);
+});
+
+
+test("request-time index verification refuses missing or weakened constraints without creating indexes", async () => {
+  for (const definition of [null, { name: "unique_project_deal_link", key: { dealId: 1 }, unique: false },
+    { name: "unique_project_deal_link", key: { dealId: 1 }, unique: true, partialFilterExpression: { isDeleted: false } }]) {
+    const s = setup({ indexDefinition: definition });
+    await assert.rejects(s.link.ensureProjectDealIndex());
+    assert.equal(s.calls.writes, 0);
+  }
 });

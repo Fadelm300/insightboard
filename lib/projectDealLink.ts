@@ -9,13 +9,17 @@ export class ProjectDealLinkUnavailable extends Error {
   }
 }
 
-/** Verify the database constraint before any write that attaches a deal. Never remove conflicting records. */
+/** Validate the pre-provisioned constraint without running DDL in request paths. */
 export async function ensureProjectDealIndex() {
   if (!indexReady) {
-    indexReady = Project.collection.createIndex(
-      { dealId: 1 },
-      { name: INDEX_NAME, unique: true, partialFilterExpression: { dealId: { $type: "objectId" } } },
-    ).catch(() => {
+    indexReady = Project.collection.listIndexes().toArray().then((indexes) => {
+      const index = indexes.find((entry) => entry.name === INDEX_NAME);
+      if (!index || index.unique !== true || index.key?.dealId !== 1 ||
+          Object.keys(index.key).length !== 1 ||
+          JSON.stringify(index.partialFilterExpression) !== JSON.stringify({ dealId: { $type: "objectId" } })) {
+        throw new ProjectDealLinkUnavailable();
+      }
+    }).catch(() => {
       indexReady = undefined;
       throw new ProjectDealLinkUnavailable();
     });

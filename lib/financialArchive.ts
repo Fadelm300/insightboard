@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import Client from "@/models/Client";
 import Expense from "@/models/Expense";
 import FinancialArchiveEvent from "@/models/FinancialArchiveEvent";
@@ -27,9 +27,7 @@ export async function changeFinancialArchive(
   actorId: string,
   action: "archive" | "restore",
 ) {
-  const session = await mongoose.startSession();
-  try {
-    return await session.withTransaction(async () => {
+  return withCrmWriteTransaction(async (session) => {
       const model = financialModel(resource);
       const restoring = action === "restore";
       const filter = { _id: recordId, isDeleted: restoring ? true : { $ne: true } };
@@ -59,8 +57,5 @@ export async function changeFinancialArchive(
         { session },
       );
       return "changed";
-    });
-  } finally {
-    await session.endSession();
-  }
+  });
 }

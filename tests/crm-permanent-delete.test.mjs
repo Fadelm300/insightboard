@@ -29,7 +29,14 @@ function fixture({ resource = "clients", archived = true, dependant, auditError 
     },
     async endSession() { calls.ended++; },
   };
-  const deps = { mongoose: { startSession: async () => session } };
+  const deps = {
+    "@/lib/crmWriteTransaction": {
+      withCrmWriteTransaction: async (operation) => {
+        try { return await session.withTransaction(() => operation(session)); }
+        finally { await session.endSession(); }
+      },
+    },
+  };
   for (const name of ["Client", "Deal", "Project", "Revenue", "Expense"]) {
     deps[`@/models/${name}`] = {
       findOne(filter) {

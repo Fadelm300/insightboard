@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import Client from "@/models/Client";
 import Deal from "@/models/Deal";
 import Project from "@/models/Project";
@@ -16,9 +16,7 @@ export async function permanentlyDeleteCrmRecord(
   actorId: string,
   confirmation: string,
 ) {
-  const session = await mongoose.startSession();
-  try {
-    return await session.withTransaction(async () => {
+  return withCrmWriteTransaction(async (session) => {
       const model = models[resource];
       const filter = { _id: id, isDeleted: true };
       const record = await model.findOne(filter)
@@ -51,8 +49,5 @@ export async function permanentlyDeleteCrmRecord(
         { session },
       );
       return "deleted";
-    });
-  } finally {
-    await session.endSession();
-  }
+  });
 }

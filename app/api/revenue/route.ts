@@ -1,3 +1,4 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { hasPermission } from "@/lib/permissions";
 import { canReadProjectFinancials, revenueDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -265,30 +266,38 @@ export async function POST(req: NextRequest) {
 
     const payload = validation.data;
 
-    const project = await Project.findOne({
-      _id: payload.projectId,
-      isDeleted: { $ne: true },
+    return await withCrmWriteTransaction(async (session) => {
+      const project = await Project.findOne({
+        _id: payload.projectId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!project) {
+        return errorResponse("Project not found", 404);
+      }
+
+      const linkedClient = await Client.findOne({
+        _id: project.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+      if (!linkedClient) return errorResponse("Client not found", 404);
+
+      const [revenue] = await Revenue.create([{
+        projectId: project._id,
+        clientId: project.clientId,
+        amount: payload.amount,
+        paymentDate: payload.paymentDate || new Date(),
+        paymentMethod: payload.paymentMethod,
+        description: payload.description,
+        notes: payload.notes,
+      }], { session, ordered: true });
+
+      return successResponse(
+        { revenue: revenueDTO(revenue, authorization.user!) },
+        "Revenue record created successfully",
+        201
+      );
     });
-
-    if (!project) {
-      return errorResponse("Project not found", 404);
-    }
-
-    const revenue = await Revenue.create({
-      projectId: project._id,
-      clientId: project.clientId,
-      amount: payload.amount,
-      paymentDate: payload.paymentDate || new Date(),
-      paymentMethod: payload.paymentMethod,
-      description: payload.description,
-      notes: payload.notes,
-    });
-
-    return successResponse(
-      { revenue: revenueDTO(revenue, authorization.user!) },
-      "Revenue record created successfully",
-      201
-    );
   } catch {
     return errorResponse("Server error", 500);
   }

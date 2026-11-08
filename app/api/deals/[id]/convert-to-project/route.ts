@@ -1,3 +1,4 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { canManageProjectFinancials, projectDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -100,69 +101,72 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid deadline", 400);
     }
 
-    const deal = await Deal.findOne({
-      _id: id,
-      isDeleted: { $ne: true },
-    });
-
-    if (!deal) {
-      return errorResponse("Deal not found", 404);
-    }
-
-    if (deal.status !== "Closed Won") {
-      return errorResponse("Deal must be Closed Won to convert to project", 400);
-    }
-
-    const existingProject = await Project.findOne({
-      dealId: deal._id,
-    });
-
-    if (existingProject) {
-      return errorResponse(
-        "This deal already has a project, including archived projects",
-        409
-      );
-    }
-
-    const client = await Client.findOne({
-      _id: deal.clientId,
-      isDeleted: { $ne: true },
-    });
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    const sourcePrice = deal.finalPrice == null || deal.finalPrice === 0
-      ? deal.estimatedBudget
-      : deal.finalPrice;
-    const projectPrice = parseCrmMoney(sourcePrice);
-
-    if (projectPrice === null || projectPrice <= 0) {
-      return errorResponse("Deal price must be a positive amount with up to 2 decimals within the supported range", 400);
-    }
-
     await ensureProjectDealIndex();
 
-    const project = await Project.create({
-      clientId: deal.clientId,
-      dealId: deal._id,
-      name: `${deal.title} Project`,
-      type: "Business Website",
-      price: projectPrice,
-      cost: 0,
-      deadline,
-      status: "Not Started",
-      paymentStatus: "Unpaid",
-      notes: "Project created from deal conversion",
-      isDeleted: false,
-    });
+    return await withCrmWriteTransaction(async (session) => {
+      const deal = await Deal.findOne({
+        _id: id,
+        isDeleted: { $ne: true },
+      }, null, { session });
 
-    return successResponse(
-      { project: projectDTO(project, authorization.user!) },
-      "Deal converted to project successfully",
-      201
-    );
+      if (!deal) {
+        return errorResponse("Deal not found", 404);
+      }
+
+      if (deal.status !== "Closed Won") {
+        return errorResponse("Deal must be Closed Won to convert to project", 400);
+      }
+
+      const existingProject = await Project.findOne({
+        dealId: deal._id,
+      }, null, { session });
+
+      if (existingProject) {
+        return errorResponse(
+          "This deal already has a project, including archived projects",
+          409
+        );
+      }
+
+      const client = await Client.findOne({
+        _id: deal.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!client) {
+        return errorResponse("Client not found", 404);
+      }
+
+      const sourcePrice = deal.finalPrice == null || deal.finalPrice === 0
+        ? deal.estimatedBudget
+        : deal.finalPrice;
+      const projectPrice = parseCrmMoney(sourcePrice);
+
+      if (projectPrice === null || projectPrice <= 0) {
+        return errorResponse("Deal price must be a positive amount with up to 2 decimals within the supported range", 400);
+      }
+
+
+      const [project] = await Project.create([{
+        clientId: deal.clientId,
+        dealId: deal._id,
+        name: `${deal.title} Project`,
+        type: "Business Website",
+        price: projectPrice,
+        cost: 0,
+        deadline,
+        status: "Not Started",
+        paymentStatus: "Unpaid",
+        notes: "Project created from deal conversion",
+        isDeleted: false,
+      }], { session, ordered: true });
+
+      return successResponse(
+        { project: projectDTO(project, authorization.user!) },
+        "Deal converted to project successfully",
+        201
+      );
+    });
   } catch (error) {
     if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
     if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);
