@@ -2,7 +2,8 @@
 
 import { usePermission } from "@/components/access/PermissionProvider";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createListRequestGuard, LIST_SEARCH_DELAY_MS } from "@/lib/listSearch";
 import type React from "react";
 import {
   Alert,
@@ -601,52 +602,55 @@ export default function DealsPage() {
     );
   }, [projects]);
 
+  const listRequests = useRef(createListRequestGuard());
   const fetchData = useCallback(async (pageNumber: number, search: string) => {
-    setLoading(true);
-    setError("");
-
-    const queryParams = new URLSearchParams({
-      page: String(pageNumber),
-      limit: String(DEALS_PER_PAGE),
-    });
-
-    const cleanSearch = search.trim();
-
-    if (cleanSearch) {
-      queryParams.set("search", cleanSearch);
-    }
-
-    try {
-      const [dealsResponse, clientsResponse, projectsResponse] =
-        await Promise.all([
-          apiFetch<DealsResponse>(`/api/deals?${queryParams.toString()}`),
-          apiFetch<ClientsResponse>("/api/lookups/clients"),
-          apiFetch<ProjectsResponse>("/api/lookups/projects"),
-        ]);
-
-      const pagination = getDealsPaginationFromResponse(dealsResponse);
-
-      setDeals(getDealsFromResponse(dealsResponse));
-      setTotalDeals(pagination.total);
-      setTotalPages(Math.max(pagination.totalPages, 1));
-      setClients(getClientsFromResponse(clientsResponse));
-      setProjects(getProjectsFromResponse(projectsResponse));
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load deals";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+      const request = listRequests.current.start();
+      setLoading(true);
+      setError("");
+      const queryParams = new URLSearchParams({
+          page: String(pageNumber),
+          limit: String(DEALS_PER_PAGE),
+      });
+      const cleanSearch = search.trim();
+      if (cleanSearch) {
+          queryParams.set("search", cleanSearch);
+      }
+      try {
+          const [dealsResponse, clientsResponse, projectsResponse] = await Promise.all([
+              apiFetch<DealsResponse>(`/api/deals?${queryParams.toString()}`, { signal: request.signal }),
+              apiFetch<ClientsResponse>("/api/lookups/clients", { signal: request.signal }),
+              apiFetch<ProjectsResponse>("/api/lookups/projects", { signal: request.signal }),
+          ]);
+          if (!request.isCurrent())
+              return;
+          const pagination = getDealsPaginationFromResponse(dealsResponse);
+          setDeals(getDealsFromResponse(dealsResponse));
+          setTotalDeals(pagination.total);
+          setTotalPages(Math.max(pagination.totalPages, 1));
+          setClients(getClientsFromResponse(clientsResponse));
+          setProjects(getProjectsFromResponse(projectsResponse));
+      }
+      catch (err) {
+          if (!request.isCurrent())
+              return;
+          const message = err instanceof Error ? err.message : "Failed to load deals";
+          setError(message);
+      }
+      finally {
+          if (request.isCurrent())
+              setLoading(false);
+      }
   }, []);
-
-useEffect(() => {
-  const timeoutId = window.setTimeout(() => {
-    void fetchData(page, searchQuery);
-  }, 350);
-
-  return () => window.clearTimeout(timeoutId);
-}, [fetchData, page, searchQuery]);
+  useEffect(() => {
+      const requests = listRequests.current;
+      const timeoutId = window.setTimeout(() => {
+          void fetchData(page, searchQuery);
+      }, LIST_SEARCH_DELAY_MS);
+      return () => {
+          window.clearTimeout(timeoutId);
+          requests.cancel();
+      };
+  }, [fetchData, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingDeal(null);

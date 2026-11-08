@@ -1,5 +1,5 @@
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
-import { clientDTO } from "@/lib/crmData";
+import { clientDTO, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
@@ -267,28 +267,23 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+    const query = parseCrmListQuery(searchParams);
+    if (!query.data) return errorResponse(query.error, 400);
 
-    const limit = Math.min(
-      Math.max(Number(searchParams.get("limit")) || 10, 1),
-      50,
-    );
-
-    const search = searchParams.get("search")?.trim() || "";
-    const skip = (page - 1) * limit;
+    const { page, limit, skip, search, pattern } = query.data;
 
    const filter: ClientFilter = {
   isDeleted: { $ne: true },
 };
     if (search) {
       filter.$or = [
-        { companyName: { $regex: search, $options: "i" } },
-        { businessType: { $regex: search, $options: "i" } },
-        { contactPerson: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { location: { $regex: search, $options: "i" } },
-        { status: { $regex: search, $options: "i" } },
+        { companyName: { $regex: pattern, $options: "i" } },
+        { businessType: { $regex: pattern, $options: "i" } },
+        { contactPerson: { $regex: pattern, $options: "i" } },
+        { phone: { $regex: pattern, $options: "i" } },
+        { email: { $regex: pattern, $options: "i" } },
+        { location: { $regex: pattern, $options: "i" } },
+        { status: { $regex: pattern, $options: "i" } },
       ];
     }
 

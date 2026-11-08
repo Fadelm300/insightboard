@@ -1,7 +1,7 @@
 import Client from "@/models/Client";
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { hasPermission } from "@/lib/permissions";
-import { canReadProjectFinancials, expenseDTO, parseCrmMoney } from "@/lib/crmData";
+import { canReadProjectFinancials, expenseDTO, parseCrmMoney, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -79,15 +79,10 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+    const query = parseCrmListQuery(searchParams);
+    if (!query.data) return errorResponse(query.error, 400);
 
-    const limit = Math.min(
-      Math.max(Number(searchParams.get("limit")) || 10, 1),
-      50
-    );
-
-    const search = searchParams.get("search")?.trim() || "";
-    const skip = (page - 1) * limit;
+    const { page, limit, skip, search, pattern } = query.data;
 
     const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
 
@@ -95,22 +90,22 @@ export async function GET(req: NextRequest) {
       const matchingProjects = await Project.find({
         isDeleted: { $ne: true },
         $or: [
-          { name: { $regex: search, $options: "i" } },
+          { name: { $regex: pattern, $options: "i" } },
           ...(hasPermission(authorization.user!, "projects.read") ? [
-            { type: { $regex: search, $options: "i" } },
-            { status: { $regex: search, $options: "i" } },
+            { type: { $regex: pattern, $options: "i" } },
+            { status: { $regex: pattern, $options: "i" } },
           ] : []),
-          ...(canReadProjectFinancials(authorization.user!) ? [{ paymentStatus: { $regex: search, $options: "i" } }] : []),
+          ...(canReadProjectFinancials(authorization.user!) ? [{ paymentStatus: { $regex: pattern, $options: "i" } }] : []),
         ],
       }).select("_id");
 
       const matchingProjectIds = matchingProjects.map((project) => project._id);
 
       const searchConditions: Record<string, unknown>[] = [
-        { title: { $regex: search, $options: "i" } },
-        { category: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { notes: { $regex: search, $options: "i" } },
+        { title: { $regex: pattern, $options: "i" } },
+        { category: { $regex: pattern, $options: "i" } },
+        { description: { $regex: pattern, $options: "i" } },
+        { notes: { $regex: pattern, $options: "i" } },
       ];
 
       const amount = Number(search);
@@ -130,7 +125,7 @@ export async function GET(req: NextRequest) {
 
     const [expenses, total] = await Promise.all([
       Expense.find(filter)
-        .populate("projectId", "name type price cost profit status paymentStatus")
+        .populate({ path: "projectId", select: "name type price cost profit status paymentStatus clientId", populate: { path: "clientId", select: "companyName" } })
         .sort({ date: -1 })
         .skip(skip)
         .limit(limit),

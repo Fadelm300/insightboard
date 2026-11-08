@@ -2,7 +2,8 @@
 
 import { usePermission } from "@/components/access/PermissionProvider";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createListRequestGuard, LIST_SEARCH_DELAY_MS } from "@/lib/listSearch";
 import type React from "react";
 import {
   Alert,
@@ -634,53 +635,54 @@ export default function ProjectsPage() {
     });
   }, [deals, formData.clientId, formData.dealId]);
 
+  const listRequests = useRef(createListRequestGuard());
   const fetchData = useCallback(async (pageNumber: number, search: string) => {
-    setLoading(true);
-    setError("");
-
-    const queryParams = new URLSearchParams({
-      page: String(pageNumber),
-      limit: String(PROJECTS_PER_PAGE),
-    });
-
-    const cleanSearch = search.trim();
-
-    if (cleanSearch) {
-      queryParams.set("search", cleanSearch);
-    }
-
-    try {
-      const [projectsResponse, clientsResponse, dealsResponse] =
-        await Promise.all([
-          apiFetch<ProjectsResponse>(
-            `/api/projects?${queryParams.toString()}`,
-          ),
-          apiFetch<ClientsResponse>("/api/lookups/clients"),
-          apiFetch<DealsResponse>("/api/lookups/deals"),
-        ]);
-
-      const pagination = getPaginationFromResponse(projectsResponse);
-
-      setProjects(getProjectsFromResponse(projectsResponse));
-      setClients(getClientsFromResponse(clientsResponse));
-      setDeals(getDealsFromResponse(dealsResponse));
-      setTotalProjects(pagination.total);
-      setTotalPages(Math.max(pagination.totalPages, 1));
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load projects";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+      const request = listRequests.current.start();
+      setLoading(true);
+      setError("");
+      const queryParams = new URLSearchParams({
+          page: String(pageNumber),
+          limit: String(PROJECTS_PER_PAGE),
+      });
+      const cleanSearch = search.trim();
+      if (cleanSearch) {
+          queryParams.set("search", cleanSearch);
+      }
+      try {
+          const [projectsResponse, clientsResponse, dealsResponse] = await Promise.all([
+              apiFetch<ProjectsResponse>(`/api/projects?${queryParams.toString()}`, { signal: request.signal }),
+              apiFetch<ClientsResponse>("/api/lookups/clients", { signal: request.signal }),
+              apiFetch<DealsResponse>("/api/lookups/deals", { signal: request.signal }),
+          ]);
+          if (!request.isCurrent())
+              return;
+          const pagination = getPaginationFromResponse(projectsResponse);
+          setProjects(getProjectsFromResponse(projectsResponse));
+          setClients(getClientsFromResponse(clientsResponse));
+          setDeals(getDealsFromResponse(dealsResponse));
+          setTotalProjects(pagination.total);
+          setTotalPages(Math.max(pagination.totalPages, 1));
+      }
+      catch (err) {
+          if (!request.isCurrent())
+              return;
+          const message = err instanceof Error ? err.message : "Failed to load projects";
+          setError(message);
+      }
+      finally {
+          if (request.isCurrent())
+              setLoading(false);
+      }
   }, []);
-
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void fetchData(page, searchQuery);
-    }, 350);
-
-    return () => window.clearTimeout(timeoutId);
+      const requests = listRequests.current;
+      const timeoutId = window.setTimeout(() => {
+          void fetchData(page, searchQuery);
+      }, LIST_SEARCH_DELAY_MS);
+      return () => {
+          window.clearTimeout(timeoutId);
+          requests.cancel();
+      };
   }, [fetchData, page, searchQuery]);
 
   function handleCreateOpen() {

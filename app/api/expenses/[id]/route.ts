@@ -9,6 +9,7 @@ import { errorResponse, successResponse } from "@/lib/apiResponse";
 import { authorizeRequest } from "@/lib/authorization";
 import Expense from "@/models/Expense";
 import "@/models/Project";
+import "@/models/Client";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -86,10 +87,11 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid expense ID", 400);
     }
 
-    const expense = await Expense.findOne({ _id: id, isDeleted: { $ne: true } }).populate(
-      "projectId",
-      "name type price cost profit status paymentStatus"
-    );
+    const expense = await Expense.findOne({ _id: id, isDeleted: { $ne: true } }).populate({
+      path: "projectId",
+      select: "name type price cost profit status paymentStatus clientId",
+      populate: { path: "clientId", select: "companyName" },
+    });
 
     if (!expense) {
       return errorResponse("Expense record not found", 404);
@@ -193,7 +195,7 @@ if (demoBlock) return demoBlock;
       const expense = await Expense.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, { session,
         returnDocument: "after",
         runValidators: true,
-      }).populate("projectId", "name type price cost profit status paymentStatus");
+      }).populate({ path: "projectId", select: "name type price cost profit status paymentStatus clientId", populate: { path: "clientId", select: "companyName" } });
 
       if (!expense) {
         return errorResponse("Expense record not found", 404);

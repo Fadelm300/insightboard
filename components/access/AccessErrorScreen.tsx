@@ -45,7 +45,7 @@ const glide = keyframes`
 `;
 
 // ── Illustration (pure SVG, no external deps) ────────────────────────────────
-function Illustration({ restricted }: { restricted: boolean }) {
+function Illustration({ restricted, serverError = false }: { restricted: boolean; serverError?: boolean }) {
   return (
     <Box
       component="svg"
@@ -84,16 +84,16 @@ function Illustration({ restricted }: { restricted: boolean }) {
         <line x1="305" y1="224" x2="333" y2="252" stroke="white" strokeWidth="5" strokeLinecap="round" />
         <line x1="333" y1="224" x2="305" y2="252" stroke="white" strokeWidth="5" strokeLinecap="round" />
       </g>
-      <text x="319" y="286" textAnchor="middle" fontFamily="inherit" fontSize="11" fontWeight="600" fill="#1a3a7a" letterSpacing="1">{restricted ? "ACCESS RESTRICTED" : "PAGE NOT FOUND"}</text>
+      <text x="319" y="286" textAnchor="middle" fontFamily="inherit" fontSize="11" fontWeight="600" fill="#1a3a7a" letterSpacing="1">{serverError ? "SERVER ERROR" : restricted ? "ACCESS RESTRICTED" : "PAGE NOT FOUND"}</text>
       <rect x="275" y="290" width="88" height="3" rx="1.5" fill="#93b8f8" opacity=".6" />
       <rect x="290" y="297" width="58" height="3" rx="1.5" fill="#93b8f8" opacity=".4" />
 
       {/* ── CLIPBOARD ── */}
       <rect x="106" y="198" width="72" height="90" rx="6" fill="#dce8fd" stroke="#93b8f8" strokeWidth="1.5" />
       <rect x="125" y="190" width="34" height="16" rx="3" fill="#93b8f8" />
-      <text x="142" y="225" textAnchor="middle" fontFamily="inherit" fontSize="10" fontWeight="700" fill="#1a3a7a">{restricted ? "403:" : "404:"}</text>
-      <text x="142" y="239" textAnchor="middle" fontFamily="inherit" fontSize="9" fontWeight="600" fill="#2657bf">{restricted ? "ACCESS" : "FILE NOT"}</text>
-      <text x="142" y="252" textAnchor="middle" fontFamily="inherit" fontSize="9" fontWeight="600" fill="#2657bf">{restricted ? "DENIED" : "FOUND"}</text>
+      <text x="142" y="225" textAnchor="middle" fontFamily="inherit" fontSize="10" fontWeight="700" fill="#1a3a7a">{serverError ? "500:" : restricted ? "403:" : "404:"}</text>
+      <text x="142" y="239" textAnchor="middle" fontFamily="inherit" fontSize="9" fontWeight="600" fill="#2657bf">{serverError ? "SERVER" : restricted ? "ACCESS" : "FILE NOT"}</text>
+      <text x="142" y="252" textAnchor="middle" fontFamily="inherit" fontSize="9" fontWeight="600" fill="#2657bf">{serverError ? "ERROR" : restricted ? "DENIED" : "FOUND"}</text>
 
       {/* ── LAMP ── */}
       <line x1="310" y1="20" x2="310" y2="90" stroke="#0f2357" strokeWidth="3" strokeLinecap="round" />
@@ -203,10 +203,16 @@ function Illustration({ restricted }: { restricted: boolean }) {
 export default function AccessErrorScreen({
   restricted = false,
   home = "/dashboard",
+  status,
+  onRetry,
 }: {
   restricted?: boolean;
   home?: string;
+  status?: 500;
+  onRetry?: () => void;
 }) {
+  const serverError = status === 500;
+
   return (
     <Box
       sx={{
@@ -264,7 +270,7 @@ export default function AccessErrorScreen({
                 userSelect: "none",
               }}
             >
-              {restricted ? "403" : "404"}
+              {serverError ? "500" : restricted ? "403" : "404"}
             </Typography>
 
             {/* Spark dots */}
@@ -303,7 +309,7 @@ export default function AccessErrorScreen({
               mb: 1.5,
             }}
           >
-            {restricted ? "Access restricted" : <>Oops! This page took<br />a wrong turn.</>}
+            {serverError ? "Something went wrong." : restricted ? "Access restricted" : <>Oops! This page took<br />a wrong turn.</>}
           </Typography>
 
           {/* Description */}
@@ -316,7 +322,9 @@ export default function AccessErrorScreen({
               maxWidth: 360,
             }}
           >
-            {restricted
+            {serverError
+              ? "We could not load this page. Try again, or return to the homepage."
+              : restricted
               ? "Your account does not have permission to view this section. Contact your manager to request access."
               : <>Looks like you&apos;ve wandered off the map.<br />Let&apos;s get you back on track.</>}
           </Typography>
@@ -324,8 +332,9 @@ export default function AccessErrorScreen({
           {/* Buttons */}
           <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", justifyContent: { xs: "center", md: "flex-start" } }}>
             <Button
-              component="a"
-              href={home}
+              component={serverError && onRetry ? "button" : "a"}
+              href={serverError && onRetry ? undefined : home}
+              onClick={serverError ? onRetry : undefined}
               variant="contained"
               size="large"
               startIcon={
@@ -352,7 +361,7 @@ export default function AccessErrorScreen({
                 transition: "all 0.2s",
               }}
             >
-              {restricted ? "Go to an available page" : "Back to Dashboard"}
+              {serverError && onRetry ? "Try again" : restricted ? "Go to an available page" : "Back to Dashboard"}
             </Button>
 
             <Button
@@ -422,7 +431,7 @@ export default function AccessErrorScreen({
             alignItems: "center",
           }}
         >
-          <Illustration restricted={restricted} />
+          <Illustration restricted={restricted} serverError={serverError} />
         </Box>
       </Box>
     </Box>

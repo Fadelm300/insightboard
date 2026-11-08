@@ -1,6 +1,6 @@
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { hasPermission } from "@/lib/permissions";
-import { dealDTO, parseCrmMoney } from "@/lib/crmData";
+import { dealDTO, parseCrmMoney, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -282,15 +282,10 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+    const query = parseCrmListQuery(searchParams);
+    if (!query.data) return errorResponse(query.error, 400);
 
-    const limit = Math.min(
-      Math.max(Number(searchParams.get("limit")) || 10, 1),
-      50
-    );
-
-    const search = searchParams.get("search")?.trim() || "";
-    const skip = (page - 1) * limit;
+    const { page, limit, skip, search, pattern } = query.data;
 
     const filter: DealFilter = {
   isDeleted: { $ne: true },
@@ -300,10 +295,10 @@ export async function GET(req: NextRequest) {
       const matchingClients = await Client.find({
         isDeleted: { $ne: true },
         $or: [
-          { companyName: { $regex: search, $options: "i" } },
+          { companyName: { $regex: pattern, $options: "i" } },
           ...(hasPermission(authorization.user!, "clients.read") ? [
-            { contactPerson: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
+            { contactPerson: { $regex: pattern, $options: "i" } },
+            { email: { $regex: pattern, $options: "i" } },
           ] : []),
         ],
       }).select("_id");
@@ -312,10 +307,10 @@ export async function GET(req: NextRequest) {
             (client) => client._id as Types.ObjectId
           );
       filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { status: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { notes: { $regex: search, $options: "i" } },
+        { title: { $regex: pattern, $options: "i" } },
+        { status: { $regex: pattern, $options: "i" } },
+        { description: { $regex: pattern, $options: "i" } },
+        { notes: { $regex: pattern, $options: "i" } },
       ];
 
       if (matchingClientIds.length > 0) {

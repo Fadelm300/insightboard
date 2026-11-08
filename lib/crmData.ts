@@ -52,15 +52,24 @@ function dealLabelDTO(value: unknown, actor: PermissionSubject): unknown {
     : ["_id", "title", "status"]);
 }
 
-function projectLabelDTO(value: unknown, actor: PermissionSubject): unknown {
+function projectLabelDTO(value: unknown, actor: PermissionSubject, includeClient = false): unknown {
   if (value === null || value === undefined || typeof value === "string") return value;
   if (!Object.hasOwn(record(value), "_id")) {
     return typeof (value as { toHexString?: unknown }).toHexString === "function" ? String(value) : null;
   }
-  return pick(value, ["_id", "name",
+  const label = pick(value, ["_id", "name",
     ...(hasPermission(actor, "projects.read") ? ["type", "status"] : []),
     ...(canReadProjectFinancials(actor) ? PROJECT_FINANCIAL_FIELDS : []),
   ]);
+
+  if (includeClient) {
+    const client = record(value).clientId;
+    label.clientId = client === null || client === undefined || typeof client === "string"
+      ? client
+      : pick(client, ["_id", "companyName"]);
+  }
+
+  return label;
 }
 
 export function clientDTO(value: unknown) {
@@ -94,7 +103,7 @@ export function expenseDTO(value: unknown, actor: PermissionSubject) {
   const source = record(value);
   return {
     ...pick(source, ["_id", "title", "amount", "category", "date", "description", "notes", ...TIMESTAMPS]),
-    projectId: projectLabelDTO(source.projectId, actor),
+    projectId: projectLabelDTO(source.projectId, actor, true),
   };
 }
 
@@ -147,4 +156,36 @@ export function projectFinancialInput(actor: PermissionSubject, body: unknown, c
   const paymentStatus = input.paymentStatus ?? previous.paymentStatus ?? "Unpaid";
   if (typeof paymentStatus !== "string" || !PAYMENT_STATUSES.includes(paymentStatus)) return { error: "Invalid payment status", status: 400 };
   return { data: { price, cost, profit: price - cost, paymentStatus } };
+}
+
+
+/** Treat search input as bounded literal text, never as a user-supplied regex. */
+export function parseCrmListQuery(params: URLSearchParams) {
+  const search = (params.get("search") ?? "").trim();
+
+  if (search.length > 200) {
+    return { error: "Search must not exceed 200 characters", data: null };
+  }
+
+  const pageText = params.get("page") || "1";
+  const limitText = params.get("limit") || "10";
+
+  if (!/^\d+$/.test(pageText) || !/^\d+$/.test(limitText)) {
+    return { error: "Page and limit must be positive integers", data: null };
+  }
+
+  const page = Number(pageText);
+  const requestedLimit = Number(limitText);
+  const limit = Math.min(requestedLimit, 50);
+  const skip = (page - 1) * limit;
+
+  if (!Number.isSafeInteger(page) || page < 1 ||
+      !Number.isSafeInteger(requestedLimit) || requestedLimit < 1 ||
+      !Number.isSafeInteger(skip) || skip > 1_000_000) {
+    return { error: "Page or limit is outside the supported range", data: null };
+  }
+
+  const pattern = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  return { error: null, data: { page, limit, skip, search, pattern } };
 }

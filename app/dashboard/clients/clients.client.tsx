@@ -2,7 +2,8 @@
 
 import { usePermission } from "@/components/access/PermissionProvider";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createListRequestGuard, LIST_SEARCH_DELAY_MS } from "@/lib/listSearch";
 import type React from "react";
 import {
   Alert,
@@ -432,47 +433,49 @@ export default function ClientsPage() {
     );
   }, [clients]);
 
-const fetchClients = useCallback(async (pageNumber: number, search: string) => {
-  setLoading(true);
-  setError("");
-
-  const queryParams = new URLSearchParams({
-    page: String(pageNumber),
-    limit: String(CLIENTS_PER_PAGE),
-  });
-
-  const cleanSearch = search.trim();
-
-  if (cleanSearch) {
-    queryParams.set("search", cleanSearch);
-  }
-
-  try {
-    const response = await apiFetch<ClientsResponse>(
-      `/api/clients?${queryParams.toString()}`
-    );
-
-    const pagination = getPaginationFromResponse(response);
-
-    setClients(getClientsFromResponse(response));
-    setTotalClients(pagination.total);
-    setTotalPages(Math.max(pagination.totalPages, 1));
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Failed to load clients";
-    setError(message);
-  } finally {
-    setLoading(false);
-  }
-}, []);
-
-useEffect(() => {
-  const timeoutId = window.setTimeout(() => {
-    void fetchClients(page, searchQuery);
-  }, 350);
-
-  return () => window.clearTimeout(timeoutId);
-}, [fetchClients, page, searchQuery]);
+  const listRequests = useRef(createListRequestGuard());
+  const fetchClients = useCallback(async (pageNumber: number, search: string) => {
+      const request = listRequests.current.start();
+      setLoading(true);
+      setError("");
+      const queryParams = new URLSearchParams({
+          page: String(pageNumber),
+          limit: String(CLIENTS_PER_PAGE),
+      });
+      const cleanSearch = search.trim();
+      if (cleanSearch) {
+          queryParams.set("search", cleanSearch);
+      }
+      try {
+          const response = await apiFetch<ClientsResponse>(`/api/clients?${queryParams.toString()}`, { signal: request.signal });
+          if (!request.isCurrent())
+              return;
+          const pagination = getPaginationFromResponse(response);
+          setClients(getClientsFromResponse(response));
+          setTotalClients(pagination.total);
+          setTotalPages(Math.max(pagination.totalPages, 1));
+      }
+      catch (err) {
+          if (!request.isCurrent())
+              return;
+          const message = err instanceof Error ? err.message : "Failed to load clients";
+          setError(message);
+      }
+      finally {
+          if (request.isCurrent())
+              setLoading(false);
+      }
+  }, []);
+  useEffect(() => {
+      const requests = listRequests.current;
+      const timeoutId = window.setTimeout(() => {
+          void fetchClients(page, searchQuery);
+      }, LIST_SEARCH_DELAY_MS);
+      return () => {
+          window.clearTimeout(timeoutId);
+          requests.cancel();
+      };
+  }, [fetchClients, page, searchQuery]);
 
   function handleCreateOpen() {
     setEditingClient(null);

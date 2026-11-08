@@ -136,7 +136,8 @@ test("revenue and expense relationships cannot smuggle client contacts or projec
   assert.deepEqual(revenue.projectId, { _id: project._id, name: project.name });
   assert.equal("email" in revenue.clientId, false); assert.equal("hidden" in revenue, false);
   const expense = plain(data.expenseDTO({ _id: "x", amount: 20, projectId: project }, actor));
-  assert.deepEqual(expense.projectId, revenue.projectId);
+  assert.deepEqual(expense.projectId, { ...revenue.projectId, clientId: { _id: project.clientId._id, companyName: project.clientId.companyName } });
+  assert.equal("email" in expense.projectId.clientId, false);
 });
 
 test("all serializers use positive field allowlists rather than forwarding document internals", () => {

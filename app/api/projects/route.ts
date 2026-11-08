@@ -1,7 +1,7 @@
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { hasPermission } from "@/lib/permissions";
-import { projectFinancialInput, canReadProjectFinancials, projectDTO } from "@/lib/crmData";
+import { projectFinancialInput, canReadProjectFinancials, projectDTO, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
@@ -230,15 +230,10 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+    const query = parseCrmListQuery(searchParams);
+    if (!query.data) return errorResponse(query.error, 400);
 
-    const limit = Math.min(
-      Math.max(Number(searchParams.get("limit")) || 10, 1),
-      50
-    );
-
-    const search = searchParams.get("search")?.trim() || "";
-    const skip = (page - 1) * limit;
+    const { page, limit, skip, search, pattern } = query.data;
 
     const filter: Record<string, unknown> = {
       isDeleted: { $ne: true },
@@ -248,10 +243,10 @@ export async function GET(req: NextRequest) {
       const matchingClients = await Client.find({
         isDeleted: { $ne: true },
         $or: [
-          { companyName: { $regex: search, $options: "i" } },
+          { companyName: { $regex: pattern, $options: "i" } },
           ...(hasPermission(authorization.user!, "clients.read") ? [
-            { contactPerson: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
+            { contactPerson: { $regex: pattern, $options: "i" } },
+            { email: { $regex: pattern, $options: "i" } },
           ] : []),
         ],
       }).select("_id");
@@ -259,8 +254,8 @@ export async function GET(req: NextRequest) {
       const matchingDeals = hasPermission(authorization.user!, "deals.read") ? await Deal.find({
         isDeleted: { $ne: true },
         $or: [
-          { title: { $regex: search, $options: "i" } },
-          { status: { $regex: search, $options: "i" } },
+          { title: { $regex: pattern, $options: "i" } },
+          { status: { $regex: pattern, $options: "i" } },
         ],
       }).select("_id") : [];
 
@@ -268,12 +263,12 @@ export async function GET(req: NextRequest) {
       const matchingDealIds = matchingDeals.map((deal) => deal._id);
 
       const searchConditions: Record<string, unknown>[] = [
-        { name: { $regex: search, $options: "i" } },
-        { type: { $regex: search, $options: "i" } },
-        { status: { $regex: search, $options: "i" } },
-        ...(canReadProjectFinancials(authorization.user!) ? [{ paymentStatus: { $regex: search, $options: "i" } }] : []),
-        { description: { $regex: search, $options: "i" } },
-        { notes: { $regex: search, $options: "i" } },
+        { name: { $regex: pattern, $options: "i" } },
+        { type: { $regex: pattern, $options: "i" } },
+        { status: { $regex: pattern, $options: "i" } },
+        ...(canReadProjectFinancials(authorization.user!) ? [{ paymentStatus: { $regex: pattern, $options: "i" } }] : []),
+        { description: { $regex: pattern, $options: "i" } },
+        { notes: { $regex: pattern, $options: "i" } },
       ];
 
       const amount = Number(search);
