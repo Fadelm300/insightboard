@@ -555,6 +555,7 @@ export default function DealsPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectLinksReady, setProjectLinksReady] = useState(false);
 
   const [formData, setFormData] = useState<DealFormData>(emptyForm);
   const [formErrors, setFormErrors] = useState<DealFormErrors>({});
@@ -603,8 +604,12 @@ export default function DealsPage() {
   }, [projects]);
 
   const listRequests = useRef(createListRequestGuard());
+  const appliedSearch = useRef("");
+  const pendingMenuAction = useRef<(() => void) | null>(null);
   const fetchData = useCallback(async (pageNumber: number, search: string) => {
       const request = listRequests.current.start();
+      appliedSearch.current = search.trim();
+      setActionAnchorEl(null);
       setLoading(true);
       setError("");
       const queryParams = new URLSearchParams({
@@ -616,19 +621,13 @@ export default function DealsPage() {
           queryParams.set("search", cleanSearch);
       }
       try {
-          const [dealsResponse, clientsResponse, projectsResponse] = await Promise.all([
-              apiFetch<DealsResponse>(`/api/deals?${queryParams.toString()}`, { signal: request.signal }),
-              apiFetch<ClientsResponse>("/api/lookups/clients", { signal: request.signal }),
-              apiFetch<ProjectsResponse>("/api/lookups/projects", { signal: request.signal }),
-          ]);
+          const dealsResponse = await apiFetch<DealsResponse>(`/api/deals?${queryParams.toString()}`, { signal: request.signal });
           if (!request.isCurrent())
               return;
           const pagination = getDealsPaginationFromResponse(dealsResponse);
           setDeals(getDealsFromResponse(dealsResponse));
           setTotalDeals(pagination.total);
           setTotalPages(Math.max(pagination.totalPages, 1));
-          setClients(getClientsFromResponse(clientsResponse));
-          setProjects(getProjectsFromResponse(projectsResponse));
       }
       catch (err) {
           if (!request.isCurrent())
@@ -642,10 +641,35 @@ export default function DealsPage() {
       }
   }, []);
   useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadLookups() {
+      try {
+        const [clientsResponse, projectsResponse] = await Promise.all([
+          apiFetch<ClientsResponse>("/api/lookups/clients", { signal: controller.signal }),
+          apiFetch<ProjectsResponse>("/api/lookups/projects", { signal: controller.signal }),
+        ]);
+
+        if (controller.signal.aborted) return;
+        setClients(getClientsFromResponse(clientsResponse));
+        setProjects(getProjectsFromResponse(projectsResponse));
+        setProjectLinksReady(true);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setError(error instanceof Error ? error.message : "Failed to load form options");
+      }
+    }
+
+    void loadLookups();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
       const requests = listRequests.current;
       const timeoutId = window.setTimeout(() => {
           void fetchData(page, searchQuery);
-      }, LIST_SEARCH_DELAY_MS);
+      }, searchQuery.trim() && searchQuery.trim() !== appliedSearch.current
+          ? LIST_SEARCH_DELAY_MS : 0);
       return () => {
           window.clearTimeout(timeoutId);
           requests.cancel();
@@ -729,20 +753,26 @@ export default function DealsPage() {
     setActionDeal(null);
   }
 
+  function handleActionMenuExited() {
+    const action = pendingMenuAction.current;
+    pendingMenuAction.current = null;
+    action?.();
+  }
+
   function handleMenuEdit() {
     if (!actionDeal) return;
 
     const selectedDeal = actionDeal;
+    pendingMenuAction.current = () => handleEditOpen(selectedDeal);
     handleActionMenuClose();
-    handleEditOpen(selectedDeal);
   }
 
   function handleMenuDelete() {
     if (!actionDeal) return;
 
     const selectedDeal = actionDeal;
+    pendingMenuAction.current = () => setDeleteDeal(selectedDeal);
     handleActionMenuClose();
-    setDeleteDeal(selectedDeal);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -822,10 +852,14 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
     setSuccess("");
 
     try {
-      await apiFetch(`/api/deals/${deal._id}/convert-to-project`, {
+      const response = await apiFetch<{ data: { project: Project } }>(`/api/deals/${deal._id}/convert-to-project`, {
         method: "POST",
       });
 
+      setProjects((current) => [
+        ...current.filter((project) => project._id !== response.data.project._id),
+        response.data.project,
+      ]);
       setSuccess("Deal converted to project successfully");
       await fetchData(page, searchQuery);
     } catch (err) {
@@ -933,11 +967,11 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
           ) : deals.length === 0 ? (
             <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                No deals yet
+                {searchQuery.trim() ? "No matching results" : "No deals yet"}
               </Typography>
 
               <Typography color="text.secondary" sx={{ mt: 1 }}>
-                Add your first deal to start tracking your sales pipeline.
+                {searchQuery.trim() ? "Try another search or clear the search field." : "Add your first deal to start tracking your sales pipeline."}
               </Typography>
 
               <Button
@@ -954,13 +988,14 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
               sx={{
                 width: "100%",
                 maxWidth: "100%",
-                overflowX: "hidden",
+                overflowX: "auto",
               }}
             >
               <Table
                 sx={{
                   width: "100%",
                   tableLayout: "fixed",
+                    minWidth: 360,
                 }}
               >
                 <TableHead>
@@ -1306,9 +1341,9 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
                                 size="small"
                                 variant="contained"
                                 onClick={() => handleConvertToProject(deal)}
-                                disabled={(saving) || !canConvert}
+                                disabled={saving || !canConvert || !projectLinksReady}
                                 sx={{
-                                  display: { xs: "none", md: "inline-flex" },
+                                  display: "inline-flex",
                                   borderRadius: 2,
                                   fontWeight: 800,
                                   minWidth: { md: 78 },
@@ -1325,7 +1360,7 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
                                 variant="outlined"
                                 disabled
                                 sx={{
-                                  display: { xs: "none", md: "inline-flex" },
+                                  display: "inline-flex",
                                   borderRadius: 2,
                                   fontWeight: 800,
                                   minWidth: { md: 88 },
@@ -1359,7 +1394,7 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
                               }
                               aria-label={`Open actions for ${deal.title}`}
                               sx={{
-                                display: { xs: "none", md: "inline-flex" },
+                                display: "inline-flex",
                                 width: 34,
                                 height: 34,
                                 flexShrink: 0,
@@ -1412,8 +1447,9 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
       </Card>
 
       <Menu
-        anchorEl={actionAnchorEl}
-        open={Boolean(actionAnchorEl)}
+        anchorEl={!loading && actionAnchorEl?.isConnected ? actionAnchorEl : null}
+        open={!loading && Boolean(actionAnchorEl?.isConnected)}
+        slotProps={{ transition: { onExited: handleActionMenuExited } }}
         onClose={handleActionMenuClose}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}

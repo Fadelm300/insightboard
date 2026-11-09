@@ -255,6 +255,7 @@ export default function Landing({
             width={36}
             height={36}
             className="ib-brand-logo"
+            style={{ width: 36, height: 36 }}
           />
           <span>InsightBoard</span>
         </Link>

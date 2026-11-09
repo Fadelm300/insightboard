@@ -434,8 +434,12 @@ export default function ClientsPage() {
   }, [clients]);
 
   const listRequests = useRef(createListRequestGuard());
+  const appliedSearch = useRef("");
+  const pendingMenuAction = useRef<(() => void) | null>(null);
   const fetchClients = useCallback(async (pageNumber: number, search: string) => {
       const request = listRequests.current.start();
+      appliedSearch.current = search.trim();
+      setActionAnchorEl(null);
       setLoading(true);
       setError("");
       const queryParams = new URLSearchParams({
@@ -470,7 +474,8 @@ export default function ClientsPage() {
       const requests = listRequests.current;
       const timeoutId = window.setTimeout(() => {
           void fetchClients(page, searchQuery);
-      }, LIST_SEARCH_DELAY_MS);
+      }, searchQuery.trim() && searchQuery.trim() !== appliedSearch.current
+          ? LIST_SEARCH_DELAY_MS : 0);
       return () => {
           window.clearTimeout(timeoutId);
           requests.cancel();
@@ -543,20 +548,26 @@ export default function ClientsPage() {
     setActionClient(null);
   }
 
+  function handleActionMenuExited() {
+    const action = pendingMenuAction.current;
+    pendingMenuAction.current = null;
+    action?.();
+  }
+
   function handleMenuEdit() {
     if (!actionClient) return;
 
     const selectedClient = actionClient;
+    pendingMenuAction.current = () => handleEditOpen(selectedClient);
     handleActionMenuClose();
-    handleEditOpen(selectedClient);
   }
 
   function handleMenuDelete() {
     if (!actionClient) return;
 
     const selectedClient = actionClient;
+    pendingMenuAction.current = () => setDeleteClient(selectedClient);
     handleActionMenuClose();
-    setDeleteClient(selectedClient);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -729,11 +740,11 @@ export default function ClientsPage() {
           ) : clients.length === 0 ? (
             <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                No clients yet
+                {searchQuery.trim() ? "No matching results" : "No clients yet"}
               </Typography>
 
               <Typography color="text.secondary" sx={{ mt: 1 }}>
-                Add your first client to start building the CRM.
+                {searchQuery.trim() ? "Try another search or clear the search field." : "Add your first client to start building the CRM."}
               </Typography>
 
               <Button
@@ -750,13 +761,14 @@ export default function ClientsPage() {
                 sx={{
                   width: "100%",
                   maxWidth: "100%",
-                  overflowX: "hidden",
+                  overflowX: "auto",
                 }}
               >
                 <Table
                   sx={{
                     width: "100%",
                     tableLayout: "fixed",
+                    minWidth: 360,
                   }}
                 >
                   <TableHead>
@@ -1067,7 +1079,7 @@ export default function ClientsPage() {
                               }
                               aria-label={`Open actions for ${client.companyName}`}
                               sx={{
-                                display: { xs: "none", md: "inline-flex" },
+                                display: "inline-flex",
                                 width: 34,
                                 height: 34,
                                 borderRadius: 2,
@@ -1118,8 +1130,9 @@ export default function ClientsPage() {
       </Card>
 
       <Menu
-        anchorEl={actionAnchorEl}
-        open={Boolean(actionAnchorEl)}
+        anchorEl={!loading && actionAnchorEl?.isConnected ? actionAnchorEl : null}
+        open={!loading && Boolean(actionAnchorEl?.isConnected)}
+        slotProps={{ transition: { onExited: handleActionMenuExited } }}
         onClose={handleActionMenuClose}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}

@@ -168,7 +168,7 @@ test("denied document navigation opens the access page while API clients keep JS
   assert.equal(apiExpired.response.status, 401);
 });
 
-test("protected pages redirect denied accounts outside the dashboard shell", async () => {
+test("protected pages deny on the server before the isolated access navigation", async () => {
   let user = employee;
   const authorization = load("lib/authorization.ts", {
     "next/server": {},
@@ -178,7 +178,9 @@ test("protected pages redirect denied accounts outside the dashboard shell", asy
     "@/lib/apiResponse": { errorResponse: (message, status) => ({ message, status }) },
     "@/lib/sessionPolicy": { isTrustedMutation: () => true },
   });
-  await assert.rejects(authorization.authorizePage("financialArchive.read"), /REDIRECT \/access-denied/);
+  const deniedPage = await authorization.authorizePage("financialArchive.read");
+  assert.equal(deniedPage.allowed, false);
+  assert.equal(deniedPage.home, "/dashboard/projects");
   const permitted = await authorization.authorizePage("projects.read");
   assert.equal(permitted.allowed, true);
   assert.equal(permitted.home, "/dashboard/projects");

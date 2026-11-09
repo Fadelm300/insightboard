@@ -636,8 +636,12 @@ export default function ProjectsPage() {
   }, [deals, formData.clientId, formData.dealId]);
 
   const listRequests = useRef(createListRequestGuard());
+  const appliedSearch = useRef("");
+  const pendingMenuAction = useRef<(() => void) | null>(null);
   const fetchData = useCallback(async (pageNumber: number, search: string) => {
       const request = listRequests.current.start();
+      appliedSearch.current = search.trim();
+      setActionAnchorEl(null);
       setLoading(true);
       setError("");
       const queryParams = new URLSearchParams({
@@ -649,17 +653,11 @@ export default function ProjectsPage() {
           queryParams.set("search", cleanSearch);
       }
       try {
-          const [projectsResponse, clientsResponse, dealsResponse] = await Promise.all([
-              apiFetch<ProjectsResponse>(`/api/projects?${queryParams.toString()}`, { signal: request.signal }),
-              apiFetch<ClientsResponse>("/api/lookups/clients", { signal: request.signal }),
-              apiFetch<DealsResponse>("/api/lookups/deals", { signal: request.signal }),
-          ]);
+          const projectsResponse = await apiFetch<ProjectsResponse>(`/api/projects?${queryParams.toString()}`, { signal: request.signal });
           if (!request.isCurrent())
               return;
           const pagination = getPaginationFromResponse(projectsResponse);
           setProjects(getProjectsFromResponse(projectsResponse));
-          setClients(getClientsFromResponse(clientsResponse));
-          setDeals(getDealsFromResponse(dealsResponse));
           setTotalProjects(pagination.total);
           setTotalPages(Math.max(pagination.totalPages, 1));
       }
@@ -675,10 +673,34 @@ export default function ProjectsPage() {
       }
   }, []);
   useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadLookups() {
+      try {
+        const [clientsResponse, dealsResponse] = await Promise.all([
+          apiFetch<ClientsResponse>("/api/lookups/clients", { signal: controller.signal }),
+          apiFetch<DealsResponse>("/api/lookups/deals", { signal: controller.signal }),
+        ]);
+
+        if (controller.signal.aborted) return;
+        setClients(getClientsFromResponse(clientsResponse));
+        setDeals(getDealsFromResponse(dealsResponse));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setError(error instanceof Error ? error.message : "Failed to load form options");
+      }
+    }
+
+    void loadLookups();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
       const requests = listRequests.current;
       const timeoutId = window.setTimeout(() => {
           void fetchData(page, searchQuery);
-      }, LIST_SEARCH_DELAY_MS);
+      }, searchQuery.trim() && searchQuery.trim() !== appliedSearch.current
+          ? LIST_SEARCH_DELAY_MS : 0);
       return () => {
           window.clearTimeout(timeoutId);
           requests.cancel();
@@ -800,20 +822,26 @@ export default function ProjectsPage() {
     setActionProject(null);
   }
 
+  function handleActionMenuExited() {
+    const action = pendingMenuAction.current;
+    pendingMenuAction.current = null;
+    action?.();
+  }
+
   function handleMenuEdit() {
     if (!actionProject) return;
 
     const selectedProject = actionProject;
+    pendingMenuAction.current = () => handleEditOpen(selectedProject);
     handleActionMenuClose();
-    handleEditOpen(selectedProject);
   }
 
   function handleMenuDelete() {
     if (!actionProject) return;
 
     const selectedProject = actionProject;
+    pendingMenuAction.current = () => setDeleteProject(selectedProject);
     handleActionMenuClose();
-    setDeleteProject(selectedProject);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1004,11 +1032,11 @@ if (!validation.isValid) {
           ) : projects.length === 0 ? (
             <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                No projects yet
+                {searchQuery.trim() ? "No matching results" : "No projects yet"}
               </Typography>
 
               <Typography color="text.secondary" sx={{ mt: 1 }}>
-                Convert a closed deal or add a project manually.
+                {searchQuery.trim() ? "Try another search or clear the search field." : "Convert a closed deal or add a project manually."}
               </Typography>
 
               <Button
@@ -1025,13 +1053,14 @@ if (!validation.isValid) {
               sx={{
                 width: "100%",
                 maxWidth: "100%",
-                overflowX: "hidden",
+                overflowX: "auto",
               }}
             >
               <Table
                 sx={{
                   width: "100%",
                   tableLayout: "fixed",
+                    minWidth: 360,
                 }}
               >
                 <TableHead>
@@ -1422,7 +1451,7 @@ if (!validation.isValid) {
                             }
                             aria-label={`Open actions for ${project.name}`}
                             sx={{
-                              display: { xs: "none", md: "inline-flex" },
+                              display: "inline-flex",
                               width: 34,
                               height: 34,
                               flexShrink: 0,
@@ -1474,8 +1503,9 @@ if (!validation.isValid) {
       </Card>
 
       <Menu
-        anchorEl={actionAnchorEl}
-        open={Boolean(actionAnchorEl)}
+        anchorEl={!loading && actionAnchorEl?.isConnected ? actionAnchorEl : null}
+        open={!loading && Boolean(actionAnchorEl?.isConnected)}
+        slotProps={{ transition: { onExited: handleActionMenuExited } }}
         onClose={handleActionMenuClose}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}

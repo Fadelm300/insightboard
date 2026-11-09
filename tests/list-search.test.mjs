@@ -24,12 +24,13 @@ for (const resource of ['clients', 'deals', 'projects', 'revenue', 'expenses']) 
     const updates = [];
     const timers = new Map();
     let effect;
+    const effects = [];
     let time = 0;
     let nextId = 0;
     const context = {
-      ...exports, URLSearchParams,
+      ...exports, URLSearchParams, AbortController,
       useRef: (value) => ({ current: value }), useCallback: (fn) => fn,
-      useEffect: (fn) => { effect = fn; }, page: 1, searchQuery: '',
+      useEffect: (fn) => { effect = fn; effects.push(fn); }, page: 1, searchQuery: '',
       window: {
         setTimeout(fn, delay) { const id = ++nextId; timers.set(id, { fn, at: time + delay }); return id; },
         clearTimeout(id) { timers.delete(id); },
@@ -51,7 +52,9 @@ for (const resource of ['clients', 'deals', 'projects', 'revenue', 'expenses']) 
     vm.runInContext(compile(code + `\nglobalThis.fetchList = ${fetchName};`), context);
     return {
       requests, updates, fetch: context.fetchList,
-      render(search) {
+      mountOptions: () => effects[0](),
+      render(search, page = 1) {
+        context.page = page;
         context.searchQuery = search;
         return effect();
       },
@@ -63,6 +66,58 @@ for (const resource of ['clients', 'deals', 'projects', 'revenue', 'expenses']) 
       },
     };
   }
+
+  if (resource !== 'clients') {
+    test(`${resource}: list results do not wait for form options or refetch them during search`, async () => {
+      const h = harness();
+      const cleanupOptions = h.mountOptions();
+      const options = [...h.requests];
+      assert.ok(options.length > 0);
+      assert.ok(options.every((request) => request.url.startsWith('/api/lookups/')));
+      const pending = h.fetch(1, 'world');
+      const list = h.requests.at(-1);
+      assert.match(list.url, new RegExp(`/api/${resource}\\?`));
+      list.resolve('ready');
+      await pending;
+      assert.ok(h.updates.some(([key, value]) => key === 'setLoading' && value === false));
+      const second = h.fetch(2, 'world');
+      h.requests.at(-1).resolve('next');
+      await second;
+      assert.equal(h.requests.filter((request) => request.url.startsWith('/api/lookups/')).length, options.length);
+      cleanupOptions();
+      options.forEach((request) => request.resolve('stale-options'));
+      await Promise.resolve();
+      await Promise.resolve();
+      assert.ok(options.every((request) => request.options.signal.aborted));
+      assert.equal(h.updates.some(([key]) => ['setClients', 'setDeals', 'setProjects'].includes(key) && key !== `set${resource[0].toUpperCase()}${resource.slice(1)}`), false);
+    });
+  }
+
+  test(`${resource}: initial loads, pagination and clearing do not wait for the search delay`, () => {
+    const h = harness();
+    let cleanup = h.render("");
+    h.advance(0);
+    assert.equal(h.requests.filter((r) => r.url.startsWith(`/api/${resource}?`)).length, 1);
+    cleanup();
+    cleanup = h.render("", 2);
+    h.advance(0);
+    assert.equal(h.requests.filter((r) => r.url.startsWith(`/api/${resource}?`)).length, 2);
+    cleanup();
+    cleanup = h.render("world");
+    h.advance(799);
+    assert.equal(h.requests.filter((r) => r.url.startsWith(`/api/${resource}?`)).length, 2);
+    h.advance(1);
+    assert.equal(h.requests.filter((r) => r.url.startsWith(`/api/${resource}?`)).length, 3);
+    cleanup();
+    cleanup = h.render("world", 2);
+    h.advance(0);
+    assert.equal(h.requests.filter((r) => r.url.startsWith(`/api/${resource}?`)).length, 4);
+    cleanup();
+    cleanup = h.render("");
+    h.advance(0);
+    assert.equal(h.requests.filter((r) => r.url.startsWith(`/api/${resource}?`)).length, 5);
+    cleanup();
+  });
 
   test(`${resource}: fast typing waits 800ms after the final letter and cancels on leave`, () => {
     const h = harness();

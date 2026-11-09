@@ -91,6 +91,7 @@ function sessionHarness() {
   };
   const auth = load("lib/auth.ts", {
     "node:crypto": crypto,
+    react: { cache: (fn) => fn },
     "next/headers": { cookies: async () => ({ get: () => undefined }) },
     "@/lib/mongodb": { __esModule: true, default: async () => { connections += 1; } },
     "@/lib/permissions": permissions,
@@ -213,6 +214,7 @@ test("login throttling is persisted, hashed, and shared across instances", async
   const records = new Map();
   const limiter = load("lib/loginRateLimit.ts", {
     "node:crypto": crypto,
+    react: { cache: (fn) => fn },
     "@/models/LoginAttempt": { __esModule: true, default: {
       findOneAndUpdate: ({ _id }, update, options) => ({ lean: async () => {
         assert.equal(options.returnDocument, "after");

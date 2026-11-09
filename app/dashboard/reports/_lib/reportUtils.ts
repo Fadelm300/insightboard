@@ -158,3 +158,22 @@ export function getMonthKey(date?: string) {
   const inputDate = formatDateToInputValue(date);
   return inputDate ? inputDate.slice(0, 7) : "";
 }
+/** Excel money stays numeric; pending pricing remains explicit text. */
+export function excelMoney(value?: number | null): number | string {
+  return value === null ? "Pending pricing" : Number(Number(value || 0).toFixed(2));
+}
+
+export function formatSheetNumbers(sheet: WorkSheet) {
+  for (const [address, cell] of Object.entries(sheet)) {
+    if (!address.startsWith("!") && cell && typeof cell === "object" && "t" in cell && cell.t === "n") {
+      const column = address.replace(/\d+$/, "");
+      const row = address.replace(/^[A-Z]+/, "");
+      const header = sheet[`${column}1`]?.v;
+      const label = sheet[`A${row}`]?.v;
+      const summaryMoney = column === "B" && [
+        "Total Revenue", "Total Expenses", "Net Profit", "Average Project Value",
+      ].includes(String(label));
+      if (String(header).includes("BHD") || summaryMoney) cell.z = "#,##0.00";
+    }
+  }
+}

@@ -515,8 +515,12 @@ export default function RevenuePage() {
   }, [revenue]);
 
   const listRequests = useRef(createListRequestGuard());
+  const appliedSearch = useRef("");
+  const pendingMenuAction = useRef<(() => void) | null>(null);
   const fetchData = useCallback(async (pageNumber: number, search: string) => {
       const request = listRequests.current.start();
+      appliedSearch.current = search.trim();
+      setActionAnchorEl(null);
       setLoading(true);
       setError("");
       const queryParams = new URLSearchParams({
@@ -528,15 +532,11 @@ export default function RevenuePage() {
           queryParams.set("search", cleanSearch);
       }
       try {
-          const [revenueResponse, projectsResponse] = await Promise.all([
-              apiFetch<RevenueResponse>(`/api/revenue?${queryParams.toString()}`, { signal: request.signal }),
-              apiFetch<ProjectsResponse>("/api/lookups/projects", { signal: request.signal }),
-          ]);
+          const revenueResponse = await apiFetch<RevenueResponse>(`/api/revenue?${queryParams.toString()}`, { signal: request.signal });
           if (!request.isCurrent())
               return;
           const pagination = getPaginationFromResponse(revenueResponse);
           setRevenue(getRevenueFromResponse(revenueResponse));
-          setProjects(getProjectsFromResponse(projectsResponse));
           setTotalRevenue(pagination.total);
           setTotalPages(Math.max(pagination.totalPages, 1));
       }
@@ -552,10 +552,32 @@ export default function RevenuePage() {
       }
   }, []);
   useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadLookups() {
+      try {
+        const [projectsResponse] = await Promise.all([
+          apiFetch<ProjectsResponse>("/api/lookups/projects", { signal: controller.signal }),
+        ]);
+
+        if (controller.signal.aborted) return;
+        setProjects(getProjectsFromResponse(projectsResponse));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setError(error instanceof Error ? error.message : "Failed to load form options");
+      }
+    }
+
+    void loadLookups();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
       const requests = listRequests.current;
       const timeoutId = window.setTimeout(() => {
           void fetchData(page, searchQuery);
-      }, LIST_SEARCH_DELAY_MS);
+      }, searchQuery.trim() && searchQuery.trim() !== appliedSearch.current
+          ? LIST_SEARCH_DELAY_MS : 0);
       return () => {
           window.clearTimeout(timeoutId);
           requests.cancel();
@@ -633,20 +655,26 @@ export default function RevenuePage() {
     setActionRevenue(null);
   }
 
+  function handleActionMenuExited() {
+    const action = pendingMenuAction.current;
+    pendingMenuAction.current = null;
+    action?.();
+  }
+
   function handleMenuEdit() {
     if (!actionRevenue) return;
 
     const selectedRevenue = actionRevenue;
+    pendingMenuAction.current = () => handleEditOpen(selectedRevenue);
     handleActionMenuClose();
-    handleEditOpen(selectedRevenue);
   }
 
   function handleMenuDelete() {
     if (!actionRevenue) return;
 
     const selectedRevenue = actionRevenue;
+    pendingMenuAction.current = () => setDeleteRevenue(selectedRevenue);
     handleActionMenuClose();
-    setDeleteRevenue(selectedRevenue);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -833,11 +861,11 @@ export default function RevenuePage() {
           ) : revenue.length === 0 ? (
             <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                No revenue yet
+                {searchQuery.trim() ? "No matching results" : "No revenue yet"}
               </Typography>
 
               <Typography color="text.secondary" sx={{ mt: 1 }}>
-                Add your first payment record to start tracking income.
+                {searchQuery.trim() ? "Try another search or clear the search field." : "Add your first payment record to start tracking income."}
               </Typography>
 
               <Button
@@ -854,14 +882,15 @@ export default function RevenuePage() {
               sx={{
                 width: "100%",
                 maxWidth: "100%",
-                overflowX: "hidden",
+                overflowX: "auto",
               }}
             >
               <Table
                 sx={{
                   width: "100%",
                   tableLayout: "fixed",
-                  minWidth: { xs: "100%", md: "100%" },
+                    minWidth: 360,
+
                 }}
               >
                 <TableHead>
@@ -1160,7 +1189,7 @@ export default function RevenuePage() {
                               }
                               aria-label={`Open actions for ${projectName}`}
                               sx={{
-                                display: { xs: "none", md: "inline-flex" },
+                                display: "inline-flex",
                                 width: 34,
                                 height: 34,
                                 flexShrink: 0,
@@ -1213,8 +1242,9 @@ export default function RevenuePage() {
       </Card>
 
       <Menu
-        anchorEl={actionAnchorEl}
-        open={Boolean(actionAnchorEl)}
+        anchorEl={!loading && actionAnchorEl?.isConnected ? actionAnchorEl : null}
+        open={!loading && Boolean(actionAnchorEl?.isConnected)}
+        slotProps={{ transition: { onExited: handleActionMenuExited } }}
         onClose={handleActionMenuClose}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}

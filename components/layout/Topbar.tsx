@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -63,6 +63,7 @@ export default function Topbar() {
   const permissions = usePermissions();
   const visibleMenuItems = menuItems.filter((item) => permissions.includes(PAGE_PERMISSIONS[item.path as keyof typeof PAGE_PERMISSIONS]));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigationTrigger = useRef<HTMLButtonElement>(null);
 
   async function handleLogout() {
     try {
@@ -73,6 +74,8 @@ export default function Topbar() {
   }
 
   function handleMobileDrawerClose() {
+    // Release a drawer item before its subtree becomes aria-hidden.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     setMobileOpen(false);
   }
 
@@ -116,13 +119,17 @@ export default function Topbar() {
             }}
           >
             <IconButton
-              onClick={() => setMobileOpen(true)}
+              onClick={(event) => {
+                event.currentTarget.blur();
+                setMobileOpen(true);
+              }}
               sx={{
                 display: { xs: "inline-flex", xl: "none" },
                 border: "1px solid",
                 borderColor: "divider",
                 borderRadius: 2,
               }}
+              ref={navigationTrigger}
               aria-label="Open navigation menu"
             >
               <MenuIcon />
@@ -174,6 +181,7 @@ export default function Topbar() {
       </AppBar>
 
       <Drawer
+        slotProps={{ transition: { onExited: () => navigationTrigger.current?.focus() } }}
         variant="temporary"
         open={mobileOpen}
         onClose={handleMobileDrawerClose}

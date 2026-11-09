@@ -35,6 +35,5 @@ export async function authorizePage(permission: Permission) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const allowed = hasPermission(user, permission);
-  if (!allowed) redirect("/access-denied");
   return { user, allowed, home: firstAllowedPage(user) };
 }

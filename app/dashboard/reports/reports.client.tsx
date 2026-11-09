@@ -26,6 +26,7 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import * as XLSX from "xlsx";
 
 import { apiFetch } from "@/lib/apiClient";
+import { paymentProgressPercent } from "@/lib/paymentProgress";
 
 import EmptyTableRow from "./_components/EmptyTableRow";
 import FilteredPrintPanel from "./_components/FilteredPrintPanel";
@@ -57,7 +58,8 @@ import {
   extractObject,
   formatDateToInputValue,
   formatMoney,
-  formatNumber,
+  excelMoney,
+  formatSheetNumbers,
   formatPercent,
   getEntityId,
   getMonthKey,
@@ -494,8 +496,7 @@ const matchesDateFilters = useCallback(
       }, 0);
 
       const price = Number(project.price || 0);
-      const paymentProgress = project.price === null ? null :
-        price > 0 ? Number(((totalRevenue / price) * 100).toFixed(1)) : 0;
+      const paymentProgress = paymentProgressPercent(totalRevenue, project.price);
 
       result.push({
         project,
@@ -969,15 +970,15 @@ useEffect(() => {
   function getSummaryRows() {
     return [
       ["Metric", "Value"],
-      ["Total Revenue", formatNumber(summary.totalRevenue)],
-      ["Total Expenses", formatNumber(summary.totalExpenses)],
-      ["Net Profit", formatNumber(summary.netProfit)],
+      ["Total Revenue", excelMoney(summary.totalRevenue)],
+      ["Total Expenses", excelMoney(summary.totalExpenses)],
+      ["Net Profit", excelMoney(summary.netProfit)],
       ["Profit Margin", formatPercent(profitMargin)],
       ["Total Deals", salesStats.totalDeals],
       ["Closed Won", salesStats.closedWon],
       ["Closed Lost", salesStats.closedLost],
       ["Conversion Rate", formatPercent(salesStats.conversionRate)],
-      ["Average Project Value", formatNumber(averageProjectValue)],
+      ["Average Project Value", excelMoney(averageProjectValue)],
       ["Best Client", bestClient?.client?.companyName || "-"],
       ["Best Project Type", bestProjectType?.type || "-"],
     ];
@@ -986,9 +987,9 @@ useEffect(() => {
   function getMonthlyRows() {
     return monthly.map((item) => [
       item.month,
-      formatNumber(item.revenue),
-      formatNumber(item.expenses),
-      formatNumber(item.profit),
+      excelMoney(item.revenue),
+      excelMoney(item.expenses),
+      excelMoney(item.profit),
     ]);
   }
 
@@ -996,11 +997,11 @@ useEffect(() => {
     return projectsFinance.map((item) => [
       item.project?.name || "-",
       item.project?.type || "-",
-      formatNumber(item.project?.price),
-      formatNumber(item.totalRevenue),
-      formatNumber(item.totalExpenses),
-      formatNumber(item.netProfit),
-      formatNumber(item.remainingBalance),
+      excelMoney(item.project?.price),
+      excelMoney(item.totalRevenue),
+      excelMoney(item.totalExpenses),
+      excelMoney(item.netProfit),
+      excelMoney(item.remainingBalance),
       formatPercent(item.paymentProgress),
     ]);
   }
@@ -1009,9 +1010,9 @@ useEffect(() => {
     return clientsFinance.map((item) => [
       item.client?.companyName || "-",
       item.totalProjects,
-      formatNumber(item.totalRevenue),
-      formatNumber(item.totalExpenses),
-      formatNumber(item.netProfit),
+      excelMoney(item.totalRevenue),
+      excelMoney(item.totalExpenses),
+      excelMoney(item.netProfit),
     ]);
   }
 
@@ -1019,10 +1020,10 @@ useEffect(() => {
     return projectTypesFinance.map((item) => [
       item.type,
       item.projectCount,
-      formatNumber(item.totalProjectValue),
-      formatNumber(item.totalRevenue),
-      formatNumber(item.totalExpenses),
-      formatNumber(item.netProfit),
+      excelMoney(item.totalProjectValue),
+      excelMoney(item.totalRevenue),
+      excelMoney(item.totalExpenses),
+      excelMoney(item.netProfit),
     ]);
   }
 
@@ -1083,6 +1084,10 @@ useEffect(() => {
       ...getProjectTypeRows(),
     ]);
     setSheetColumnWidths(projectTypesSheet, [24, 14, 20, 18, 18, 18]);
+
+    for (const sheet of [summarySheet, monthlySheet, projectsSheet, clientsSheet, projectTypesSheet]) {
+      formatSheetNumbers(sheet);
+    }
 
     XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
     XLSX.utils.book_append_sheet(workbook, monthlySheet, "Monthly");

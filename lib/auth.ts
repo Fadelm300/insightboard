@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { NextRequest, NextResponse } from "next/server";
 
 import connectDB from "@/lib/mongodb";
@@ -76,10 +77,10 @@ export async function getAuthUser(req: NextRequest) {
   return (await lookupSession(req.cookies.get(sessionCookieName())?.value))?.user ?? null;
 }
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async () => {
   const store = await cookies();
   return (await lookupSession(store.get(sessionCookieName())?.value))?.user ?? null;
-}
+});
 
 export async function getRequestSession(req: NextRequest) {
   return lookupSession(req.cookies.get(sessionCookieName())?.value);
