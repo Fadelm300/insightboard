@@ -9,6 +9,7 @@ export const PERMISSIONS = [
   "expenses.read", "expenses.create", "expenses.update", "expenses.delete",
   "financialArchive.read", "financialArchive.restore", "crmArchive.read", "crmArchive.restore", "crmArchive.purge",
   "finance.read", "reports.read", "reports.print", "reports.export",
+  "archiveRequests.read", "archiveRequests.create", "archiveRequests.review",
   "settings.read", "users.read", "users.manage", "system.diagnose",
 ] as const;
 
@@ -26,7 +27,11 @@ export type PermissionSubject = {
 };
 
 const BUSINESS_PERMISSIONS = PERMISSIONS.filter(
-  (permission) => !permission.startsWith("users.") && !permission.startsWith("financialArchive.") && !permission.startsWith("crmArchive.") && permission !== "system.diagnose",
+  (permission) => !permission.startsWith("archiveRequests.")
+    && !permission.startsWith("users.")
+    && !permission.startsWith("financialArchive.")
+    && !permission.startsWith("crmArchive.")
+    && permission !== "system.diagnose",
 );
 const NON_DELETE_PERMISSIONS = BUSINESS_PERMISSIONS.filter(
   (permission) => !permission.endsWith(".delete"),
@@ -36,6 +41,8 @@ const READ_PERMISSIONS = BUSINESS_PERMISSIONS.filter(
 );
 
 export function permissionDependencies(permission: Permission): readonly Permission[] {
+  if (permission === "archiveRequests.create" || permission === "archiveRequests.review")
+    return ["archiveRequests.read"];
   if (permission === "crmArchive.purge") return ["crmArchive.read"];
   if (permission === "crmArchive.restore") return ["crmArchive.read"];
   if (permission === "financialArchive.restore") return ["financialArchive.read"];
@@ -64,14 +71,21 @@ export function permissionCeiling(role: string): readonly Permission[] {
     case "admin":
       return PERMISSIONS;
     case "manager":
-      return [...BUSINESS_PERMISSIONS, "users.read", "users.manage"];
+      return [
+        ...BUSINESS_PERMISSIONS,
+        "archiveRequests.read",
+        "archiveRequests.create",
+        "archiveRequests.review",
+        "users.read",
+        "users.manage"
+      ];
     case "administration":
       // Provisioning without CRM access requires an invitation / recovery design
       // that does not let the operator choose another person's credentials.
       return ["users.read", "settings.read"];
     case "senior":
     case "employee":
-      return NON_DELETE_PERMISSIONS;
+      return [...NON_DELETE_PERMISSIONS, "archiveRequests.read", "archiveRequests.create"];
     case "viewer":
       return READ_PERMISSIONS;
     default:
@@ -124,6 +138,7 @@ export const PAGE_PERMISSIONS = {
   "/dashboard/reports": "reports.read",
   "/dashboard/financial-archive": "financialArchive.read",
   "/dashboard/crm-archive": "crmArchive.read",
+  "/dashboard/archive-requests": "archiveRequests.read",
   "/dashboard/settings": "settings.read",
   "/dashboard/users": "users.read",
 } satisfies Record<string, Permission>;

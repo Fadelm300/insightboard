@@ -1,4 +1,5 @@
 "use client";
+import ArchiveRequestButton from "@/components/archive/ArchiveRequestButton";
 
 import { usePermission } from "@/components/access/PermissionProvider";
 
@@ -1428,7 +1429,12 @@ if (!validation.isValid) {
                             flexWrap: "nowrap",
                           }}
                         >
-                          <Button
+                          <ArchiveRequestButton
+                            resource="projects"
+                            recordId={project._id}
+                            label={project.name || "projects record"}
+                          />
+                            <Button
                             size="small"
                             variant="outlined"
                             onClick={() => setViewProject(project)}

@@ -1,4 +1,5 @@
 "use client";
+import ArchiveRequestButton from "@/components/archive/ArchiveRequestButton";
 
 import { usePermission } from "@/components/access/PermissionProvider";
 
@@ -1211,6 +1212,11 @@ export default function ExpensesPage() {
                               flexWrap: "nowrap",
                             }}
                           >
+                            <ArchiveRequestButton
+                              resource="expenses"
+                              recordId={item._id}
+                              label={item.title || "expenses record"}
+                            />
                             <Button
                               size="small"
                               variant="outlined"

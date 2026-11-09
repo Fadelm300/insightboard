@@ -40,6 +40,7 @@ const menuItems = [
   { text: "Reports", icon: <AssessmentIcon />, path: "/dashboard/reports" },
   { text: "Financial Archive", icon: <AssessmentIcon />, path: "/dashboard/financial-archive" },
   { text: "CRM Archive", icon: <AssessmentIcon />, path: "/dashboard/crm-archive" },
+  { text: "Archive Requests", icon: <AssessmentIcon />,   path: "/dashboard/archive-requests" },
   { text: "Settings", icon: <SettingsIcon />, path: "/dashboard/settings" },
 ];
 

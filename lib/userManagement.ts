@@ -53,7 +53,7 @@ export function validateUserInput(body: unknown, creating: boolean): UserInput {
     throw new UserManagementError(400, "Name must be between 2 and 80 characters");
   }
   if (typeof data.role !== "string" || !Array.isArray(data.allowedPermissions) ||
-      data.allowedPermissions.length > 40 || data.allowedPermissions.some((permission) => typeof permission !== "string")) {
+    data.allowedPermissions.length > PERMISSIONS.length || data.allowedPermissions.some((permission) => typeof permission !== "string")) {
     throw new UserManagementError(400, "Invalid role or permissions");
   }
   if (typeof data.isActive !== "boolean") {

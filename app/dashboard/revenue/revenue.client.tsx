@@ -1,5 +1,7 @@
 "use client";
 
+import ArchiveRequestButton from "@/components/archive/ArchiveRequestButton";
+
 import { usePermission } from "@/components/access/PermissionProvider";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1166,6 +1168,11 @@ export default function RevenuePage() {
                               flexWrap: "nowrap",
                             }}
                           >
+                            <ArchiveRequestButton
+                              resource="revenue"
+                              recordId={item._id}
+                              label="Revenue record"
+                            />
                             <Button
                               size="small"
                               variant="outlined"

@@ -141,7 +141,7 @@ export default function UsersClient({ actorRole, actorPermissions }: {
       </Box>
       {error && !open && <Alert severity="error">{error}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}
-      <Alert severity="info">Managers can manage the employee accounts they create. Reserved and existing admin accounts are not editable here. Employee deletion approvals are a separate upcoming workflow.</Alert>
+      <Alert severity="info">Managers can manage the employee accounts they create. Reserved and existing admin accounts are not editable here. Archive requests are reviewed separately; request, review, and direct archive permissions are independent.</Alert>
       {loading ? <CircularProgress aria-label="Loading users" /> : (
         <Box sx={{ overflowX: "auto" }}>
           <Table>
@@ -181,11 +181,21 @@ export default function UsersClient({ actorRole, actorPermissions }: {
             <FormControlLabel control={<Switch checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} />} label="Account active" />
             <Typography variant="body2" color="text.secondary">Selecting an action also selects its required read permissions. Reports and overview need the underlying data sections. Related selectors expose only minimal names and IDs. Print and export permissions are independent.</Typography>
             {resources.map((resource) => <Box key={resource} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1.5 }}>
-              <Typography variant="subtitle2">{resource}</Typography>
+              <Typography variant="subtitle2">{resource === "archiveRequests" ? "Archive requests" : resource}</Typography>
               <Box sx={{ display: "flex", flexWrap: "wrap" }}>
                 {options.filter((permission) => permission.startsWith(resource + ".")).map((permission) => <FormControlLabel key={permission}
                   control={<Checkbox checked={form.allowedPermissions.includes(permission)} onChange={(event) => togglePermission(permission, event.target.checked)} />}
-                  label={permission === "projects.financial.read" ? "View project financial details" : permission === "projects.financial.manage" ? "Set and update project financial details" : permission.slice(resource.length + 1)} />)}
+                  label={permission === "archiveRequests.read"
+                    ? "View own / assigned requests"
+                    : permission === "archiveRequests.create"
+                    ? "Submit archive requests"
+                    : permission === "archiveRequests.review"
+                    ? "Review team archive requests"
+                    : permission === "projects.financial.read"
+                    ? "View project financial details"
+                    : permission === "projects.financial.manage"
+                    ? "Set and update project financial details"
+                    : permission.slice(resource.length + 1)} />)}
               </Box>
             </Box>)}
           </Stack>

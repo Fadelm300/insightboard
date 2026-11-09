@@ -1,4 +1,5 @@
 "use client";
+import ArchiveRequestButton from "@/components/archive/ArchiveRequestButton";
 
 import { usePermission } from "@/components/access/PermissionProvider";
 
@@ -1371,6 +1372,11 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
                               </Button>
                             )}
 
+                            <ArchiveRequestButton
+                              resource="deals"
+                              recordId={deal._id}
+                              label={deal.title || "deals record"}
+                            />
                             <Button
                               size="small"
                               variant="outlined"
