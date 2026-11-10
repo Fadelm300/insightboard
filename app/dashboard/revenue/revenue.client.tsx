@@ -1165,7 +1165,15 @@ export default function RevenuePage() {
                               justifyContent: "flex-end",
                               alignItems: "center",
                               gap: { xs: 0.5, md: 1 },
-                              flexWrap: "nowrap",
+                              flexWrap: "wrap",
+                              rowGap: 1,
+                              "& > .MuiButtonBase-root": {
+                                minWidth: 0,
+                                maxWidth: "100%",
+                                flexShrink: 0,
+                                whiteSpace: "normal",
+                                overflowWrap: "anywhere",
+                              },
                             }}
                           >
                             <ArchiveRequestButton

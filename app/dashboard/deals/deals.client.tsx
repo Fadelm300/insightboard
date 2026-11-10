@@ -1334,7 +1334,15 @@ const { values, payload, errors } = validateDealForm(formData, editingDeal);
                               justifyContent: "flex-end",
                               alignItems: "center",
                               gap: { xs: 0.5, md: 0.5 },
-                              flexWrap: "nowrap",
+                              flexWrap: "wrap",
+                              rowGap: 1,
+                              "& > .MuiButtonBase-root": {
+                                minWidth: 0,
+                                maxWidth: "100%",
+                                flexShrink: 0,
+                                whiteSpace: "normal",
+                                overflowWrap: "anywhere",
+                              },
                             }}
                           >
                             {deal.status === "Closed Won" && !isConverted && (

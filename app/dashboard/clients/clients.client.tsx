@@ -1050,11 +1050,20 @@ export default function ClientsPage() {
                         >
                           <Stack
                             direction="row"
+                            useFlexGap
                             spacing={{ xs: 0.5, md: 1 }}
                             sx={{
                               justifyContent: "flex-end",
                               alignItems: "center",
-                              flexWrap: "nowrap",
+                              flexWrap: "wrap",
+                              rowGap: 1,
+                              "& > .MuiButtonBase-root": {
+                                minWidth: 0,
+                                maxWidth: "100%",
+                                flexShrink: 0,
+                                whiteSpace: "normal",
+                                overflowWrap: "anywhere",
+                              },
                             }}
                           >
                             <ArchiveRequestButton
