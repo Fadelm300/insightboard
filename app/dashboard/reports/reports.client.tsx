@@ -51,13 +51,16 @@ import type {
 } from "./_lib/reportTypes";
 
 import {
+  averagePricedProjectValue,
   buildHtmlTable,
   emptySummary,
   escapeHtml,
   extractList,
   extractObject,
+  formatAverageProjectValue,
   formatDateToInputValue,
   formatMoney,
+  formatReportGeneratedAt,
   excelMoney,
   formatSheetNumbers,
   formatPercent,
@@ -636,15 +639,10 @@ const matchesDateFilters = useCallback(
     );
   }, [filteredExpenseRecords, filteredRevenueRecords]);
 
-  const filteredAverageProjectValue = useMemo(() => {
-    if (filteredProjectsFinance.length === 0) return 0;
-
-    const totalValue = filteredProjectsFinance.reduce((sum, item) => {
-      return sum + Number(item.project.price || 0);
-    }, 0);
-
-    return totalValue / filteredProjectsFinance.length;
-  }, [filteredProjectsFinance]);
+  const filteredAverageProjectValue = useMemo(
+    () => averagePricedProjectValue(filteredProjectsFinance),
+    [filteredProjectsFinance],
+  );
 
   const filteredProfitMargin = useMemo(() => {
     if (!filteredSummary.totalRevenue) return 0;
@@ -674,15 +672,10 @@ const matchesDateFilters = useCallback(
     };
   }, [deals]);
 
-  const averageProjectValue = useMemo(() => {
-    if (projectsFinance.length === 0) return 0;
-
-    const totalValue = projectsFinance.reduce((sum, item) => {
-      return sum + Number(item.project?.price || 0);
-    }, 0);
-
-    return totalValue / projectsFinance.length;
-  }, [projectsFinance]);
+  const averageProjectValue = useMemo(
+    () => averagePricedProjectValue(projectsFinance),
+    [projectsFinance],
+  );
 
   const profitMargin = useMemo(() => {
     if (!summary.totalRevenue) return 0;
@@ -978,7 +971,12 @@ useEffect(() => {
       ["Closed Won", salesStats.closedWon],
       ["Closed Lost", salesStats.closedLost],
       ["Conversion Rate", formatPercent(salesStats.conversionRate)],
-      ["Average Project Value", excelMoney(averageProjectValue)],
+      [
+        "Average Project Value",
+        averageProjectValue === null
+          ? "No priced projects"
+          : excelMoney(averageProjectValue),
+      ],
       ["Best Client", bestClient?.client?.companyName || "-"],
       ["Best Project Type", bestProjectType?.type || "-"],
     ];
@@ -1116,7 +1114,7 @@ useEffect(() => {
       ["Closed Won", salesStats.closedWon],
       ["Closed Lost", salesStats.closedLost],
       ["Conversion Rate", formatPercent(salesStats.conversionRate)],
-      ["Average Project Value", formatMoney(averageProjectValue)],
+      ["Average Project Value", formatAverageProjectValue(averageProjectValue)],
       ["Best Client", bestClient?.client?.companyName || "-"],
       ["Best Project Type", bestProjectType?.type || "-"],
     ];
@@ -1182,7 +1180,7 @@ useEffect(() => {
           <h1>InsightBoard Reports</h1>
           ${projects.some((project) => project.price === null) ? "<p>Some projects are awaiting pricing. Project-value totals include priced projects only.</p>" : ""}
           <div class="subtitle">
-            Generated at ${escapeHtml(new Date().toLocaleString())}
+            Generated at ${escapeHtml(formatReportGeneratedAt())}
           </div>
 
           ${buildHtmlTable("Summary", ["Metric", "Value"], summaryRows)}
@@ -1289,7 +1287,7 @@ useEffect(() => {
       ["Revenue Records", filteredSummary.revenueCount],
       ["Expense Records", filteredSummary.expenseCount],
       ["Projects With Activity", filteredProjectsFinance.length],
-      ["Average Project Value", formatMoney(filteredAverageProjectValue)],
+      ["Average Project Value", formatAverageProjectValue(filteredAverageProjectValue)],
       ["Best Client", filteredBestClient?.client?.companyName || "-"],
       ["Best Project Type", filteredBestProjectType?.type || "-"],
     ];
@@ -1363,7 +1361,7 @@ useEffect(() => {
         <body>
           <h1>InsightBoard Filtered Report</h1>
           <div class="subtitle">
-            Generated at ${escapeHtml(new Date().toLocaleString())}
+            Generated at ${escapeHtml(formatReportGeneratedAt())}
           </div>
 
           <div class="filter-box">
@@ -1595,7 +1593,7 @@ useEffect(() => {
         />
         <ReportCard
           title="Avg Project Value"
-          value={formatMoney(averageProjectValue)}
+          value={formatAverageProjectValue(averageProjectValue)}
         />
       </Box>
 
