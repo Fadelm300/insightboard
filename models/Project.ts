@@ -59,6 +59,12 @@ const ProjectSchema = new Schema(
       min: [0.01, "Price must be greater than 0"],
     },
 
+    agreedExtras: {
+      type: Number,
+      min: 0,
+      max: Number.MAX_SAFE_INTEGER / 100,
+    },
+
     cost: {
       type: Number,
       default: null,

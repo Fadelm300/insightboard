@@ -1,4 +1,4 @@
-import { paymentProgressPercent } from "@/lib/paymentProgress";
+import { paymentProgressPercent, projectPaymentBalance } from "@/lib/paymentProgress";
 import { logServerError } from "@/lib/serverLogger";
 import { NextRequest } from "next/server";
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const projects = await Project.find({
       isDeleted: { $ne: true },
     })
-      .select("name type price cost profit status paymentStatus")
+      .select("name type price agreedExtras cost profit status paymentStatus")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
       const expenseCount = expenseData?.expenseCount || 0;
 
       const netProfit = totalRevenue - totalExpenses;
-      const remainingBalance = project.price === null ? null : Math.max(project.price - totalRevenue, 0);
+      const balance = projectPaymentBalance(totalRevenue, project.price);
 
       const paymentProgress = paymentProgressPercent(totalRevenue, project.price);
 
@@ -100,6 +100,7 @@ export async function GET(req: NextRequest) {
           name: project.name,
           type: project.type,
           price: project.price,
+          agreedExtras: project.agreedExtras ?? 0,
           cost: project.cost,
           profit: project.profit,
           status: project.status,
@@ -108,7 +109,7 @@ export async function GET(req: NextRequest) {
         totalRevenue,
         totalExpenses,
         netProfit,
-        remainingBalance,
+        ...balance,
         paymentProgress,
         revenueCount,
         expenseCount,

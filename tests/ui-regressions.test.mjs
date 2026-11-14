@@ -29,6 +29,15 @@ test('payment progress uses the same decimal rule and preserves pending pricing'
   assert.equal(progress.paymentProgressPercent(300, 200), 100);
 });
 
+test('project balances distinguish outstanding, excess and pending pricing', () => {
+  const balance = (revenue, price) => ({ ...progress.projectPaymentBalance(revenue, price) });
+  assert.deepEqual(balance(139.75, 100), { remainingBalance: 0, overpayment: 39.75 });
+  assert.deepEqual(balance(600, 1250), { remainingBalance: 650, overpayment: 0 });
+  assert.deepEqual(balance(80.25, 200), { remainingBalance: 119.75, overpayment: 0 });
+  assert.deepEqual(balance(0.1 + 0.2, 0.3), { remainingBalance: 0, overpayment: 0 });
+  assert.deepEqual(balance(25, null), { remainingBalance: null, overpayment: null });
+});
+
 test('actual Excel row builders round-trip monetary cells as numbers and pending as text', () => {
   const source = read('app/dashboard/reports/reports.client.tsx');
   const begin = source.indexOf('  function getSummaryRows()');
@@ -41,15 +50,16 @@ test('actual Excel row builders round-trip monetary cells as numbers and pending
     averageProjectValue: 200, bestClient: null, bestProjectType: null,
     monthly: [{ month: '2026-11', revenue: 80.25, expenses: 20.25, profit: 60 }],
     projectsFinance: [
-      { project: { name: 'Paid', type: 'Website', price: 200 }, totalRevenue: 80.25, totalExpenses: 20.25, netProfit: 60, remainingBalance: 119.75, paymentProgress: 40.1 },
-      { project: { name: 'Pending', price: null }, totalRevenue: 0, totalExpenses: 0, netProfit: 0, remainingBalance: null, paymentProgress: null },
+      { project: { name: 'Paid', type: 'Website', price: 200 }, totalRevenue: 80.25, totalExpenses: 20.25, netProfit: 60, remainingBalance: 119.75, overpayment: 0, paymentProgress: 40.1 },
+      { project: { name: "Overpaid", price: 100 }, totalRevenue: 139.75, totalExpenses: 0, netProfit: 139.75, remainingBalance: 0, overpayment: 39.75, paymentProgress: 100 },
+      { project: { name: 'Pending', price: null }, totalRevenue: 0, totalExpenses: 0, netProfit: 0, remainingBalance: null, overpayment: null, paymentProgress: null },
     ],
     clientsFinance: [], projectTypesFinance: [],
   };
   const builders = execute(source.slice(begin, end) + '\nexport { getSummaryRows, getProjectRows, getMonthlyRows };', context);
   const book = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet([
-    ['Project', 'Type', 'Price BHD', 'Revenue BHD', 'Expenses BHD', 'Net Profit BHD', 'Remaining BHD', 'Payment'],
+    ['Project', 'Type', 'Total agreed BHD', 'Agreed extras BHD', 'Revenue BHD', 'Expenses BHD', 'Net Profit BHD', 'Remaining BHD', 'Overpayment BHD', 'Payment'],
     ...builders.getProjectRows(),
   ]);
   utils.formatSheetNumbers(sheet);
@@ -58,14 +68,14 @@ test('actual Excel row builders round-trip monetary cells as numbers and pending
   utils.formatSheetNumbers(summarySheet);
   XLSX.utils.book_append_sheet(book, summarySheet, 'Summary');
   const reopened = XLSX.read(XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer', cellNF: true });
-  for (const [address, expected] of Object.entries({ C2: 200, D2: 80.25, E2: 20.25, F2: 60, G2: 119.75 })) {
+  for (const [address, expected] of Object.entries({ C2: 200, D2: 0, E2: 80.25, F2: 20.25, G2: 60, H2: 119.75, I2: 0, H3: 0, I3: 39.75 })) {
     assert.equal(reopened.Sheets.Projects[address].t, 'n');
     assert.equal(reopened.Sheets.Projects[address].v, expected);
     assert.equal(reopened.Sheets.Projects[address].z, '#,##0.00');
   }
-  assert.equal(reopened.Sheets.Projects.C3.t, 's');
-  assert.equal(reopened.Sheets.Projects.C3.v, 'Pending pricing');
-  assert.equal(reopened.Sheets.Projects.H2.v, '40.1%');
+  assert.equal(reopened.Sheets.Projects.C4.t, 's');
+  assert.equal(reopened.Sheets.Projects.C4.v, 'Pending pricing');
+  assert.equal(reopened.Sheets.Projects.J2.v, '40.1%');
   assert.equal(reopened.Sheets.Summary.B2.t, 'n');
   assert.equal(reopened.Sheets.Summary.B2.v, 220);
   assert.equal(reopened.Sheets.Summary.B6.t, 'n');

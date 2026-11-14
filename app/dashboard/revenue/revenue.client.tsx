@@ -1545,7 +1545,7 @@ export default function RevenuePage() {
                 minRows={3}
                 value={formData.notes}
                 error={Boolean(formErrors.notes)}
-                helperText={formErrors.notes}
+                helperText={formErrors.notes || "Optional: explain any payment above the agreed project price."}
                 onChange={(event) =>
                   updateFormField("notes", event.target.value)
                 }

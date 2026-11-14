@@ -79,6 +79,7 @@ type Project = {
   name: string;
   type: ProjectType;
   price?: number | null;
+  agreedExtras?: number;
   cost?: number | null;
   profit?: number | null;
   deadline?: string;
@@ -96,6 +97,7 @@ type ProjectFormData = {
   name: string;
   type: ProjectType;
   price: string;
+  agreedExtras: string;
   cost: string;
   deadline: string;
   status: ProjectStatus;
@@ -188,6 +190,7 @@ const emptyForm: ProjectFormData = {
   name: "",
   type: "Business Website",
   price: "",
+  agreedExtras: "0",
   cost: "0",
   deadline: "",
   status: "Not Started",
@@ -426,6 +429,7 @@ function validateProjectForm(
     name: cleanSingleLineText(formData.name),
     type: formData.type,
     price: formData.price.trim(),
+    agreedExtras: formData.agreedExtras.trim() || "0",
     cost: formData.cost.trim() || "0",
     deadline: formData.deadline.trim(),
     status: formData.status,
@@ -450,6 +454,13 @@ function validateProjectForm(
     errors.type = "Invalid project type";
   }
 
+  if (manageFinancials && cleanedValues.agreedExtras !== "0") {
+    if (!isValidMoney(cleanedValues.agreedExtras) || Number(cleanedValues.agreedExtras) < 0) {
+      errors.agreedExtras = "Enter a valid non-negative amount";
+    } else if (!cleanedValues.price) {
+      errors.price = "Enter the original price before adding agreed extras";
+    }
+  }
   if (manageFinancials && cleanedValues.price) {
     if (!isValidMoney(cleanedValues.price) || !Number.isFinite(Number(cleanedValues.price)) || Number(cleanedValues.price) <= 0) {
       errors.price = "Enter a valid positive price";
@@ -725,7 +736,10 @@ export default function ProjectsPage() {
       dealId: getId(project.dealId),
       name: project.name || "",
       type: project.type || "Business Website",
-      price: String(project.price || ""),
+      price: project.price == null
+        ? ""
+        : String(Number((project.price - (project.agreedExtras ?? 0)).toFixed(2))),
+      agreedExtras: String(project.agreedExtras ?? 0),
       cost: String(project.cost ?? 0),
       deadline: getDateInputValue(project.deadline),
       status: project.status || "Not Started",
@@ -869,7 +883,8 @@ if (!validation.isValid) {
       name: values.name,
       type: values.type,
       ...(canManageFinancials && values.price ? {
-        price: Number(values.price),
+        price: Number((Number(values.price) + Number(values.agreedExtras)).toFixed(2)),
+        agreedExtras: Number(values.agreedExtras),
         cost: Number(values.cost || 0),
         paymentStatus: values.paymentStatus,
       } : {}),
@@ -1829,7 +1844,7 @@ if (!validation.isValid) {
                 }}
               >
                 {canManageFinancials && (<TextField
-                  label="Price"
+                  label="Original agreed price"
                   type="number"
                   fullWidth
                   value={formData.price}
@@ -1844,6 +1859,17 @@ if (!validation.isValid) {
                       min: "0",
                     },
                   }}
+                />)}
+
+                {canManageFinancials && (<TextField
+                  label="Agreed extras"
+                  type="number"
+                  fullWidth
+                  value={formData.agreedExtras}
+                  error={Boolean(formErrors.agreedExtras)}
+                  helperText={formErrors.agreedExtras || "Additional charges approved by the client."}
+                  onChange={(event) => updateFormField("agreedExtras", event.target.value)}
+                  slotProps={{ htmlInput: { step: "0.01", min: "0" } }}
                 />)}
 
                 {canManageFinancials && (<TextField

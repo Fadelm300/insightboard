@@ -8,3 +8,16 @@ export function paymentProgressPercent
   return Math.round(Math.min(Math.max(
     (revenue / price) * 100, 0), 100) * 10) / 10;
 }
+
+export function projectPaymentBalance(revenue: number, price: number | null | undefined) {
+  if (price == null) {
+    return { remainingBalance: null, overpayment: null };
+  }
+
+  const difference = Number((price - revenue).toFixed(2));
+
+  return {
+    remainingBalance: Math.max(difference, 0),
+    overpayment: Math.max(-difference, 0),
+  };
+}

@@ -155,6 +155,10 @@ test("no-financial-write employee can create pending pricing but cannot submit h
     assert.equal(data.projectFinancialInput(employee, { [field]: field === "paymentStatus" ? "Unpaid" : 900 }).status, 403);
   }
   assert.equal(data.projectFinancialInput(reader, { price: 900 }).status, 403);
+  assert.equal(data.projectFinancialInput(employee, { agreedExtras: 1150 }).status, 403);
+  assert.equal(data.projectFinancialInput(writer, { price: 1250, agreedExtras: 1150 }).data.agreedExtras, 1150);
+  assert.equal(data.projectFinancialInput(writer, { price: 100, agreedExtras: 100 }).status, 400);
+  assert.equal(data.projectFinancialInput(writer, { price: 100, agreedExtras: -1 }).status, 400);
 });
 
 test("writer pricing is finite, positive, bounded and derived; server-owned fields are rejected", () => {

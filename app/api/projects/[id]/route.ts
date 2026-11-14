@@ -327,7 +327,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
         clientId,
         name,
         type,
-        ...(canManageProjectFinancials(authorization.user!) && ["price", "cost", "paymentStatus"].some((key) => Object.hasOwn(body, key)) ? financial.data : {}),
+        ...(canManageProjectFinancials(authorization.user!) && ["price", "agreedExtras", "cost", "paymentStatus"].some((key) => Object.hasOwn(body, key)) ? financial.data : {}),
         status,
         description,
         notes,

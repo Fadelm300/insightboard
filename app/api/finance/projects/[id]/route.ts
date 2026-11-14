@@ -1,4 +1,4 @@
-import { paymentProgressPercent } from "@/lib/paymentProgress";
+import { paymentProgressPercent, projectPaymentBalance } from "@/lib/paymentProgress";
 import { logServerError } from "@/lib/serverLogger";
 import { NextRequest } from "next/server";
 
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const expenseCount = expenseSummary[0]?.expenseCount || 0;
 
     const netProfit = totalRevenue - totalExpenses;
-    const remainingBalance = project.price === null ? null : project.price - totalRevenue;
+    const balance = projectPaymentBalance(totalRevenue, project.price);
 
     const paymentProgress = paymentProgressPercent(totalRevenue, project.price);
 
@@ -81,13 +81,14 @@ export async function GET(req: NextRequest, context: RouteContext) {
           name: project.name,
           type: project.type,
           price: project.price,
+          agreedExtras: project.agreedExtras ?? 0,
           status: project.status,
           paymentStatus: project.paymentStatus,
         },
         totalRevenue,
         totalExpenses,
         netProfit,
-        remainingBalance,
+        ...balance,
         paymentProgress,
         revenueCount,
         expenseCount,

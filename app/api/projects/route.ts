@@ -373,7 +373,7 @@ export async function POST(req: NextRequest) {
       }
 
 
-      const [project] = await Project.create([payload], { session, ordered: true });
+      const [project] = await Project.create([{ ...payload, ...financial.data }], { session, ordered: true });
 
       return successResponse({ project: projectDTO(project, authorization.user!) }, "Project created successfully", 201);
     });

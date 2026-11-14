@@ -22,7 +22,7 @@ const TIMESTAMPS = ["createdAt", "updatedAt"];
 const CLIENT_FIELDS = ["_id", "companyName", "businessType", "contactPerson", "phone", "email", "location", "website", "description", "notes", "status", ...TIMESTAMPS];
 const DEAL_FIELDS = ["_id", "title", "estimatedBudget", "finalPrice", "status", "probability", "expectedCloseDate", "description", "notes", ...TIMESTAMPS];
 const PROJECT_FIELDS = ["_id", "name", "type", "deadline", "status", "description", "notes", ...TIMESTAMPS];
-export const PROJECT_FINANCIAL_FIELDS = ["price", "cost", "profit", "paymentStatus"] as const;
+export const PROJECT_FINANCIAL_FIELDS = ["price", "agreedExtras", "cost", "profit", "paymentStatus"] as const;
 
 export function canReadProjectFinancials(actor: PermissionSubject) {
   return hasPermission(actor, "finance.read") || hasPermission(actor, "projects.financial.read");
@@ -107,7 +107,7 @@ export function expenseDTO(value: unknown, actor: PermissionSubject) {
   };
 }
 
-const PROJECT_INPUT_FIELDS = ["clientId", "dealId", "name", "type", "deadline", "status", "description", "notes", "price", "cost", "paymentStatus"];
+const PROJECT_INPUT_FIELDS = ["clientId", "dealId", "name", "type", "deadline", "status", "description", "notes", "price", "agreedExtras", "cost", "paymentStatus"];
 const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 export function parseCrmMoney(value: unknown): number | null {
   if (typeof value !== "string" && typeof value !== "number") return null;
@@ -126,7 +126,7 @@ export function parseCrmMoney(value: unknown): number | null {
 }
 
 const PAYMENT_STATUSES = ["Unpaid", "Partially Paid", "Paid"];
-type FinancialData = { price: number | null; cost: number | null; profit: number | null; paymentStatus: string };
+type FinancialData = { price: number | null; agreedExtras?: number; cost: number | null; profit: number | null; paymentStatus: string };
 type InputResult = { data: FinancialData; error?: never; status?: never } | { error: string; status: number; data?: never };
 
 /** Check the write boundary before inspecting hidden fields or validating CRM relationships. */
@@ -135,7 +135,7 @@ export function projectFinancialInput(actor: PermissionSubject, body: unknown, c
   const input = body as Row;
   if (Object.keys(input).some((key) => !PROJECT_INPUT_FIELDS.includes(key))) return { error: "Unsupported project field", status: 400 };
   for (const [key, value] of Object.entries(input)) {
-    if (["price", "cost"].includes(key)) continue;
+    if (["price", "agreedExtras", "cost"].includes(key)) continue;
     if (value !== null && typeof value !== "string") return { error: "Invalid project field type", status: 400 };
   }
   const previous = record(current);
@@ -146,16 +146,29 @@ export function projectFinancialInput(actor: PermissionSubject, body: unknown, c
   const rawPrice = input.price === undefined ? previous.price : input.price;
   if (rawPrice === undefined || rawPrice === null || rawPrice === "") {
     if (previous.price !== undefined && previous.price !== null) return { error: "Existing pricing cannot be cleared", status: 400 };
-    if (input.cost !== undefined || input.paymentStatus !== undefined) return { error: "Set a price before financial details", status: 400 };
+    if (input.agreedExtras !== undefined || input.cost !== undefined || input.paymentStatus !== undefined) return { error: "Set a price before financial details", status: 400 };
     return { data: { price: null, cost: null, profit: null, paymentStatus: "Unpaid" } };
   }
   const rawCost = input.cost === undefined ? previous.cost ?? 0 : input.cost;
   const price = parseCrmMoney(rawPrice);
   const cost = parseCrmMoney(rawCost);
   if (price === null || price <= 0 || cost === null || cost < 0) return { error: "Invalid project amount", status: 400 };
+  // The existing price field remains the total agreed price. Legacy projects have zero extras.
+  const extras = parseCrmMoney(input.agreedExtras === undefined ? previous.agreedExtras ?? 0 : input.agreedExtras);
+  if (extras === null || extras >= price) {
+    return { error: "Agreed extras must be non-negative and below the total agreed price", status: 400 };
+  }
   const paymentStatus = input.paymentStatus ?? previous.paymentStatus ?? "Unpaid";
   if (typeof paymentStatus !== "string" || !PAYMENT_STATUSES.includes(paymentStatus)) return { error: "Invalid payment status", status: 400 };
-  return { data: { price, cost, profit: price - cost, paymentStatus } };
+  return {
+    data: {
+      price,
+      ...(input.agreedExtras !== undefined ? { agreedExtras: extras } : {}),
+      cost,
+      profit: price - cost,
+      paymentStatus,
+    },
+  };
 }
 
 

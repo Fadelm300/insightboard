@@ -26,7 +26,7 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import * as XLSX from "xlsx";
 
 import { apiFetch } from "@/lib/apiClient";
-import { paymentProgressPercent } from "@/lib/paymentProgress";
+import { paymentProgressPercent, projectPaymentBalance } from "@/lib/paymentProgress";
 
 import EmptyTableRow from "./_components/EmptyTableRow";
 import FilteredPrintPanel from "./_components/FilteredPrintPanel";
@@ -498,7 +498,6 @@ const matchesDateFilters = useCallback(
         return sum + Number(record.amount || 0);
       }, 0);
 
-      const price = Number(project.price || 0);
       const paymentProgress = paymentProgressPercent(totalRevenue, project.price);
 
       result.push({
@@ -506,7 +505,7 @@ const matchesDateFilters = useCallback(
         totalRevenue,
         totalExpenses,
         netProfit: totalRevenue - totalExpenses,
-        remainingBalance: project.price === null ? null : price - totalRevenue,
+        ...projectPaymentBalance(totalRevenue, project.price),
         paymentProgress,
         revenueCount: projectRevenue.length,
         expenseCount: projectExpenses.length,
@@ -738,6 +737,7 @@ const matchesDateFilters = useCallback(
         item.totalExpenses,
         item.netProfit,
         item.remainingBalance,
+        item.overpayment,
         item.paymentProgress,
       ];
 
@@ -996,10 +996,12 @@ useEffect(() => {
       item.project?.name || "-",
       item.project?.type || "-",
       excelMoney(item.project?.price),
+      excelMoney(item.project?.price == null ? null : item.project.agreedExtras ?? 0),
       excelMoney(item.totalRevenue),
       excelMoney(item.totalExpenses),
       excelMoney(item.netProfit),
       excelMoney(item.remainingBalance),
+      excelMoney(item.overpayment),
       formatPercent(item.paymentProgress),
     ]);
   }
@@ -1053,11 +1055,13 @@ useEffect(() => {
       [
         "Project",
         "Type",
-        "Price BHD",
+        "Total agreed BHD",
+        "Agreed extras BHD",
         "Revenue BHD",
         "Expenses BHD",
         "Net Profit BHD",
         "Remaining BHD",
+        "Overpayment BHD",
         "Payment",
       ],
       ...getProjectRows(),
@@ -1201,21 +1205,25 @@ useEffect(() => {
             [
               "Project",
               "Type",
-              "Price",
+              "Total agreed",
+              "Agreed extras",
               "Revenue",
               "Expenses",
               "Net Profit",
               "Remaining",
+              "Overpayment",
               "Payment",
             ],
             projectsFinance.map((item) => [
               item.project?.name || "-",
               item.project?.type || "-",
               formatMoney(item.project?.price),
+              formatMoney(item.project?.price == null ? null : item.project.agreedExtras ?? 0),
               formatMoney(item.totalRevenue),
               formatMoney(item.totalExpenses),
               formatMoney(item.netProfit),
               formatMoney(item.remainingBalance),
+              formatMoney(item.overpayment),
               formatPercent(item.paymentProgress),
             ]),
           )}
@@ -1386,21 +1394,25 @@ useEffect(() => {
             [
               "Project",
               "Type",
-              "Price",
+              "Total agreed",
+              "Agreed extras",
               "Revenue",
               "Expenses",
               "Net Profit",
               "Remaining",
+              "Overpayment",
               "Payment",
             ],
             filteredProjectsFinance.map((item) => [
               item.project.name || "-",
               item.project.type || "-",
               formatMoney(item.project.price),
+              formatMoney(item.project.price == null ? null : item.project.agreedExtras ?? 0),
               formatMoney(item.totalRevenue),
               formatMoney(item.totalExpenses),
               formatMoney(item.netProfit),
               formatMoney(item.remainingBalance),
+              formatMoney(item.overpayment),
               formatPercent(item.paymentProgress),
             ]),
           )}
@@ -1766,11 +1778,13 @@ useEffect(() => {
                 #
               </TableCell>
               <TableCell>Project</TableCell>
-              <TableCell>Price</TableCell>
+              <TableCell>Total agreed</TableCell>
+              <TableCell>Agreed extras</TableCell>
               <TableCell>Revenue</TableCell>
               <TableCell>Expenses</TableCell>
               <TableCell>Net Profit</TableCell>
               <TableCell>Remaining</TableCell>
+              <TableCell>Overpayment</TableCell>
               <TableCell>Payment Status</TableCell>
             </TableRow>
           </TableHead>
@@ -1778,7 +1792,7 @@ useEffect(() => {
           <TableBody>
             {filteredProjectFinanceRows.length === 0 ? (
               <EmptyTableRow
-                colSpan={8}
+                colSpan={10}
                 message={
                   projectsFinance.length === 0
                     ? "No project finance data."
@@ -1812,6 +1826,9 @@ useEffect(() => {
                   <TableCell sx={{ fontWeight: 700 }}>
                     {formatMoney(item.project?.price)}
                   </TableCell>
+                  <TableCell>
+                    {formatMoney(item.project?.price == null ? null : item.project.agreedExtras ?? 0)}
+                  </TableCell>
                   <TableCell sx={getRevenueTextSx()}>
                     {formatMoney(item.totalRevenue)}
                   </TableCell>
@@ -1823,6 +1840,9 @@ useEffect(() => {
                   </TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>
                     {formatMoney(item.remainingBalance)}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    {formatMoney(item.overpayment)}
                   </TableCell>
                   <TableCell>
                     <Chip

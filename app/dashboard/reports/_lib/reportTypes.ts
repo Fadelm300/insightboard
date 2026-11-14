@@ -28,6 +28,7 @@ export type ProjectFinance = {
     name: string;
     type?: string;
     price?: number | null;
+  agreedExtras?: number;
     status?: string;
     paymentStatus?: string;
   };
@@ -35,6 +36,7 @@ export type ProjectFinance = {
   totalExpenses: number;
   netProfit: number;
   remainingBalance: number | null;
+  overpayment: number | null;
   paymentProgress: number | null;
   revenueCount?: number;
   expenseCount?: number;
@@ -86,6 +88,7 @@ export type ProjectRecord = {
   name: string;
   type?: string;
   price?: number | null;
+  agreedExtras?: number;
   cost?: number | null;
   profit?: number | null;
   status?: string;
@@ -121,6 +124,7 @@ export type FilteredProjectFinance = {
   totalExpenses: number;
   netProfit: number;
   remainingBalance: number | null;
+  overpayment: number | null;
   paymentProgress: number | null;
   revenueCount: number;
   expenseCount: number;
