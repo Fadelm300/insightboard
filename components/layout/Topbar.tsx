@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -9,6 +9,7 @@ import {
   Box,
   Button,
   Drawer,
+  Collapse,
   IconButton,
   List,
   ListItem,
@@ -20,6 +21,7 @@ import {
 } from "@mui/material";
 
 import MenuIcon from "@mui/icons-material/Menu";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import PeopleIcon from "@mui/icons-material/People";
 import HandshakeIcon from "@mui/icons-material/Handshake";
@@ -36,19 +38,21 @@ import { PAGE_PERMISSIONS } from "@/lib/permissions";
 
 const drawerWidth = 240;
 
+const sections = ["Workspace", "Finance", "Archives", "Administration"];
+
 const menuItems = [
-  { text: "Users", icon: <PeopleIcon />, path: "/dashboard/users" },
-  { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
-  { text: "Clients", icon: <PeopleIcon />, path: "/dashboard/clients" },
-  { text: "Deals", icon: <HandshakeIcon />, path: "/dashboard/deals" },
-  { text: "Projects", icon: <WorkIcon />, path: "/dashboard/projects" },
-  { text: "Revenue", icon: <PaymentsIcon />, path: "/dashboard/revenue" },
-  { text: "Expenses", icon: <ReceiptLongIcon />, path: "/dashboard/expenses" },
-  { text: "Reports", icon: <AssessmentIcon />, path: "/dashboard/reports" },
-  { text: "Financial Archive", icon: <AssessmentIcon />, path: "/dashboard/financial-archive" },
-  { text: "CRM Archive", icon: <AssessmentIcon />, path: "/dashboard/crm-archive" },
-  {  text: "Archive Requests", icon: <AssessmentIcon />, path: "/dashboard/archive-requests" },
-  { text: "Settings", icon: <SettingsIcon />, path: "/dashboard/settings" },
+  { text: "Users", section: "Administration", icon: <PeopleIcon />, path: "/dashboard/users" },
+  { text: "Dashboard", section: null, icon: <DashboardIcon />, path: "/dashboard" },
+  { text: "Clients", section: "Workspace", icon: <PeopleIcon />, path: "/dashboard/clients" },
+  { text: "Deals", section: "Workspace", icon: <HandshakeIcon />, path: "/dashboard/deals" },
+  { text: "Projects", section: "Workspace", icon: <WorkIcon />, path: "/dashboard/projects" },
+  { text: "Revenue", section: "Finance", icon: <PaymentsIcon />, path: "/dashboard/revenue" },
+  { text: "Expenses", section: "Finance", icon: <ReceiptLongIcon />, path: "/dashboard/expenses" },
+  { text: "Reports", section: "Finance", icon: <AssessmentIcon />, path: "/dashboard/reports" },
+  { text: "Financial Archive", section: "Archives", icon: <AssessmentIcon />, path: "/dashboard/financial-archive" },
+  { text: "CRM Archive", section: "Archives", icon: <AssessmentIcon />, path: "/dashboard/crm-archive" },
+  {  text: "Archive Requests", section: "Archives", icon: <AssessmentIcon />, path: "/dashboard/archive-requests" },
+  { text: "Settings", section: null, icon: <SettingsIcon />, path: "/dashboard/settings" },
 ];
 
 function isActivePath(pathname: string, itemPath: string) {
@@ -62,6 +66,8 @@ function isActivePath(pathname: string, itemPath: string) {
 export default function Topbar() {
   const pathname = usePathname();
   const permissions = usePermissions();
+  const sectionId = useId();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const visibleMenuItems = menuItems.filter((item) => permissions.includes(PAGE_PERMISSIONS[item.path as keyof typeof PAGE_PERMISSIONS]));
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigationTrigger = useRef<HTMLButtonElement>(null);
@@ -78,6 +84,63 @@ export default function Topbar() {
     // Release a drawer item before its subtree becomes aria-hidden.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     setMobileOpen(false);
+  }
+
+  function renderItem(item: (typeof menuItems)[number]) {
+    const selected = isActivePath(pathname, item.path);
+
+    return (
+      <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+        <ListItemButton
+          component={Link}
+          href={item.path}
+          prefetch={false}
+          selected={selected}
+          aria-current={selected ? "page" : undefined}
+          onClick={handleMobileDrawerClose}
+          sx={{
+            minHeight: 46,
+            borderRadius: 2,
+            px: 1.5,
+            color: selected ? "#FFFFFF" : "rgba(248, 250, 252, 0.78)",
+            transition:
+              "background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease",
+
+            "& .MuiListItemIcon-root": {
+              minWidth: 36,
+              color: selected ? "#FFFFFF" : "rgba(248, 250, 252, 0.72)",
+            },
+
+            "& .MuiListItemText-primary": {
+              fontSize: 14,
+              fontWeight: selected ? 800 : 650,
+            },
+
+            "&.Mui-selected": {
+              bgcolor: "rgba(79, 70, 229, 0.34)",
+              boxShadow: "0 0 22px rgba(59, 130, 246, 0.22)",
+            },
+
+            "&.Mui-selected:hover": {
+              bgcolor: "rgba(79, 70, 229, 0.42)",
+            },
+
+            "&:hover": {
+              bgcolor: "rgba(255, 255, 255, 0.10)",
+              color: "#FFFFFF",
+              transform: "translateX(2px)",
+            },
+
+            "&:hover .MuiListItemIcon-root": {
+              color: "#FFFFFF",
+            },
+          }}
+        >
+          <ListItemIcon>{item.icon}</ListItemIcon>
+          <ListItemText primary={item.text} />
+        </ListItemButton>
+      </ListItem>
+    );
   }
 
   return (
@@ -176,7 +239,7 @@ export default function Topbar() {
               fontWeight: 800,
             }}
           >
-            Logout
+            Sign out
           </Button>
         </Toolbar>
       </AppBar>
@@ -194,6 +257,9 @@ export default function Topbar() {
           "& .MuiDrawer-paper": {
             width: drawerWidth,
             boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
             color: "#F8FAFC",
             background:
               theme.palette.mode === "dark"
@@ -269,91 +335,71 @@ export default function Topbar() {
           </Box>
         </Toolbar>
 
-        <List sx={{ px: 1.25, py: 1 }}>
-          {visibleMenuItems.map((item) => {
-            const selected = isActivePath(pathname, item.path);
+        <Box component="nav" aria-label="Dashboard navigation" sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <List sx={{ px: 1.25, py: 1, flex: 1, minHeight: 0, overflowY: "auto" }}>
+            {visibleMenuItems.filter((item) => item.path === "/dashboard").map(renderItem)}
+            {sections.map((section, index) => {
+              const items = visibleMenuItems.filter((item) => item.section === section);
+              if (!items.length) return null;
 
-            return (
-              <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
-                <ListItemButton
-                  component={Link}
-                  href={item.path}
-                  selected={selected}
-                  onClick={handleMobileDrawerClose}
-                  sx={{
-                    minHeight: 46,
-                    borderRadius: 2,
-                    px: 1.5,
-                    color: selected ? "#FFFFFF" : "rgba(248, 250, 252, 0.78)",
-                    transition:
-                      "background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease",
+              const open = expanded[section] ?? (section === "Workspace" || items.some((item) => isActivePath(pathname, item.path)));
+              const id = `${sectionId}-${index}`;
 
-                    "& .MuiListItemIcon-root": {
-                      minWidth: 36,
-                      color: selected ? "#FFFFFF" : "rgba(248, 250, 252, 0.72)",
-                    },
-
-                    "& .MuiListItemText-primary": {
-                      fontSize: 14,
-                      fontWeight: selected ? 800 : 650,
-                    },
-
-                    "&.Mui-selected": {
-                      bgcolor: "rgba(79, 70, 229, 0.34)",
-                      boxShadow: "0 0 22px rgba(59, 130, 246, 0.22)",
-                    },
-
-                    "&.Mui-selected:hover": {
-                      bgcolor: "rgba(79, 70, 229, 0.42)",
-                    },
-
-                    "&:hover": {
-                      bgcolor: "rgba(255, 255, 255, 0.10)",
-                      color: "#FFFFFF",
-                      transform: "translateX(2px)",
-                    },
-
-                    "&:hover .MuiListItemIcon-root": {
-                      color: "#FFFFFF",
-                    },
-                  }}
-                >
-                  <ListItemIcon>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.text} />
-                </ListItemButton>
-              </ListItem>
-            );
-          })}
-
-          <ListItem disablePadding sx={{ mt: 1.5 }}>
-            <ListItemButton
-              onClick={handleLogout}
-              sx={{
-                minHeight: 46,
-                borderRadius: 2,
-                px: 1.5,
-                color: "#FCA5A5",
-                "&:hover": {
-                  bgcolor: "rgba(239, 68, 68, 0.12)",
-                },
-              }}
-            >
-              <ListItemText
-                primary={
-                  <Typography
-                    component="span"
-                    sx={{
-                      fontSize: 14,
-                      fontWeight: 800,
-                    }}
+              return (
+                <ListItem key={section} disablePadding sx={{ display: "block", mb: 0.5 }}>
+                  <ListItemButton
+                    component="button"
+                    type="button"
+                    aria-expanded={open}
+                    aria-controls={id}
+                    onClick={() => setExpanded((current) => ({ ...current, [section]: !open }))}
+                    sx={{ width: "100%", px: 1.5, borderRadius: 2, color: "inherit" }}
                   >
-                    Logout
-                  </Typography>
-                }
-              />
-            </ListItemButton>
-          </ListItem>
-        </List>
+                    <ListItemText primary={section} />
+                    <ExpandMoreIcon fontSize="small" sx={{ transform: open ? "rotate(180deg)" : "none" }} />
+                  </ListItemButton>
+                  <Collapse in={open} id={id}>
+                    <List disablePadding sx={{ pl: 1.5 }}>
+                      {items.map(renderItem)}
+                    </List>
+                  </Collapse>
+                </ListItem>
+              );
+            })}
+          </List>
+          <List sx={{ px: 1.25, py: 1, flexShrink: 0 }}>
+            {visibleMenuItems.filter((item) => item.path === "/dashboard/settings").map(renderItem)}
+
+            <ListItem disablePadding sx={{ mt: 1.5 }}>
+              <ListItemButton
+                onClick={handleLogout}
+                sx={{
+                  minHeight: 46,
+                  borderRadius: 2,
+                  px: 1.5,
+                  color: "#FCA5A5",
+                  "&:hover": {
+                    bgcolor: "rgba(239, 68, 68, 0.12)",
+                  },
+                }}
+              >
+                <ListItemText
+                  primary={
+                    <Typography
+                      component="span"
+                      sx={{
+                        fontSize: 14,
+                        fontWeight: 800,
+                      }}
+                    >
+                      Sign out
+                    </Typography>
+                  }
+                />
+              </ListItemButton>
+            </ListItem>
+          </List>
+        </Box>
       </Drawer>
     </>
   );

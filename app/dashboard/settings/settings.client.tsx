@@ -491,9 +491,9 @@ export default function SettingsPage({ canEditCompany }: { canEditCompany: boole
                 }}
               >
                 <Box>
-                  <Typography sx={{ fontWeight: 900 }}>Session</Typography>
+                  <Typography sx={{ fontWeight: 900 }}>Sign out</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    End the current authenticated dashboard session.
+                    Sign out of InsightBoard on this device.
                   </Typography>
                 </Box>
 
@@ -511,7 +511,7 @@ export default function SettingsPage({ canEditCompany }: { canEditCompany: boole
                       `0 14px 32px ${alpha(theme.palette.error.main, 0.22)}`,
                   }}
                 >
-                  {loggingOut ? "Logging out..." : "Logout"}
+                  {loggingOut ? "Signing out..." : "Sign out"}
                 </Button>
               </Box>
             </CardContent>
