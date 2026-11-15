@@ -1,5 +1,7 @@
 "use client";
 
+import CompanySettingsPanel from "./company-settings.client";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
@@ -37,11 +39,8 @@ type MeResponse = {
 
 type ThemeMode = "Light" | "Dark" | "System";
 
-const BUSINESS_NAME_KEY = "insightboard_business_name";
 const THEME_MODE_KEY = "insightboard_theme_mode";
 
-const DEFAULT_BUSINESS_NAME = "InsightBoard CRM";
-const DEFAULT_CURRENCY = "BHD";
 const DEFAULT_THEME_MODE: ThemeMode = "Light";
 
 function getUserFromResponse(response: MeResponse): User | null {
@@ -58,52 +57,9 @@ function notifyThemeChanged() {
   window.dispatchEvent(new Event("insightboard-theme-changed"));
 }
 
-function cleanSingleLineText(value: string) {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function hasUnsafeCharacters(value: string) {
-  return /[<>{}\[\]`$|\\]/.test(value);
-}
-
-function hasUnsafePattern(value: string) {
-  return /(javascript:|data:|on\w+\s*=|<\s*script)/i.test(value);
-}
-
-function validateBusinessName(value: string) {
-  const cleanedValue = cleanSingleLineText(value);
-
-  if (!cleanedValue) {
-    return {
-      value: DEFAULT_BUSINESS_NAME,
-      error: "",
-    };
-  }
-
-  if (cleanedValue.length > 80) {
-    return {
-      value: cleanedValue,
-      error: "Business name must be 80 characters or less",
-    };
-  }
-
-  if (hasUnsafeCharacters(cleanedValue) || hasUnsafePattern(cleanedValue)) {
-    return {
-      value: cleanedValue,
-      error: "Business name contains invalid characters",
-    };
-  }
-
-  return {
-    value: cleanedValue,
-    error: "",
-  };
-}
-
-export default function SettingsPage() {
+export default function SettingsPage({ canEditCompany }: { canEditCompany: boolean }) {
 
   const [user, setUser] = useState<User | null>(null);
-  const [businessName, setBusinessName] = useState(DEFAULT_BUSINESS_NAME);
   const [themeMode, setThemeMode] = useState<ThemeMode>(DEFAULT_THEME_MODE);
 
   const [loading, setLoading] = useState(true);
@@ -132,10 +88,8 @@ export default function SettingsPage() {
   const loadPreferences = useCallback(() => {
     if (typeof window === "undefined") return;
 
-    const savedBusinessName = getPreference(BUSINESS_NAME_KEY);
     const savedThemeMode = getPreference(THEME_MODE_KEY);
 
-    if (savedBusinessName) setBusinessName(savedBusinessName);
     if (isThemeMode(savedThemeMode)) setThemeMode(savedThemeMode);
   }, []);
 
@@ -145,18 +99,8 @@ export default function SettingsPage() {
     setSuccess("");
 
     try {
-      const businessNameValidation = validateBusinessName(businessName);
-
-      if (businessNameValidation.error) {
-        setError(businessNameValidation.error);
-        setSavingPreferences(false);
-        return;
-      }
-
-      setPreference(BUSINESS_NAME_KEY, businessNameValidation.value);
       setPreference(THEME_MODE_KEY, themeMode);
 
-      setBusinessName(businessNameValidation.value);
       notifyThemeChanged();
 
       setSuccess("Settings saved successfully");
@@ -168,10 +112,8 @@ export default function SettingsPage() {
   }
 
   function handleResetPreferences() {
-    removePreference(BUSINESS_NAME_KEY);
     removePreference(THEME_MODE_KEY);
 
-    setBusinessName(DEFAULT_BUSINESS_NAME);
     setThemeMode(DEFAULT_THEME_MODE);
 
     notifyThemeChanged();
@@ -229,7 +171,25 @@ export default function SettingsPage() {
   }
 
   return (
-    <Box sx={{ position: "relative", overflow: "hidden", pb: 2 }}>
+    <Box
+      sx={(theme) => ({
+        position: "relative",
+        overflow: "hidden",
+        pb: 2,
+        "& .MuiCard-root": {
+          borderRadius: 3,
+          border: `1px solid ${alpha(theme.palette.text.primary, 0.12)}`,
+          backgroundColor: alpha(theme.palette.background.paper, 0.86),
+          backgroundImage: "none",
+          backdropFilter: "blur(12px)",
+          boxShadow: "none",
+          "&::before": { display: "none" },
+        },
+        "& .MuiCard-root .MuiBox-root, & .MuiButton-root": {
+          boxShadow: "none",
+        },
+      })}
+    >
  
 
      
@@ -316,8 +276,7 @@ export default function SettingsPage() {
                   color="text.secondary"
                   sx={{ mt: 1, maxWidth: 760, lineHeight: 1.8 }}
                 >
-                  Manage account information, dashboard preferences, local
-                  business labels and theme mode from one clean place.
+                  Manage company settings, your account and your theme.
                 </Typography>
               </Box>
 
@@ -331,8 +290,6 @@ export default function SettingsPage() {
                 }}
               >
                 {[
-                  { label: "Business", value: businessName },
-                  { label: "Currency", value: DEFAULT_CURRENCY },
                   { label: "Theme", value: themeMode },
                 ].map((item) => (
                   <Box
@@ -620,46 +577,16 @@ export default function SettingsPage() {
                       Dashboard Preferences
                     </Typography>
                     <Typography color="text.secondary" sx={{ mt: 0.3 }}>
-                      Customize local dashboard preferences and theme mode.
+                      Manage company details and your personal theme.
                     </Typography>
                   </Box>
                 </Box>
               </Box>
 
               <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <TextField
-                  label="Business Name"
-                  value={businessName}
-                  onChange={(event) => setBusinessName(event.target.value)}
-                  fullWidth
-                  helperText="Used as the local dashboard business label."
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: 3,
-                    },
-                  }}
-                />
+                <CompanySettingsPanel editable={canEditCompany} />
 
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-                    gap: 2,
-                  }}
-                >
-                  <TextField
-                    label="Default Currency"
-                    value={`${DEFAULT_CURRENCY} — Bahraini Dinar`}
-                    fullWidth
-                    disabled
-                    helperText="InsightBoard currently uses Bahraini Dinar only."
-                    sx={{
-                      "& .MuiOutlinedInput-root": {
-                        borderRadius: 3,
-                      },
-                    }}
-                  />
-
+                <Box>
                   <TextField
                     select
                     label="Theme Mode"
@@ -689,7 +616,7 @@ export default function SettingsPage() {
                     bgcolor: (theme) => alpha(theme.palette.info.main, 0.08),
                   }}
                 >
-                  Demo settings are saved locally in your browser for preview purposes.
+                  Your theme preference is saved in this browser.
                 </Alert>
 
                 <Box
@@ -713,7 +640,7 @@ export default function SettingsPage() {
                         `0 14px 32px ${alpha(theme.palette.primary.main, 0.24)}`,
                     }}
                   >
-                    {savingPreferences ? "Saving..." : "Save Settings"}
+                    {savingPreferences ? "Saving..." : "Save Theme"}
                   </Button>
 
                   <Button
@@ -726,7 +653,7 @@ export default function SettingsPage() {
                       px: 3,
                     }}
                   >
-                    Reset
+                    Reset Theme
                   </Button>
                 </Box>
               </Box>

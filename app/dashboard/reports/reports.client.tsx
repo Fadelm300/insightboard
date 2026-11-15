@@ -1,5 +1,7 @@
 "use client";
 
+import type { CompanySettings } from "@/lib/companySettings";
+
 import { usePermission } from "@/components/access/PermissionProvider";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -169,7 +171,7 @@ async function fetchAllPaginatedList<T>(endpoint: string, keys: string[]) {
   ];
 }
 
-export default function ReportsPage() {
+export default function ReportsPage({ companySettings }: { companySettings: CompanySettings }) {
   const canPrint = usePermission("reports.print");
   const canExport = usePermission("reports.export");
   const [summary, setSummary] = useState<FinanceSummary>(emptySummary);
@@ -1181,10 +1183,10 @@ useEffect(() => {
           </style>
         </head>
         <body>
-          <h1>InsightBoard Reports</h1>
+          <h1>${escapeHtml(companySettings.name)} Reports</h1>
           ${projects.some((project) => project.price === null) ? "<p>Some projects are awaiting pricing. Project-value totals include priced projects only.</p>" : ""}
           <div class="subtitle">
-            Generated at ${escapeHtml(formatReportGeneratedAt())}
+            Generated at ${escapeHtml(formatReportGeneratedAt(undefined, companySettings.timeZone))}
           </div>
 
           ${buildHtmlTable("Summary", ["Metric", "Value"], summaryRows)}
@@ -1367,9 +1369,9 @@ useEffect(() => {
           </style>
         </head>
         <body>
-          <h1>InsightBoard Filtered Report</h1>
+          <h1>${escapeHtml(companySettings.name)} Filtered Report</h1>
           <div class="subtitle">
-            Generated at ${escapeHtml(formatReportGeneratedAt())}
+            Generated at ${escapeHtml(formatReportGeneratedAt(undefined, companySettings.timeZone))}
           </div>
 
           <div class="filter-box">

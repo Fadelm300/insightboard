@@ -138,5 +138,5 @@ test("printed report timestamps use explicit Latin digits and a Gregorian Englis
   assert.match(value, /9 Nov 2026/);
   assert.match(value, /17:42:55/);
   assert.doesNotMatch(value, /[\u0600-\u06ff]/);
-  assert.equal((page.match(/Generated at \$\{escapeHtml\(formatReportGeneratedAt\(\)\)\}/g) || []).length, 2);
+  assert.equal((page.match(/Generated at \$\{escapeHtml\(formatReportGeneratedAt\(undefined, companySettings\.timeZone\)\)\}/g) || []).length, 2);
 });

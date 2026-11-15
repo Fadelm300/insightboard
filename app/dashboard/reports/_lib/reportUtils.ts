@@ -63,8 +63,9 @@ export function extractObject<T>(
   return fallback;
 }
 
-export function formatReportGeneratedAt(date: Date = new Date()): string {
+export function formatReportGeneratedAt(date: Date = new Date(), timeZone?: string): string {
   return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
     dateStyle: "medium",
     timeStyle: "medium",
     calendar: "gregory",

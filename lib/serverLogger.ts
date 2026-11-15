@@ -8,7 +8,8 @@ type ServerErrorEvent =
   | "GET_PROJECT_FINANCE_SUMMARY_ERROR"
   | "GET_PROJECTS_FINANCE_SUMMARY_ERROR"
   | "GET_FINANCE_SUMMARY_ERROR"
-  | "DATABASE_DIAGNOSTIC_ERROR";
+  | "DATABASE_DIAGNOSTIC_ERROR"
+  | "COMPANY_SETTINGS_ERROR";
 
 export function logServerError(event: ServerErrorEvent) {
   // Log a known operation name, never raw errors, tokens, credentials or records.
