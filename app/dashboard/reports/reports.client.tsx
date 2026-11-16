@@ -158,17 +158,15 @@ async function fetchAllPaginatedList<T>(endpoint: string, keys: string[]) {
     return firstItems;
   }
 
-  const remainingResponses = await Promise.all(
-    Array.from({ length: totalPages - 1 }, (_, index) => {
-      const page = index + 2;
-      return apiFetch<ApiResponse>(`${endpoint}?page=${page}&limit=50`);
-    }),
-  );
+  const items = [...firstItems];
 
-  return [
-    ...firstItems,
-    ...remainingResponses.flatMap((response) => extractList<T>(response, keys)),
-  ];
+  // Fetch one page per resource at a time so large reports cannot fan out over all pages.
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await apiFetch<ApiResponse>(`${endpoint}?page=${page}&limit=50`);
+    items.push(...extractList<T>(response, keys));
+  }
+
+  return items;
 }
 
 export default function ReportsPage({ companySettings }: { companySettings: CompanySettings }) {

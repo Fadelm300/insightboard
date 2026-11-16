@@ -1,49 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
-  Alert,
   Box,
   Card,
   CardContent,
-  CircularProgress,
   Divider,
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 
-import { apiFetch } from "@/lib/apiClient";
-
-type FinanceSummary = {
-  totalRevenue?: number;
-  totalExpenses?: number;
-  netProfit?: number;
-  revenueCount?: number;
-  expenseCount?: number;
-};
-
-type FinanceSummaryResponse = {
-  success?: boolean;
-  message?: string;
-  data?: FinanceSummary;
-  totalRevenue?: number;
-  totalExpenses?: number;
-  netProfit?: number;
-  revenueCount?: number;
-  expenseCount?: number;
-};
-
-function getSummaryFromResponse(response: FinanceSummaryResponse): FinanceSummary {
-  const data = response.data ?? response;
-
-  return {
-    totalRevenue: Number(data.totalRevenue ?? 0),
-    totalExpenses: Number(data.totalExpenses ?? 0),
-    netProfit: Number(data.netProfit ?? 0),
-    revenueCount: Number(data.revenueCount ?? 0),
-    expenseCount: Number(data.expenseCount ?? 0),
-  };
-}
+import type { DashboardOverview } from "@/lib/dashboardOverviewTypes";
 
 function formatCurrency(value?: number) {
   return `BHD ${Number(value ?? 0).toLocaleString("en-US", {
@@ -52,42 +18,8 @@ function formatCurrency(value?: number) {
   })}`;
 }
 
-export default function RevenueSummary() {
+export default function RevenueSummary({ summary }: { summary: DashboardOverview["summary"] }) {
   const theme = useTheme();
-
-  const [summary, setSummary] = useState<FinanceSummary>({
-    totalRevenue: 0,
-    totalExpenses: 0,
-    netProfit: 0,
-    revenueCount: 0,
-    expenseCount: 0,
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function fetchSummary() {
-      try {
-        setError("");
-
-        const response = await apiFetch<FinanceSummaryResponse>(
-          "/api/finance/summary"
-        );
-
-        setSummary(getSummaryFromResponse(response));
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to load revenue summary";
-
-        setError(message);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchSummary();
-  }, []);
 
   const netProfit = Number(summary.netProfit ?? 0);
   const profitColor =
@@ -185,7 +117,7 @@ export default function RevenueSummary() {
             </Typography>
           </Box>
 
-          {!loading && !error && (
+          {(
             <Box
               sx={{
                 px: 1.4,
@@ -210,21 +142,7 @@ export default function RevenueSummary() {
           )}
         </Box>
 
-        {loading && (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-            <CircularProgress size={28} />
-          </Box>
-        )}
-
-        {!loading && error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {!loading &&
-          !error &&
-          summaryItems.map((item, index) => (
+        {summaryItems.map((item, index) => (
             <Box key={item.label}>
               <Box
                 sx={{

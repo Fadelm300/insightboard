@@ -4,17 +4,7 @@ import { NextRequest } from "next/server";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
 import { authorizeRequest } from "@/lib/authorization";
-import Revenue from "@/models/Revenue";
-import Expense from "@/models/Expense";
-
-type MonthlyFinanceItem = {
-  month: string;
-  revenue: number;
-  expenses: number;
-  profit: number;
-  revenueCount: number;
-  expenseCount: number;
-};
+import { readMonthlyFinance } from "@/lib/dashboardFinance";
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,88 +13,7 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const revenueMonthly = await Revenue.aggregate([
-      { $match: { isDeleted: { $ne: true } } },
-      {
-        $group: {
-          _id: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: "$paymentDate",
-            },
-          },
-          revenue: { $sum: "$amount" },
-          revenueCount: { $sum: 1 },
-        },
-      },
-      {
-        $sort: {
-          _id: 1,
-        },
-      },
-    ]);
-
-    const expenseMonthly = await Expense.aggregate([
-      { $match: { isDeleted: { $ne: true } } },
-      {
-        $group: {
-          _id: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: "$date",
-            },
-          },
-          expenses: { $sum: "$amount" },
-          expenseCount: { $sum: 1 },
-        },
-      },
-      {
-        $sort: {
-          _id: 1,
-        },
-      },
-    ]);
-
-    const monthlyMap = new Map<string, MonthlyFinanceItem>();
-
-    for (const item of revenueMonthly) {
-      monthlyMap.set(item._id, {
-        month: item._id,
-        revenue: item.revenue,
-        expenses: 0,
-        profit: item.revenue,
-        revenueCount: item.revenueCount,
-        expenseCount: 0,
-      });
-    }
-
-    for (const item of expenseMonthly) {
-      const existing = monthlyMap.get(item._id);
-
-      if (existing) {
-        existing.expenses = item.expenses;
-        existing.expenseCount = item.expenseCount;
-        existing.profit = existing.revenue - item.expenses;
-      } else {
-        monthlyMap.set(item._id, {
-          month: item._id,
-          revenue: 0,
-          expenses: item.expenses,
-          profit: 0 - item.expenses,
-          revenueCount: 0,
-          expenseCount: item.expenseCount,
-        });
-      }
-    }
-
-    const monthly = Array.from(monthlyMap.values()).sort((a, b) =>
-      a.month.localeCompare(b.month)
-    );
-
-    return successResponse(
-      { monthly },
-      "Monthly finance data fetched successfully"
-    );
+    return successResponse({ monthly: await readMonthlyFinance() }, "Monthly finance data fetched successfully");
   } catch {
     logServerError("GET_MONTHLY_FINANCE_ERROR");
     return errorResponse("Server error", 500);

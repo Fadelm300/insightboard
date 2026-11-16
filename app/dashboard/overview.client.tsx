@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Box, CircularProgress, Grid, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Alert, Box, Button, Grid, Skeleton, Typography } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
 import HandshakeIcon from "@mui/icons-material/Handshake";
 import PaymentsIcon from "@mui/icons-material/Payments";
@@ -16,57 +16,7 @@ import RecentDeals from "@/components/dashboard/RecentDeals";
 import RevenueSummary from "@/components/dashboard/RevenueSummary";
 import { apiFetch } from "@/lib/apiClient";
 
-type Client = {
-  _id: string;
-  companyName: string;
-};
-
-type Deal = {
-  _id: string;
-  title: string;
-  status: string;
-};
-
-type Project = {
-  _id: string;
-  name: string;
-  status?: string;
-  paymentStatus?: string;
-};
-
-type FinanceSummary = {
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  revenueCount: number;
-  expenseCount: number;
-};
-
-type MonthlyFinance = {
-  month: string;
-  revenue: number;
-  expenses: number;
-  profit: number;
-};
-
-type ApiListResponse<T> = {
-  success?: boolean;
-  message?: string;
-  data?: T[] | Record<string, T[]>;
-  clients?: T[];
-  deals?: T[];
-  projects?: T[];
-  monthly?: T[];
-  months?: T[];
-  items?: T[];
-  records?: T[];
-};
-
-type ApiObjectResponse<T> = {
-  success?: boolean;
-  message?: string;
-  data?: T;
-};
+import type { DashboardOverview } from "@/lib/dashboardOverviewTypes";
 
 const icons = [
   <PeopleIcon key="clients" />,
@@ -75,122 +25,67 @@ const icons = [
   <TrendingUpIcon key="profit" />,
 ];
 
-const emptySummary: FinanceSummary = {
-  totalRevenue: 0,
-  totalExpenses: 0,
-  netProfit: 0,
-  revenueCount: 0,
-  expenseCount: 0,
-};
-
-function extractList<T>(response: ApiListResponse<T>, keys: string[]): T[] {
-  if (Array.isArray(response.data)) return response.data;
-
-  if (response.data && !Array.isArray(response.data)) {
-    for (const key of keys) {
-      const value = response.data[key];
-
-      if (Array.isArray(value)) {
-        return value;
-      }
-    }
-  }
-
-  for (const key of keys) {
-    const value = response[key as keyof ApiListResponse<T>];
-
-    if (Array.isArray(value)) {
-      return value as T[];
-    }
-  }
-
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.records)) return response.records;
-
-  return [];
-}
-
-function extractObject<T>(response: ApiObjectResponse<T>, fallback: T): T {
-  if (response.data) return response.data;
-  return fallback;
-}
-
 function formatMoney(value: number) {
   return `${Number(value || 0).toFixed(2)} BHD`;
 }
 
 export default function DashboardPage() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [summary, setSummary] = useState<FinanceSummary>(emptySummary);
-  const [monthly, setMonthly] = useState<MonthlyFinance[]>([]);
-
-  const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
-const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      apiFetch<{ data: DashboardOverview }>("/api/dashboard/overview", { signal: controller.signal })
+        .then(({ data }) => {
+          if (!controller.signal.aborted) setOverview(data);
+        })
+        .catch((cause: unknown) => {
+          if (!controller.signal.aborted) {
+            setError(cause instanceof Error ? cause.message : "Failed to load dashboard data");
+          }
+        });
+    }, 0);
 
-    try {
-      const [
-        clientsResponse,
-        dealsResponse,
-        projectsResponse,
-        summaryResponse,
-        monthlyResponse,
-      ] = await Promise.all([
-        apiFetch<ApiListResponse<Client>>("/api/clients"),
-        apiFetch<ApiListResponse<Deal>>("/api/deals"),
-        apiFetch<ApiListResponse<Project>>("/api/projects"),
-        apiFetch<ApiObjectResponse<FinanceSummary>>("/api/finance/summary"),
-        apiFetch<ApiListResponse<MonthlyFinance>>("/api/finance/monthly"),
-      ]);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [attempt]);
 
-      setClients(extractList(clientsResponse, ["clients"]));
-      setDeals(extractList(dealsResponse, ["deals"]));
-      setProjects(extractList(projectsResponse, ["projects"]));
-      setSummary(extractObject(summaryResponse, emptySummary));
-      setMonthly(extractList(monthlyResponse, ["monthly", "months"]));
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load dashboard data";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  if (error) {
+    return (
+      <Alert severity="error" action={<Button color="inherit" onClick={() => {
+        setError("");
+        setAttempt((previous) => previous + 1);
+      }}>Retry</Button>}>
+        {error}
+      </Alert>
+    );
+  }
 
-useEffect(() => {
-  const timeoutId = window.setTimeout(() => {
-    void fetchDashboardData();
-  }, 0);
+  if (!overview) {
+    return (
+      <Grid container spacing={{ xs: 2, md: 3 }} aria-label="Loading dashboard" aria-busy="true">
+        {[0, 1, 2, 3].map((index) => (
+          <Grid key={index} size={{ xs: 12, sm: 6, lg: 3 }}>
+            <Skeleton variant="rounded" height={120} />
+          </Grid>
+        ))}
+        <Grid size={{ xs: 12, lg: 8 }}><Skeleton variant="rounded" height={280} /></Grid>
+        <Grid size={{ xs: 12, lg: 4 }}><Skeleton variant="rounded" height={280} /></Grid>
+      </Grid>
+    );
+  }
 
-  return () => window.clearTimeout(timeoutId);
-}, [fetchDashboardData]);
-  const activeDealsCount = useMemo(() => {
-    return deals.filter(
-      (deal) => deal.status !== "Closed Won" && deal.status !== "Closed Lost"
-    ).length;
-  }, [deals]);
-
-  const latestMonthRevenue = useMemo(() => {
-    if (monthly.length === 0) return 0;
-
-    const latestMonth = monthly[monthly.length - 1];
-    return Number(latestMonth?.revenue || 0);
-  }, [monthly]);
-
-  const pendingPaymentsCount = useMemo(() => {
-    return projects.filter((project) => project.paymentStatus !== "Paid")
-      .length;
-  }, [projects]);
+  const { clientCount, activeDealsCount, pendingPaymentsCount, summary, monthly } = overview;
+  const latestMonthRevenue = monthly.at(-1)?.revenue ?? 0;
 
   const dashboardStats = [
     {
       title: "Total Clients",
-      value: String(clients.length),
+      value: String(clientCount),
       helperText: "Active CRM clients",
       icon: icons[0],
       tone: "primary" as const,
@@ -218,22 +113,6 @@ useEffect(() => {
     },
   ];
 
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          minHeight: "60vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "text.primary",
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   return (
     <Box
       sx={{
@@ -259,12 +138,6 @@ useEffect(() => {
         </Typography>
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError("")}>
-          {error}
-        </Alert>
-      )}
-
       <Grid container spacing={{ xs: 2, md: 3 }}>
         {dashboardStats.map((stat) => (
           <Grid key={stat.title} size={{ xs: 12, sm: 6, lg: 3 }}>
@@ -279,23 +152,23 @@ useEffect(() => {
         ))}
 
         <Grid size={{ xs: 12, lg: 8 }}>
-          <RecentDeals />
+          <RecentDeals deals={overview.recentDeals} />
         </Grid>
 
         <Grid size={{ xs: 12, lg: 4 }}>
-          <RevenueSummary />
+          <RevenueSummary summary={summary} />
         </Grid>
 
         <Grid size={{ xs: 12, lg: 8 }}>
-          <RevenueChart />
+          <RevenueChart monthlyData={monthly} />
         </Grid>
 
         <Grid size={{ xs: 12, lg: 4 }}>
-          <ProjectStatusChart />
+          <ProjectStatusChart counts={overview.projectStatusCounts} />
         </Grid>
 
         <Grid size={{ xs: 12 }}>
-          <DealsPipelineChart />
+          <DealsPipelineChart counts={overview.dealStatusCounts} />
         </Grid>
       </Grid>
     </Box>

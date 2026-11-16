@@ -1,13 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
   Box,
   Card,
   CardContent,
   Chip,
-  CircularProgress,
   Table,
   TableBody,
   TableCell,
@@ -18,63 +15,12 @@ import {
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 
-import { apiFetch } from "@/lib/apiClient";
+import type { DashboardOverview } from "@/lib/dashboardOverviewTypes";
 
-type Client = {
-  _id: string;
-  companyName: string;
-  contactPerson?: string;
-  email?: string;
-};
+type Deal = DashboardOverview["recentDeals"][number];
 
-type Deal = {
-  _id: string;
-  title: string;
-  status: string;
-  estimatedBudget?: number;
-  finalPrice?: number;
-  probability?: number;
-  clientId?: Client | string;
-  createdAt?: string;
-};
-
-type DealsResponse = {
-  success?: boolean;
-  message?: string;
-  data?:
-    | Deal[]
-    | {
-        deals?: Deal[];
-        items?: Deal[];
-        records?: Deal[];
-      };
-  deals?: Deal[];
-  items?: Deal[];
-  records?: Deal[];
-};
-
-function getDealsFromResponse(response: DealsResponse): Deal[] {
-  if (Array.isArray(response.data)) return response.data;
-
-  if (response.data && !Array.isArray(response.data)) {
-    if (Array.isArray(response.data.deals)) return response.data.deals;
-    if (Array.isArray(response.data.items)) return response.data.items;
-    if (Array.isArray(response.data.records)) return response.data.records;
-  }
-
-  if (Array.isArray(response.deals)) return response.deals;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.records)) return response.records;
-
-  return [];
-}
-
-function getClientName(clientId?: Client | string) {
-  if (typeof clientId === "object" && clientId?.companyName) {
-    return clientId.companyName;
-  }
-
-  return "-";
+function getClientName(clientId: Deal["clientId"]) {
+  return clientId?.companyName || "-";
 }
 
 function formatMoney(value?: number) {
@@ -107,39 +53,9 @@ function getStatusColor(
   return "default";
 }
 
-export default function RecentDeals() {
+export default function RecentDeals({ deals }: { deals: DashboardOverview["recentDeals"] }) {
   const theme = useTheme();
 
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const fetchDeals = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await apiFetch<DealsResponse>("/api/deals");
-      const allDeals = getDealsFromResponse(response);
-
-      setDeals(allDeals.slice(0, 5));
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load recent deals";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-      useEffect(() => {
-        const timeoutId = window.setTimeout(() => {
-          void fetchDeals();
-        }, 0);
-
-        return () => window.clearTimeout(timeoutId);
-      }, [fetchDeals]);
-      
   return (
     <Card
       sx={{
@@ -209,7 +125,7 @@ export default function RecentDeals() {
             </Typography>
           </Box>
 
-          {!loading && !error && deals.length > 0 && (
+          {deals.length > 0 && (
             <Box
               sx={{
                 px: 1.4,
@@ -231,13 +147,7 @@ export default function RecentDeals() {
           )}
         </Box>
 
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-            <CircularProgress />
-          </Box>
-        ) : error ? (
-          <Alert severity="error">{error}</Alert>
-        ) : deals.length === 0 ? (
+        {deals.length === 0 ? (
           <Typography color="text.secondary">No deals yet.</Typography>
         ) : (
           <TableContainer
