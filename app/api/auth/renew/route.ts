@@ -1,3 +1,4 @@
+import { readBoundedJsonObject } from "@/lib/boundedJson";
 import { NextRequest } from "next/server";
 
 import { renewSession } from "@/lib/auth";
@@ -8,7 +9,15 @@ export async function POST(req: NextRequest) {
   if (!isTrustedMutation(req)) return errorResponse("Forbidden", 403);
 
   try {
-    const body = await req.json().catch(() => null);
+    const parsed = await readBoundedJsonObject(req, 1024);
+    if (!parsed.ok) {
+      return errorResponse(
+        parsed.status === 413 ? "Request body is too large" :
+          parsed.status === 415 ? "Expected application/json" : "Invalid renewal request",
+        parsed.status,
+      );
+    }
+    const body = parsed.value;
     if (body?.mode !== "continue" && body?.mode !== "activity") {
       return errorResponse("Invalid renewal request", 400);
     }

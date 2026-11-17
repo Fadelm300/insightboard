@@ -1,3 +1,4 @@
+import { readBoundedJsonObject } from "@/lib/boundedJson";
 import { logServerError } from "@/lib/serverLogger";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
@@ -39,11 +40,12 @@ export async function POST(req: NextRequest) {
 
   try {
 
-    const body = await req.json().catch(() => null);
-
-    if (!body) {
-      return loginFail("Invalid login request");
+    const parsed = await readBoundedJsonObject(req, 4096);
+    if (!parsed.ok) {
+      if (parsed.status === 400) return loginFail("Invalid login request");
+      return errorResponse(parsed.status === 413 ? "Request body is too large" : "Expected application/json", parsed.status);
     }
+    const body = parsed.value;
 
     if (typeof body.email !== "string" || typeof body.password !== "string") {
       return loginFail("Invalid email or password");

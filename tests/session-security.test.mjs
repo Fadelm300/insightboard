@@ -14,7 +14,7 @@ function load(relative, dependencies = {}, env = {}, Clock = Date) {
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
   const exports = {};
   vm.runInNewContext(compiled, {
-    exports, Buffer, URL, Date: Clock, process: { env },
+    exports, Buffer, TextDecoder, URL, Date: Clock, process: { env },
     require(name) {
       if (!(name in dependencies)) throw new Error(`Unexpected import: ${name}`);
       return dependencies[name];
@@ -247,6 +247,7 @@ function loginHarness(userPresent = true, validPassword = true) {
     "@/lib/auth": { createSession: async (id, req, response) => { created += 1; response.headers.set("set-cookie", "test-session=opaque; HttpOnly"); } },
     "@/lib/permissions": permissions,
     "@/lib/sessionPolicy": policy,
+    "@/lib/boundedJson": load("lib/boundedJson.ts"),
     "@/lib/loginRateLimit": { allowLoginAttempt: async () => true },
     "@/models/User": { __esModule: true, default: { findOne: async () => userPresent ? { _id: "user-1", name: "Example", email: "example@example.invalid", role: "admin", password: "test-hash" } : null } },
   });
@@ -254,7 +255,11 @@ function loginHarness(userPresent = true, validPassword = true) {
 }
 
 function loginRequest(body, origin = "https://crm.example") {
-  return { method: "POST", url: "https://crm.example/api/auth/login", headers: headers(origin), json: async () => body };
+  const requestHeaders = headers(origin);
+  requestHeaders.set("content-type", "application/json");
+  return new Request("https://crm.example/api/auth/login", {
+    method: "POST", headers: requestHeaders, body: JSON.stringify(body),
+  });
 }
 
 test("login rejects cross-origin and object-injection payloads before connecting", async () => {
@@ -268,8 +273,9 @@ test("unknown and wrong-password users receive identical failures and both run b
   const request = loginRequest({ email: "example@example.invalid", password: "password" });
   const missing = loginHarness(false, false);
   const wrong = loginHarness(true, false);
+  const duplicate = request.clone();
   const a = await missing.route.POST(request);
-  const b = await wrong.route.POST(request);
+  const b = await wrong.route.POST(duplicate);
   assert.equal(a.status, 401);
   assert.equal(b.status, 401);
   assert.equal(await a.text(), await b.text());
@@ -287,4 +293,37 @@ test("successful login issues a cookie without returning a bearer token or passw
   assert.equal("token" in body.data, false);
   assert.equal("password" in body.data.user, false);
   assert.match(response.headers.get("set-cookie"), /HttpOnly/);
+});
+
+
+test("login rejects a body larger than its limit before database or password work", async () => {
+  const h = loginHarness();
+  const response = await h.route.POST(loginRequest({ email: "qa@example.invalid", password: "x".repeat(4096) }));
+  assert.equal(response.status, 413);
+  assert.equal(h.connected, 0);
+  assert.equal(h.comparisons, 0);
+});
+
+test("bounded JSON validates byte size and content type on the actual request stream", async () => {
+  const { readBoundedJsonObject } = load("lib/boundedJson.ts");
+  const url = "https://crm.example";
+  const jsonHeaders = { "content-type": "application/json; charset=utf-8" };
+  const payload = JSON.stringify({ name: "البحرين" });
+  const bytes = Buffer.byteLength(payload);
+  const body = () => new Request(url, { method: "POST", headers: jsonHeaders, body: payload });
+
+  assert.equal((await readBoundedJsonObject(body(), bytes)).value.name, "البحرين");
+  assert.equal((await readBoundedJsonObject(body(), bytes - 1)).status, 413);
+
+  const oversized = new Request(url, {
+    method: "POST", headers: { ...jsonHeaders, "content-length": "999999" }, body: "{}",
+  });
+  assert.equal((await readBoundedJsonObject(oversized, 20)).status, 413);
+  assert.equal(oversized.bodyUsed, false);
+
+  for (const invalid of ["[]", "null", "{"]) {
+    const req = new Request(url, { method: "POST", headers: jsonHeaders, body: invalid });
+    assert.equal((await readBoundedJsonObject(req, 20)).status, 400);
+  }
+  assert.equal((await readBoundedJsonObject(new Request(url, { method: "POST", body: "{}" }), 20)).status, 415);
 });

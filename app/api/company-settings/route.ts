@@ -1,3 +1,4 @@
+import { readBoundedJsonObject } from "@/lib/boundedJson";
 import type { NextRequest } from "next/server";
 import { authorizeRequest } from "@/lib/authorization";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
@@ -26,7 +27,15 @@ export async function PUT(req: NextRequest) {
   const demoResponse = blockIfDemoMode();
   if (demoResponse) return demoResponse;
 
-  const settings = parseCompanySettings(await req.json().catch(() => null));
+  const parsed = await readBoundedJsonObject(req, 4096);
+  if (!parsed.ok) {
+    return errorResponse(
+      parsed.status === 413 ? "Request body is too large" :
+        parsed.status === 415 ? "Expected application/json" : "Invalid JSON body",
+      parsed.status,
+    );
+  }
+  const settings = parseCompanySettings(parsed.value);
   if (!settings) return errorResponse("Enter a valid company name and time zone", 400);
 
   try {
