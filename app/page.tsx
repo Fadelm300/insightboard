@@ -36,6 +36,7 @@ export default async function Home() {
   return <Landing
     initialLanguage={language}
     initialTheme={theme}
+    showLegalReviewLinks={process.env.LEGAL_NOTICE_MODE === "review"}
     fontClasses={
       sans.variable + " " + serif.variable + " " + arabic.variable
     }

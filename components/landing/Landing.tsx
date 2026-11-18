@@ -34,10 +34,12 @@ function savePreference(name: "theme" | "language", value: string) {
 export default function Landing({
   initialLanguage,
   initialTheme,
+  showLegalReviewLinks,
   fontClasses
 }: {
   initialLanguage: Language;
   initialTheme: Theme;
+  showLegalReviewLinks: boolean;
   fontClasses: string;
 }) {
   const [language, setLanguage] = useState(initialLanguage);
@@ -782,6 +784,10 @@ export default function Landing({
           <Link href="/login">
             {t.login}
           </Link>
+          {showLegalReviewLinks && <>
+            <Link href="/privacy">{rtl ? "الخصوصية" : "Privacy"}</Link>
+            <Link href="/terms">{rtl ? "شروط الاستخدام" : "Terms of use"}</Link>
+          </>}
         </nav>
 
         <p>
