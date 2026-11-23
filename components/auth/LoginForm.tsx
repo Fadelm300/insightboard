@@ -33,8 +33,6 @@ type LoginResponse = {
     };
   };
 };
-const DEMO_EMAIL = "admin@insightboard.demo";
-const DEMO_PASSWORD = "Admin@123456";
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -162,8 +160,8 @@ export default function LoginForm({ demoMode }: { demoMode: boolean }) {
   const compactLaptop =
     "@media (min-width: 900px) and (max-width: 1700px) and (max-height: 850px)";
 
-  const [email, setEmail] = useState(demoMode ? DEMO_EMAIL : "");
-  const [password, setPassword] = useState(demoMode ? DEMO_PASSWORD : "");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -843,7 +841,7 @@ const [demoNotice, setDemoNotice] = useState("");
     },
   }}
 >
-  Demo access is pre-filled for preview only.
+  Demo accounts have view-only access. Sign in with the account shared with you.
 </Alert>
 )}
           {error && (

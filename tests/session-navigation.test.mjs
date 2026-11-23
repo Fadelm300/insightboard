@@ -108,7 +108,7 @@ test("repeated logout and cross-tab events navigate once without refreshing", as
   h.resolveInitial(); await settle();
   for (let i=0;i<20;i++) { h.auth("logout"); h.broadcast("logout"); }
   assert.equal(h.navigations.length, 1);
-  assert.equal(h.navigations[0], "/login");
+  assert.equal(h.navigations[0], "/");
   assert.equal(h.refreshes, 0);
   h.cleanup();
 });

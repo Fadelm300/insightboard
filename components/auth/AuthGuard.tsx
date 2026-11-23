@@ -42,7 +42,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       leaving.current = true;
       snapshot = null;
       setChecking(true);
-      router.replace(reason === "expired" ? "/login?reason=session-expired" : "/login");
+      router.replace(reason === "expired" ? "/login?reason=session-expired" : "/");
       return true;
     }
 
