@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   devIndicators: false,
   poweredByHeader: false,
+  ...(process.env.CONTAINER_BUILD === "1" ? { output: "standalone" } : {}),
   async headers() {
     return [
       {

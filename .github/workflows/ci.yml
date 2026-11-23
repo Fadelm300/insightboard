@@ -1,0 +1,99 @@
+name: InsightBoard pipeline
+
+on:
+  pull_request:
+  push:
+    branches: [main, demo, ci-pipeline, initial-integration]
+  workflow_dispatch:
+    inputs:
+      deploy_preview:
+        description: Deploy this validated ref to the configured Vercel Preview project
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: insightboard-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  checks:
+    name: Lint, tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:security
+      - run: npm run build
+
+  container:
+    name: Docker build and smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Build the image
+        run: docker build --tag insightboard:${GITHUB_SHA} .
+      - name: Start the container
+        run: docker run --detach --name insightboard-ci --publish 127.0.0.1:3000:3000 insightboard:${GITHUB_SHA}
+      - name: Verify the running image
+        run: node scripts/smoke-deployment.mjs http://127.0.0.1:3000
+      - name: Collect container logs on failure
+        if: failure()
+        run: docker logs insightboard-ci || true
+      - name: Remove the test container
+        if: always()
+        run: docker rm -f insightboard-ci || true
+
+  preview:
+    name: Deploy and verify Vercel Preview
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_preview
+    needs: [checks, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Deploy the validated commit to Preview
+        id: deploy
+        env:
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TELEMETRY_DISABLED: 1
+        run: |
+          : "${VERCEL_ORG_ID:?Configure VERCEL_ORG_ID in the preview environment}"
+          : "${VERCEL_PROJECT_ID:?Configure VERCEL_PROJECT_ID in the preview environment}"
+          : "${VERCEL_TOKEN:?Configure VERCEL_TOKEN in the preview environment}"
+          url="$(npx --yes vercel@65.16.0 deploy --yes --token "$VERCEL_TOKEN" --target=preview)"
+          [[ "$url" =~ ^https://[a-z0-9-]+\.vercel\.app/?$ ]]
+          printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+      - name: Verify Preview without a signed-in user
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: node scripts/smoke-deployment.mjs "$PREVIEW_URL"
