@@ -1,10 +1,8 @@
-import type { Metadata } from "next";
-import LegalNotice from "@/components/landing/LegalNotice";
+import LegalNotice, { legalMetadata } from "@/components/landing/LegalNotice";
 
-export const metadata: Metadata = {
-  title: "Terms of use | InsightBoard",
-  robots: { index: false, follow: false },
-};
+export function generateMetadata() {
+  return legalMetadata("terms");
+}
 
 export default function TermsPage() {
   return <LegalNotice kind="terms" />;

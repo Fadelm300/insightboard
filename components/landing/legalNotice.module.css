@@ -1,27 +1,309 @@
-.notice {
-  max-width: 48rem;
-  margin-inline: auto;
-  padding: 3rem 1.5rem;
-  line-height: 1.7;
+.legal {
+  --policy-header-offset: 6.75rem;
 }
 
-.notice h1 {
-  margin-block: 1.5rem 0.5rem;
+.legalHeader {
+  gap: 0.45rem 1.5rem;
 }
 
-.notice section {
-  margin-block: 1.5rem;
+.policyNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem 1.35rem;
+  font-size: 0.9rem;
 }
 
-.notice h2 {
-  margin-block: 0 0.25rem;
+.legal .policyNav a {
+  display: inline-flex;
+  min-block-size: 44px;
+  align-items: center;
+  color: var(--ib-muted);
+  text-underline-offset: 0.35em;
 }
 
-.notice p {
-  margin-block: 0 1rem;
+.legal .policyNav a:hover,
+.legal .policyNav a[aria-current="page"] {
+  color: var(--ib-accent);
+  text-decoration: underline;
 }
 
-.notice a {
+.hero {
+  border-block-end: 1px solid var(--ib-border);
+}
+
+.intro {
+  padding-block: clamp(2rem, 5vw, 4.25rem);
+}
+
+.legal .intro h1 {
+  font-size: clamp(2.65rem, 5.7vw, 5rem);
+  margin-block: 0.25rem 0.85rem;
+}
+
+.legal[lang="ar"] .intro h1 {
+  font-size: clamp(2.15rem, 4.65vw, 4.1rem);
+}
+
+.intro > p {
+  max-width: 42rem;
+}
+
+.legal .homeLink {
+  display: inline-flex;
+  min-block-size: 44px;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.88rem;
+  color: var(--ib-accent);
+}
+
+.homeLink:hover {
   text-decoration: underline;
   text-underline-offset: 0.2em;
+}
+
+.detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-block-start: 1.25rem;
+  color: var(--ib-muted);
+  font-size: 0.86rem;
+}
+
+.detail span {
+  border-inline-start: 1px solid var(--ib-border);
+  padding-inline-start: 1rem;
+}
+
+.notice {
+  padding-block: clamp(1.75rem, 4vw, 3.25rem) clamp(3rem, 6vw, 6rem);
+}
+
+.legalBody {
+  display: grid;
+  grid-template-columns: minmax(10rem, 16rem) minmax(0, 1fr);
+  gap: clamp(1.5rem, 5vw, 5.5rem);
+}
+
+.contents {
+  align-self: start;
+  position: sticky;
+  inset-block-start: var(--policy-header-offset);
+  border-inline-start: 1px solid var(--ib-border);
+  padding-inline-start: 1rem;
+}
+
+.legal .contents p {
+  margin-block-end: 0.5rem;
+}
+
+.contents a {
+  display: block;
+  padding-block: 0.38rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--ib-muted);
+}
+
+.contents a:hover,
+.sections footer a,
+.preferenceBody a {
+  color: var(--ib-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.legal .sections section {
+  scroll-margin-block-start: var(--policy-header-offset);
+  margin-block-end: 1.85rem;
+  padding-block-end: 1.85rem;
+  border-block-end: 1px solid var(--ib-border);
+}
+
+.legal .sections h2,
+.legal .cookiePreferences h2 {
+  font-size: clamp(1.4rem, 2.6vw, 1.95rem);
+  line-height: 1.35;
+}
+
+.sections section p {
+  max-width: 68ch;
+  margin-block-start: 0.55rem;
+  color: var(--ib-muted);
+}
+
+.sections footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-size: 0.94rem;
+}
+
+.cookieLink {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: start;
+}
+
+.cookieLink:hover,
+.cookieBanner p a {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.cookieBanner {
+  position: fixed;
+  z-index: 40;
+  inset-inline: 1rem;
+  inset-block-end: 1rem;
+  max-width: 57rem;
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  padding-inline-end: 4rem;
+  background: var(--ib-surface);
+  color: var(--ib-text);
+  border: 1px solid var(--ib-border);
+  border-radius: 0.55rem;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 12%);
+}
+
+.cookieBanner p {
+  color: var(--ib-muted);
+  font-size: 0.91rem;
+  margin-block-start: 0.2rem;
+}
+
+.cookieActions {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 0.45rem;
+}
+
+.cookieActions button {
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--ib-accent);
+  border-radius: 0.35rem;
+  background: var(--ib-accent-soft);
+}
+
+.cookieActions button:hover {
+  border-color: var(--ib-accent-hover);
+  text-decoration: underline;
+}
+
+.cookieActions button:focus-visible,
+.cookieDismiss:focus-visible,
+.cookieLink:focus-visible {
+  outline: 2px solid var(--ib-focus);
+  outline-offset: 2px;
+}
+
+.cookieDismiss {
+  position: absolute;
+  inset-inline-end: 0.5rem;
+  inset-block-start: 0.5rem;
+  inline-size: 44px;
+  block-size: 44px;
+  background: transparent;
+  border: 0;
+  border-radius: 0.35rem;
+  font-size: 1.35rem;
+  color: inherit;
+}
+
+.cookieDismiss:hover {
+  background: var(--ib-accent-soft);
+}
+
+.cookiePreferences {
+  max-width: 64rem;
+}
+
+.cookiePreferences section {
+  display: grid;
+  grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr);
+  align-items: start;
+  gap: 0.65rem clamp(1rem, 5vw, 5rem);
+  padding-block: 1.65rem;
+  border-block-end: 1px solid var(--ib-border);
+}
+
+.cookiePreferences section:first-child {
+  padding-block-start: 0;
+}
+
+.preferenceBody {
+  max-width: 60ch;
+  color: var(--ib-muted);
+}
+
+.legal .preferenceStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-block-end: 0.4rem;
+  color: var(--ib-text);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.preferenceStatus::before {
+  content: "";
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--ib-muted);
+}
+
+.preferenceStatus[data-enabled="true"]::before {
+  background: var(--ib-accent);
+  border-color: var(--ib-accent);
+}
+
+.preferenceBody .cookieActions {
+  margin-block-start: 1rem;
+}
+
+.preferenceBody .cookieActions button {
+  padding-inline: 1rem;
+  border-color: var(--ib-border);
+  background: var(--ib-bg);
+}
+
+.preferenceBody .cookieActions button:hover,
+.preferenceBody .cookieActions button[aria-pressed="true"] {
+  border-color: var(--ib-accent);
+  background: var(--ib-accent-soft);
+}
+
+@media (max-width: 700px) {
+  .legal { --policy-header-offset: 8.25rem; }
+  .legal .legalHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    min-height: 0;
+    padding-block: 0.6rem 0;
+  }
+  .legalBody,
+  .cookiePreferences section { grid-template-columns: minmax(0, 1fr); }
+  .contents {
+    position: static;
+    border-inline-start: 0;
+    padding-inline-start: 0;
+    border-block-end: 1px solid var(--ib-border);
+    padding-block-end: 0.9rem;
+  }
+  .cookieBanner { align-items: start; flex-direction: column; }
 }

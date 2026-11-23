@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import CookieConsent from "./CookieConsent";
 
 import {
   content,
@@ -34,12 +35,12 @@ function savePreference(name: "theme" | "language", value: string) {
 export default function Landing({
   initialLanguage,
   initialTheme,
-  showLegalReviewLinks,
+  showInitialCookieBanner,
   fontClasses
 }: {
   initialLanguage: Language;
   initialTheme: Theme;
-  showLegalReviewLinks: boolean;
+  showInitialCookieBanner: boolean;
   fontClasses: string;
 }) {
   const [language, setLanguage] = useState(initialLanguage);
@@ -784,10 +785,9 @@ export default function Landing({
           <Link href="/login">
             {t.login}
           </Link>
-          {showLegalReviewLinks && <>
-            <Link href="/privacy">{rtl ? "الخصوصية" : "Privacy"}</Link>
-            <Link href="/terms">{rtl ? "شروط الاستخدام" : "Terms of use"}</Link>
-          </>}
+          <Link href="/privacy">{rtl ? "الخصوصية" : "Privacy"}</Link>
+          <Link href="/terms">{rtl ? "شروط الاستخدام" : "Terms of use"}</Link>
+          <CookieConsent language={language} showInitialBanner={showInitialCookieBanner} />
         </nav>
 
         <p>
