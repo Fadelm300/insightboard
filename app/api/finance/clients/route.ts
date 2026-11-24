@@ -1,8 +1,10 @@
+import { clientLabelDTO } from "@/lib/crmData";
+import { logServerError } from "@/lib/serverLogger";
 import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Project from "@/models/Project";
 import Revenue from "@/models/Revenue";
 import Expense from "@/models/Expense";
@@ -25,11 +27,8 @@ type ClientFinanceItem = {
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "finance.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -45,6 +44,7 @@ export async function GET(req: NextRequest) {
     const revenueSummary = await Revenue.aggregate([
       {
         $match: {
+          isDeleted: { $ne: true },
           projectId: { $in: projectIds },
         },
       },
@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
     const expenseSummary = await Expense.aggregate([
       {
         $match: {
+          isDeleted: { $ne: true },
           projectId: { $in: projectIds },
         },
       },
@@ -147,11 +148,11 @@ export async function GET(req: NextRequest) {
     );
 
     return successResponse(
-      { clients },
+      { clients: clients.map((item) => ({ ...item, client: clientLabelDTO(item.client, authorization.user!) })) },
       "Clients finance summary fetched successfully"
     );
-  } catch (error) {
-    console.error("GET_CLIENTS_FINANCE_SUMMARY_ERROR:", error);
+  } catch {
+    logServerError("GET_CLIENTS_FINANCE_SUMMARY_ERROR");
     return errorResponse("Server error", 500);
   }
 }

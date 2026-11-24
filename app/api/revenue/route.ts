@@ -1,9 +1,12 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
+import { hasPermission } from "@/lib/permissions";
+import { canReadProjectFinancials, revenueDTO, parseCrmMoney, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Revenue from "@/models/Revenue";
 import Project from "@/models/Project";
 import Client from "@/models/Client";
@@ -31,8 +34,6 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   "Other",
 ];
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
-
 const UNSAFE_TEXT_PATTERN =
   /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
 
@@ -51,15 +52,6 @@ function cleanText(value: unknown) {
 
 function hasUnsafeText(value: string) {
   return UNSAFE_TEXT_PATTERN.test(value);
-}
-
-function isValidMoney(value: unknown) {
-  const stringValue = getString(value);
-  return MONEY_PATTERN.test(stringValue);
-}
-
-function parseMoney(value: unknown) {
-  return Number(getString(value));
 }
 
 function isValidDate(value: string) {
@@ -108,11 +100,10 @@ function validateRevenuePayload(
     return { error: "Amount is required" };
   }
 
-  if (!isValidMoney(body.amount)) {
-    return { error: "Amount must be a valid number with up to 2 decimals" };
+  const amount = parseCrmMoney(body.amount);
+  if (amount === null) {
+    return { error: "Amount must have up to 2 decimals and be within the supported range" };
   }
-
-  const amount = parseMoney(body.amount);
 
   if (amount <= 0) {
     return { error: "Amount must be greater than 0" };
@@ -160,45 +151,41 @@ function validateRevenuePayload(
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "revenue.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+    const query = parseCrmListQuery(searchParams);
+    if (!query.data) return errorResponse(query.error, 400);
 
-    const limit = Math.min(
-      Math.max(Number(searchParams.get("limit")) || 10, 1),
-      50
-    );
+    const { page, limit, skip, search, pattern } = query.data;
 
-    const search = searchParams.get("search")?.trim() || "";
-    const skip = (page - 1) * limit;
-
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
 
     if (search) {
       const matchingProjects = await Project.find({
         isDeleted: { $ne: true },
         $or: [
-          { name: { $regex: search, $options: "i" } },
-          { type: { $regex: search, $options: "i" } },
-          { status: { $regex: search, $options: "i" } },
-          { paymentStatus: { $regex: search, $options: "i" } },
+          { name: { $regex: pattern, $options: "i" } },
+          ...(hasPermission(authorization.user!, "projects.read") ? [
+            { type: { $regex: pattern, $options: "i" } },
+            { status: { $regex: pattern, $options: "i" } },
+          ] : []),
+          ...(canReadProjectFinancials(authorization.user!) ? [{ paymentStatus: { $regex: pattern, $options: "i" } }] : []),
         ],
       }).select("_id");
 
       const matchingClients = await Client.find({
         isDeleted: { $ne: true },
         $or: [
-          { companyName: { $regex: search, $options: "i" } },
-          { contactPerson: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
+          { companyName: { $regex: pattern, $options: "i" } },
+          ...(hasPermission(authorization.user!, "clients.read") ? [
+            { contactPerson: { $regex: pattern, $options: "i" } },
+            { email: { $regex: pattern, $options: "i" } },
+          ] : []),
         ],
       }).select("_id");
 
@@ -206,9 +193,9 @@ export async function GET(req: NextRequest) {
       const matchingClientIds = matchingClients.map((client) => client._id);
 
       const searchConditions: Record<string, unknown>[] = [
-        { paymentMethod: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { notes: { $regex: search, $options: "i" } },
+        { paymentMethod: { $regex: pattern, $options: "i" } },
+        { description: { $regex: pattern, $options: "i" } },
+        { notes: { $regex: pattern, $options: "i" } },
       ];
 
       const amount = Number(search);
@@ -244,7 +231,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(
       {
-        revenues,
+        revenues: revenues.map((record) => revenueDTO(record, authorization.user!)),
         total,
         page,
         limit,
@@ -259,11 +246,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "revenue.create");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -277,30 +261,38 @@ export async function POST(req: NextRequest) {
 
     const payload = validation.data;
 
-    const project = await Project.findOne({
-      _id: payload.projectId,
-      isDeleted: { $ne: true },
+    return await withCrmWriteTransaction(async (session) => {
+      const project = await Project.findOne({
+        _id: payload.projectId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!project) {
+        return errorResponse("Project not found", 404);
+      }
+
+      const linkedClient = await Client.findOne({
+        _id: project.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+      if (!linkedClient) return errorResponse("Client not found", 404);
+
+      const [revenue] = await Revenue.create([{
+        projectId: project._id,
+        clientId: project.clientId,
+        amount: payload.amount,
+        paymentDate: payload.paymentDate || new Date(),
+        paymentMethod: payload.paymentMethod,
+        description: payload.description,
+        notes: payload.notes,
+      }], { session, ordered: true });
+
+      return successResponse(
+        { revenue: revenueDTO(revenue, authorization.user!) },
+        "Revenue record created successfully",
+        201
+      );
     });
-
-    if (!project) {
-      return errorResponse("Project not found", 404);
-    }
-
-    const revenue = await Revenue.create({
-      projectId: project._id,
-      clientId: project.clientId,
-      amount: payload.amount,
-      paymentDate: payload.paymentDate || new Date(),
-      paymentMethod: payload.paymentMethod,
-      description: payload.description,
-      notes: payload.notes,
-    });
-
-    return successResponse(
-      { revenue },
-      "Revenue record created successfully",
-      201
-    );
   } catch {
     return errorResponse("Server error", 500);
   }

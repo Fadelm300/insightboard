@@ -1,0 +1,9 @@
+services:
+  app:
+    build:
+      context: .
+    init: true
+    env_file:
+      - ${INSIGHTBOARD_QA_ENV:-.env.local}
+    ports:
+      - "127.0.0.1:3100:3000"

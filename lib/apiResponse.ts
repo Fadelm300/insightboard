@@ -11,7 +11,7 @@ export function successResponse(
       message,
       data,
     },
-    { status }
+    { status, headers: { "Cache-Control": "no-store" } }
   );
 }
 
@@ -21,6 +21,6 @@ export function errorResponse(message = "Error", status = 500) {
       success: false,
       message,
     },
-    { status }
+    { status, headers: { "Cache-Control": "no-store" } }
   );
 }

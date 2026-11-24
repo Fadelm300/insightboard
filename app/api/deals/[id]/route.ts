@@ -1,9 +1,13 @@
+import Project from "@/models/Project";
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
+import { archiveCrmRecord } from "@/lib/crmArchive";
+import { dealDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Deal from "@/models/Deal";
 import Client from "@/models/Client";
 
@@ -205,8 +209,8 @@ function validateDealPayload(
   try {
     const clientId = getStringField(data, "clientId");
     const title = cleanSingleLineText(getStringField(data, "title"));
-    const estimatedBudget = getNumberField(data, "estimatedBudget");
-    const finalPrice = getNumberField(data, "finalPrice");
+    const estimatedBudget = parseCrmMoney(data.estimatedBudget);
+    const finalPrice = parseCrmMoney(data.finalPrice === "" ? 0 : data.finalPrice ?? 0);
     const status = (getStringField(data, "status") || "Lead") as DealStatus;
     const probability = getNumberField(data, "probability");
     const expectedCloseDateValue = getStringField(data, "expectedCloseDate");
@@ -223,17 +227,17 @@ function validateDealPayload(
       return { values: null, error: titleError };
     }
 
-    if (estimatedBudget <= 0) {
+    if (estimatedBudget === null || estimatedBudget <= 0) {
       return {
         values: null,
-        error: "Estimated budget must be greater than 0",
+        error: "Estimated budget must be a positive amount with up to 2 decimals within the supported range",
       };
     }
 
-    if (finalPrice < 0) {
+    if (finalPrice === null) {
       return {
         values: null,
-        error: "Final price cannot be negative",
+        error: "Final price must be a non-negative amount with up to 2 decimals within the supported range",
       };
     }
 
@@ -284,12 +288,10 @@ const { date: expectedCloseDate, error: dateError } =
     };
 
     return { values, error: "" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid deal data";
-
+  } catch {
     return {
       values: null,
-      error: message,
+      error: "Invalid deal data",
     };
   }
 }
@@ -306,11 +308,8 @@ async function getDealId(context: RouteContext) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -329,7 +328,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Deal not found", 404);
     }
 
-    return successResponse({ deal }, "Deal fetched successfully");
+    return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -337,11 +336,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.update");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -353,50 +349,54 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     }
     const body = await req.json().catch(() => null);
 
-    const existingDeal = await Deal.findOne({
-      _id: id,
-      isDeleted: { $ne: true },
-    });
-
-    if (!existingDeal) {
-      return errorResponse("Deal not found", 404);
-    }
-
-    const { values, error } = validateDealPayload(
-      body,
-      existingDeal.expectedCloseDate
-    );
-
-    if (!values) {
-      return errorResponse(error, 400);
-    }
-
-    const client = await Client.findOne({
-      _id: values.clientId,
-      isDeleted: { $ne: true },
-    });
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    const deal = await Deal.findOneAndUpdate(
-      {
+    return await withCrmWriteTransaction(async (session) => {
+      const existingDeal = await Deal.findOne({
         _id: id,
         isDeleted: { $ne: true },
-      },
-      values,
-      {
-        new: true,
-        runValidators: true,
+      }, null, { session });
+
+      if (!existingDeal) {
+        return errorResponse("Deal not found", 404);
       }
-    ).populate("clientId", "companyName contactPerson email status");
 
-    if (!deal) {
-      return errorResponse("Deal not found", 404);
-    }
+      const { values, error } = validateDealPayload(
+        body,
+        existingDeal.expectedCloseDate
+      );
 
-    return successResponse({ deal }, "Deal updated successfully");
+      if (!values) {
+        return errorResponse(error, 400);
+      }
+
+      const client = await Client.findOne({
+        _id: values.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!client) {
+        return errorResponse("Client not found", 404);
+      }
+
+      if ((String(existingDeal.clientId) !== values.clientId || values.status !== "Closed Won") &&
+          await Project.exists({ dealId: id }).session(session)) {
+        return errorResponse("A linked project requires this deal to remain Closed Won for the same client", 409);
+      }
+
+      const deal = await Deal.findOneAndUpdate({
+          _id: id,
+          isDeleted: { $ne: true },
+        }, values, { session,
+          returnDocument: "after",
+          runValidators: true,
+        }
+      ).populate("clientId", "companyName contactPerson email status");
+
+      if (!deal) {
+        return errorResponse("Deal not found", 404);
+      }
+
+      return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal updated successfully");
+    });
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -404,11 +404,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.delete");
+    if (authorization.response) return authorization.response;
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
@@ -419,24 +416,13 @@ if (demoBlock) return demoBlock;
       return errorResponse("Invalid deal id", 400);
     }
 
-    const deal = await Deal.findOneAndUpdate(
-      {
-        _id: id,
-        isDeleted: { $ne: true },
-      },
-      {
-        isDeleted: true,
-      },
-      {
-        new: true,
-      }
-    );
-
-    if (!deal) {
-      return errorResponse("Deal not found", 404);
+    const result = await archiveCrmRecord("deals", id, authorization.user!.id);
+    if (result === "missing") return errorResponse("Deal not found", 404);
+    if (result === "active-dependants") {
+      return errorResponse("Archive the linked project before archiving this deal", 409);
     }
 
-    return successResponse({}, "Deal deleted successfully");
+    return successResponse({}, "Deal archived successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

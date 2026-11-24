@@ -1,26 +1,25 @@
+import { paymentProgressPercent, projectPaymentBalance } from "@/lib/paymentProgress";
+import { logServerError } from "@/lib/serverLogger";
 import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Project from "@/models/Project";
 import Revenue from "@/models/Revenue";
 import Expense from "@/models/Expense";
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "finance.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
     const projects = await Project.find({
       isDeleted: { $ne: true },
     })
-      .select("name type price cost profit status paymentStatus")
+      .select("name type price agreedExtras cost profit status paymentStatus")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -29,6 +28,7 @@ export async function GET(req: NextRequest) {
     const revenueSummary = await Revenue.aggregate([
       {
         $match: {
+          isDeleted: { $ne: true },
           projectId: { $in: projectIds },
         },
       },
@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
     const expenseSummary = await Expense.aggregate([
       {
         $match: {
+          isDeleted: { $ne: true },
           projectId: { $in: projectIds },
         },
       },
@@ -89,12 +90,9 @@ export async function GET(req: NextRequest) {
       const expenseCount = expenseData?.expenseCount || 0;
 
       const netProfit = totalRevenue - totalExpenses;
-      const remainingBalance = Math.max(project.price - totalRevenue, 0);
+      const balance = projectPaymentBalance(totalRevenue, project.price);
 
-      const paymentProgress =
-        project.price > 0
-          ? Math.min(Math.round((totalRevenue / project.price) * 100), 100)
-          : 0;
+      const paymentProgress = paymentProgressPercent(totalRevenue, project.price);
 
       return {
         project: {
@@ -102,6 +100,7 @@ export async function GET(req: NextRequest) {
           name: project.name,
           type: project.type,
           price: project.price,
+          agreedExtras: project.agreedExtras ?? 0,
           cost: project.cost,
           profit: project.profit,
           status: project.status,
@@ -110,7 +109,7 @@ export async function GET(req: NextRequest) {
         totalRevenue,
         totalExpenses,
         netProfit,
-        remainingBalance,
+        ...balance,
         paymentProgress,
         revenueCount,
         expenseCount,
@@ -121,8 +120,8 @@ export async function GET(req: NextRequest) {
       { projects: projectFinance },
       "Projects finance summary fetched successfully"
     );
-  } catch (error) {
-    console.error("GET_PROJECTS_FINANCE_SUMMARY_ERROR:", error);
+  } catch {
+    logServerError("GET_PROJECTS_FINANCE_SUMMARY_ERROR");
     return errorResponse("Server error", 500);
   }
 }

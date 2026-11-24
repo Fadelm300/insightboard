@@ -1,8 +1,10 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
+import { clientDTO, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Client from "@/models/Client";
 import { blockIfDemoMode } from "@/lib/demoMode";
 type ClientStatus =
@@ -248,51 +250,40 @@ function validateClientPayload(body: unknown) {
     }
 
     return { values, error: "" };
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Invalid client data";
-
+  } catch {
     return {
       values: null,
-      error: message,
+      error: "Invalid client data",
     };
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "clients.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+    const query = parseCrmListQuery(searchParams);
+    if (!query.data) return errorResponse(query.error, 400);
 
-    const limit = Math.min(
-      Math.max(Number(searchParams.get("limit")) || 10, 1),
-      50,
-    );
-
-    const search = searchParams.get("search")?.trim() || "";
-    const skip = (page - 1) * limit;
+    const { page, limit, skip, search, pattern } = query.data;
 
    const filter: ClientFilter = {
   isDeleted: { $ne: true },
 };
     if (search) {
       filter.$or = [
-        { companyName: { $regex: search, $options: "i" } },
-        { businessType: { $regex: search, $options: "i" } },
-        { contactPerson: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { location: { $regex: search, $options: "i" } },
-        { status: { $regex: search, $options: "i" } },
+        { companyName: { $regex: pattern, $options: "i" } },
+        { businessType: { $regex: pattern, $options: "i" } },
+        { contactPerson: { $regex: pattern, $options: "i" } },
+        { phone: { $regex: pattern, $options: "i" } },
+        { email: { $regex: pattern, $options: "i" } },
+        { location: { $regex: pattern, $options: "i" } },
+        { status: { $regex: pattern, $options: "i" } },
       ];
     }
 
@@ -306,7 +297,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(
       {
-        clients,
+        clients: clients.map((record) => clientDTO(record)),
         total,
         page,
         limit,
@@ -321,11 +312,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "clients.create");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -337,9 +325,11 @@ export async function POST(req: NextRequest) {
       return errorResponse(error, 400);
     }
 
-    const client = await Client.create(values);
+    return await withCrmWriteTransaction(async (session) => {
+      const [client] = await Client.create([values], { session, ordered: true });
 
-    return successResponse({ client }, "Client created successfully", 201);
+      return successResponse({ client: clientDTO(client) }, "Client created successfully", 201);
+    });
   } catch {
     return errorResponse("Server error", 500);
   }

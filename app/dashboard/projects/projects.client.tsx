@@ -1,0 +1,2056 @@
+"use client";
+import ArchiveRequestButton from "@/components/archive/ArchiveRequestButton";
+
+import { usePermission } from "@/components/access/PermissionProvider";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createListRequestGuard, LIST_SEARCH_DELAY_MS } from "@/lib/listSearch";
+import type React from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Menu,
+  MenuItem,
+  Pagination,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import type { SxProps, Theme } from "@mui/material/styles";
+
+import { apiFetch } from "@/lib/apiClient";
+
+type ProjectType =
+  | "Landing Page"
+  | "Business Website"
+  | "Portfolio Website"
+  | "E-commerce Website"
+  | "Redesign"
+  | "Maintenance";
+
+type ProjectStatus =
+  | "Not Started"
+  | "In Progress"
+  | "Review"
+  | "Completed"
+  | "Cancelled";
+
+type PaymentStatus = "Unpaid" | "Partially Paid" | "Paid";
+
+type Client = {
+  _id: string;
+  companyName: string;
+  contactPerson?: string;
+  email?: string;
+};
+
+type Deal = {
+  _id: string;
+  title: string;
+  clientId?: Client | string;
+  status?: string;
+  finalPrice?: number;
+  estimatedBudget?: number;
+};
+
+type ProjectClient = Client | string;
+type ProjectDeal = Deal | string;
+
+type Project = {
+  _id: string;
+  clientId: ProjectClient;
+  dealId?: ProjectDeal;
+  name: string;
+  type: ProjectType;
+  price?: number | null;
+  agreedExtras?: number;
+  cost?: number | null;
+  profit?: number | null;
+  deadline?: string;
+  status: ProjectStatus;
+  paymentStatus?: PaymentStatus;
+  description?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type ProjectFormData = {
+  clientId: string;
+  dealId: string;
+  name: string;
+  type: ProjectType;
+  price: string;
+  agreedExtras: string;
+  cost: string;
+  deadline: string;
+  status: ProjectStatus;
+  paymentStatus: PaymentStatus;
+  description: string;
+  notes: string;
+};
+
+type ProjectFormErrors = Partial<Record<keyof ProjectFormData, string>>;
+
+type ProjectsResponse = {
+  success?: boolean;
+  message?: string;
+  data?:
+    | Project[]
+    | {
+        projects?: Project[];
+        items?: Project[];
+        records?: Project[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
+      };
+  projects?: Project[];
+  items?: Project[];
+  records?: Project[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+};
+
+type ClientsResponse = {
+  success?: boolean;
+  message?: string;
+  data?:
+    | Client[]
+    | {
+        clients?: Client[];
+        items?: Client[];
+        records?: Client[];
+      };
+  clients?: Client[];
+  items?: Client[];
+  records?: Client[];
+};
+
+type DealsResponse = {
+  success?: boolean;
+  message?: string;
+  data?:
+    | Deal[]
+    | {
+        deals?: Deal[];
+        items?: Deal[];
+        records?: Deal[];
+      };
+  deals?: Deal[];
+  items?: Deal[];
+  records?: Deal[];
+};
+
+const PROJECT_TYPES: ProjectType[] = [
+  "Landing Page",
+  "Business Website",
+  "Portfolio Website",
+  "E-commerce Website",
+  "Redesign",
+  "Maintenance",
+];
+
+const PROJECT_STATUSES: ProjectStatus[] = [
+  "Not Started",
+  "In Progress",
+  "Review",
+  "Completed",
+  "Cancelled",
+];
+
+const PAYMENT_STATUSES: PaymentStatus[] = ["Unpaid", "Partially Paid", "Paid"];
+
+const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
+
+const PROJECTS_PER_PAGE = 7;
+
+const emptyForm: ProjectFormData = {
+  clientId: "",
+  dealId: "",
+  name: "",
+  type: "Business Website",
+  price: "",
+  agreedExtras: "0",
+  cost: "0",
+  deadline: "",
+  status: "Not Started",
+  paymentStatus: "Unpaid",
+  description: "",
+  notes: "",
+};
+
+const readonlyTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+  },
+};
+
+const readonlyMultilineTextFieldSx: SxProps<Theme> = {
+  "& .MuiInputBase-input": {
+    cursor: "default",
+    whiteSpace: "pre-wrap",
+  },
+};
+
+const tableHeaderCellSx = {
+  px: { xs: 0.75, sm: 1, md: 1.25, xl: 2 },
+  py: { xs: 1.25, md: 1.75, xl: 2 },
+  fontSize: { xs: 10, sm: 11, md: 12 },
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tableBodyCellSx = {
+  px: { xs: 0.75, sm: 1, md: 1.25, xl: 2 },
+  py: { xs: 1.25, md: 1.75, xl: 2 },
+};
+
+const hideOnPhoneSx = {
+  display: { xs: "none", sm: "table-cell" },
+};
+
+const hideFromMobileSx = {
+  display: { xs: "none", md: "table-cell" },
+};
+
+const hideUntilLargeSx = {
+  display: { xs: "none", lg: "table-cell" },
+};
+
+const hideUntilExtraLargeSx = {
+  display: { xs: "none", xl: "table-cell" },
+};
+
+function getProjectsFromResponse(response: ProjectsResponse): Project[] {
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.projects)) return response.projects;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.projects)) return response.data.projects;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
+
+  return [];
+}
+
+function getPaginationFromResponse(response: ProjectsResponse) {
+  if (response.data && !Array.isArray(response.data)) {
+    return {
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || PROJECTS_PER_PAGE,
+      totalPages: response.data.totalPages || 1,
+    };
+  }
+
+  return {
+    total: response.total || 0,
+    page: response.page || 1,
+    limit: response.limit || PROJECTS_PER_PAGE,
+    totalPages: response.totalPages || 1,
+  };
+}
+
+function getClientsFromResponse(response: ClientsResponse): Client[] {
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.clients)) return response.clients;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.clients)) return response.data.clients;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
+
+  return [];
+}
+
+function getDealsFromResponse(response: DealsResponse): Deal[] {
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.deals)) return response.deals;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.records)) return response.records;
+
+  if (response.data && !Array.isArray(response.data)) {
+    if (Array.isArray(response.data.deals)) return response.data.deals;
+    if (Array.isArray(response.data.items)) return response.data.items;
+    if (Array.isArray(response.data.records)) return response.data.records;
+  }
+
+  return [];
+}
+
+function getClientName(clientId: ProjectClient) {
+  if (typeof clientId === "object" && clientId?.companyName) {
+    return clientId.companyName;
+  }
+
+  return "-";
+}
+
+function getDealName(dealId?: ProjectDeal) {
+  if (!dealId) return "-";
+
+  if (typeof dealId === "object" && dealId?.title) {
+    return dealId.title;
+  }
+
+  return "-";
+}
+
+function getId(value?: { _id: string } | string | null) {
+  if (!value) return "";
+  return typeof value === "object" ? value._id : value;
+}
+
+function getDateInputValue(date?: string) {
+  if (!date) return "";
+  return date.slice(0, 10);
+}
+
+function getTodayInputValue() {
+  const today = new Date();
+  const timezoneOffset = today.getTimezoneOffset() * 60_000;
+  return new Date(today.getTime() - timezoneOffset).toISOString().slice(0, 10);
+}
+
+function formatDate(date?: string) {
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getDeadlineTime(deadline?: string) {
+  if (!deadline) return Number.POSITIVE_INFINITY;
+
+  const time = new Date(deadline).getTime();
+
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+}
+
+function getCreatedAtTime(createdAt?: string) {
+  if (!createdAt) return 0;
+
+  const time = new Date(createdAt).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function cleanSingleLineText(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function cleanMultiLineText(value: string) {
+  return value.trim().replace(/[ \t]+/g, " ");
+}
+
+function hasUnsafeCharacters(value: string) {
+  return /[<>{}\[\]`$|\\]/.test(value);
+}
+
+function hasUnsafePattern(value: string) {
+  return /(javascript:|data:|on\w+\s*=|<\s*script)/i.test(value);
+}
+
+function hasUnsafeText(value: string) {
+  return hasUnsafeCharacters(value) || hasUnsafePattern(value);
+}
+
+function isValidMoney(value: string) {
+  return MONEY_PATTERN.test(value.trim());
+}
+
+function isPastDate(value: string) {
+  const inputDate = new Date(value);
+
+  if (Number.isNaN(inputDate.getTime())) {
+    return true;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  inputDate.setHours(0, 0, 0, 0);
+
+  return inputDate < today;
+}
+
+function validateProjectForm(
+  formData: ProjectFormData,
+  editingProject?: Project | null,
+  manageFinancials = false,
+):
+  | {
+      isValid: true;
+      values: ProjectFormData;
+    }
+  | {
+      isValid: false;
+      errors: ProjectFormErrors;
+    } {
+  const errors: ProjectFormErrors = {};
+
+  const cleanedValues: ProjectFormData = {
+    clientId: formData.clientId.trim(),
+    dealId: formData.dealId.trim(),
+    name: cleanSingleLineText(formData.name),
+    type: formData.type,
+    price: formData.price.trim(),
+    agreedExtras: formData.agreedExtras.trim() || "0",
+    cost: formData.cost.trim() || "0",
+    deadline: formData.deadline.trim(),
+    status: formData.status,
+    paymentStatus: formData.paymentStatus,
+    description: cleanMultiLineText(formData.description),
+    notes: cleanMultiLineText(formData.notes),
+  };
+
+  if (!cleanedValues.clientId) {
+    errors.clientId = "Client is required";
+  }
+
+  if (!cleanedValues.name) {
+    errors.name = "Project name is required";
+  } else if (cleanedValues.name.length > 120) {
+    errors.name = "Project name cannot exceed 120 characters";
+  } else if (hasUnsafeText(cleanedValues.name)) {
+    errors.name = "Project name contains invalid characters";
+  }
+
+  if (!PROJECT_TYPES.includes(cleanedValues.type)) {
+    errors.type = "Invalid project type";
+  }
+
+  if (manageFinancials && cleanedValues.agreedExtras !== "0") {
+    if (!isValidMoney(cleanedValues.agreedExtras) || Number(cleanedValues.agreedExtras) < 0) {
+      errors.agreedExtras = "Enter a valid non-negative amount";
+    } else if (!cleanedValues.price) {
+      errors.price = "Enter the original price before adding agreed extras";
+    }
+  }
+  if (manageFinancials && cleanedValues.price) {
+    if (!isValidMoney(cleanedValues.price) || !Number.isFinite(Number(cleanedValues.price)) || Number(cleanedValues.price) <= 0) {
+      errors.price = "Enter a valid positive price";
+    }
+    if (!isValidMoney(cleanedValues.cost) || !Number.isFinite(Number(cleanedValues.cost)) || Number(cleanedValues.cost) < 0) {
+      errors.cost = "Enter a valid non-negative cost";
+    }
+  }
+
+const originalDeadline = editingProject
+  ? getDateInputValue(editingProject.deadline)
+  : "";
+
+const isDeadlineChanged = cleanedValues.deadline !== originalDeadline;
+
+if (
+  cleanedValues.deadline &&
+  (!editingProject || isDeadlineChanged) &&
+  isPastDate(cleanedValues.deadline)
+) {
+  errors.deadline = "Deadline cannot be in the past";
+}
+
+  if (!PROJECT_STATUSES.includes(cleanedValues.status)) {
+    errors.status = "Invalid project status";
+  }
+
+  if (manageFinancials && cleanedValues.price && !PAYMENT_STATUSES.includes(cleanedValues.paymentStatus)) {
+    errors.paymentStatus = "Invalid payment status";
+  }
+
+  if (cleanedValues.description.length > 1000) {
+    errors.description = "Description cannot exceed 1000 characters";
+  } else if (
+    cleanedValues.description &&
+    hasUnsafeText(cleanedValues.description)
+  ) {
+    errors.description = "Description contains invalid characters";
+  }
+
+  if (cleanedValues.notes.length > 1000) {
+    errors.notes = "Notes cannot exceed 1000 characters";
+  } else if (cleanedValues.notes && hasUnsafeText(cleanedValues.notes)) {
+    errors.notes = "Notes contain invalid characters";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return {
+      isValid: false,
+      errors,
+    };
+  }
+
+  return {
+    isValid: true,
+    values: cleanedValues,
+  };
+}
+
+function getProjectStatusChipSx(status: ProjectStatus): SxProps<Theme> {
+  const statusColors: Record<ProjectStatus, string> = {
+    "Not Started": "#64748B",
+    "In Progress": "#0EA5E9",
+    Review: "#F59E0B",
+    Completed: "#10B981",
+    Cancelled: "#EF4444",
+  };
+
+  const color = statusColors[status];
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
+
+function getPaymentStatusChipSx(status: PaymentStatus): SxProps<Theme> {
+  const statusColors: Record<PaymentStatus, string> = {
+    Unpaid: "#64748B",
+    "Partially Paid": "#F59E0B",
+    Paid: "#10B981",
+  };
+
+  const color = statusColors[status];
+
+  return {
+    height: 26,
+    borderRadius: "999px",
+    fontWeight: 800,
+    fontSize: 12,
+    color,
+    bgcolor: alpha(color, 0.12),
+    border: `1px solid ${alpha(color, 0.25)}`,
+  };
+}
+
+function getProjectInitial(name: string) {
+  return name.trim().charAt(0).toUpperCase() || "P";
+}
+
+function formatBHD(value?: number | null) {
+  if (value === null || value === undefined) return "Pending pricing";
+  return `${Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} BHD`;
+}
+
+function getProfitSx(profit?: number | null) {
+  return {
+    fontWeight: 900,
+    color: (profit ?? 0) >= 0 ? "success.main" : "error.main",
+  } satisfies SxProps<Theme>;
+}
+
+export default function ProjectsPage() {
+  const canCreate = usePermission("projects.create");
+  const financialRead = usePermission("projects.financial.read");
+  const financeRead = usePermission("finance.read");
+  const canReadFinancials = financialRead || financeRead;
+  const canManageFinancials = usePermission("projects.financial.manage");
+  const canUpdate = usePermission("projects.update");
+  const canDelete = usePermission("projects.delete");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
+
+  const [formData, setFormData] = useState<ProjectFormData>(emptyForm);
+  const [formErrors, setFormErrors] = useState<ProjectFormErrors>({});
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [deleteProject, setDeleteProject] = useState<Project | null>(null);
+  const [viewProject, setViewProject] = useState<Project | null>(null);
+  const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+  const [actionProject, setActionProject] = useState<Project | null>(null);
+
+  const [openForm, setOpenForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalProjects, setTotalProjects] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const todayInputValue = getTodayInputValue();
+
+  const sortedProjects = useMemo(() => {
+    return [...projects].sort((firstProject, secondProject) => {
+      const deadlineDifference =
+        getDeadlineTime(firstProject.deadline) -
+        getDeadlineTime(secondProject.deadline);
+
+      if (deadlineDifference !== 0) {
+        return deadlineDifference;
+      }
+
+      return (
+        getCreatedAtTime(secondProject.createdAt) -
+        getCreatedAtTime(firstProject.createdAt)
+      );
+    });
+  }, [projects]);
+
+  const availableDeals = useMemo(() => {
+    return deals.filter((deal) => {
+      const isClosedWon = deal.status === "Closed Won";
+      const isSelectedDeal = deal._id === formData.dealId;
+      const dealClientId = getId(deal.clientId);
+      const belongsToSelectedClient =
+        !formData.clientId ||
+        !dealClientId ||
+        dealClientId === formData.clientId;
+
+      return (isClosedWon || isSelectedDeal) && belongsToSelectedClient;
+    });
+  }, [deals, formData.clientId, formData.dealId]);
+
+  const listRequests = useRef(createListRequestGuard());
+  const appliedSearch = useRef("");
+  const pendingMenuAction = useRef<(() => void) | null>(null);
+  const fetchData = useCallback(async (pageNumber: number, search: string) => {
+      const request = listRequests.current.start();
+      appliedSearch.current = search.trim();
+      setActionAnchorEl(null);
+      setLoading(true);
+      setError("");
+      const queryParams = new URLSearchParams({
+          page: String(pageNumber),
+          limit: String(PROJECTS_PER_PAGE),
+      });
+      const cleanSearch = search.trim();
+      if (cleanSearch) {
+          queryParams.set("search", cleanSearch);
+      }
+      try {
+          const projectsResponse = await apiFetch<ProjectsResponse>(`/api/projects?${queryParams.toString()}`, { signal: request.signal });
+          if (!request.isCurrent())
+              return;
+          const pagination = getPaginationFromResponse(projectsResponse);
+          setProjects(getProjectsFromResponse(projectsResponse));
+          setTotalProjects(pagination.total);
+          setTotalPages(Math.max(pagination.totalPages, 1));
+      }
+      catch (err) {
+          if (!request.isCurrent())
+              return;
+          const message = err instanceof Error ? err.message : "Failed to load projects";
+          setError(message);
+      }
+      finally {
+          if (request.isCurrent())
+              setLoading(false);
+      }
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadLookups() {
+      try {
+        const [clientsResponse, dealsResponse] = await Promise.all([
+          apiFetch<ClientsResponse>("/api/lookups/clients", { signal: controller.signal }),
+          apiFetch<DealsResponse>("/api/lookups/deals", { signal: controller.signal }),
+        ]);
+
+        if (controller.signal.aborted) return;
+        setClients(getClientsFromResponse(clientsResponse));
+        setDeals(getDealsFromResponse(dealsResponse));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setError(error instanceof Error ? error.message : "Failed to load form options");
+      }
+    }
+
+    void loadLookups();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+      const requests = listRequests.current;
+      const timeoutId = window.setTimeout(() => {
+          void fetchData(page, searchQuery);
+      }, searchQuery.trim() && searchQuery.trim() !== appliedSearch.current
+          ? LIST_SEARCH_DELAY_MS : 0);
+      return () => {
+          window.clearTimeout(timeoutId);
+          requests.cancel();
+      };
+  }, [fetchData, page, searchQuery]);
+
+  function handleCreateOpen() {
+    setEditingProject(null);
+    setFormData(emptyForm);
+    setFormErrors({});
+    setOpenForm(true);
+    setError("");
+    setSuccess("");
+  }
+
+  function handleEditOpen(project: Project) {
+    setEditingProject(project);
+
+    setFormData({
+      clientId: getId(project.clientId),
+      dealId: getId(project.dealId),
+      name: project.name || "",
+      type: project.type || "Business Website",
+      price: project.price == null
+        ? ""
+        : String(Number((project.price - (project.agreedExtras ?? 0)).toFixed(2))),
+      agreedExtras: String(project.agreedExtras ?? 0),
+      cost: String(project.cost ?? 0),
+      deadline: getDateInputValue(project.deadline),
+      status: project.status || "Not Started",
+      paymentStatus: project.paymentStatus || "Unpaid",
+      description: project.description || "",
+      notes: project.notes || "",
+    });
+
+    setFormErrors({});
+    setOpenForm(true);
+    setError("");
+    setSuccess("");
+  }
+
+  function handleFormClose() {
+    if (saving) return;
+
+    setOpenForm(false);
+    setEditingProject(null);
+    setFormData(emptyForm);
+    setFormErrors({});
+  }
+
+  function updateFormField<K extends keyof ProjectFormData>(
+    field: K,
+    value: ProjectFormData[K],
+  ) {
+    setFormData((current) => ({
+      ...current,
+      [field]: value,
+    }));
+
+    setFormErrors((current) => ({
+      ...current,
+      [field]: undefined,
+    }));
+  }
+
+  function handleClientSelect(clientId: string) {
+    const selectedDeal = deals.find((deal) => deal._id === formData.dealId);
+    const selectedDealClientId = getId(selectedDeal?.clientId);
+
+    setFormData((current) => ({
+      ...current,
+      clientId,
+      dealId:
+        selectedDealClientId && selectedDealClientId !== clientId
+          ? ""
+          : current.dealId,
+    }));
+
+    setFormErrors((current) => ({
+      ...current,
+      clientId: undefined,
+      dealId: undefined,
+    }));
+  }
+
+  function handleDealSelect(dealId: string) {
+    const selectedDeal = deals.find((deal) => deal._id === dealId);
+    const selectedDealClientId = getId(selectedDeal?.clientId);
+
+    setFormData((current) => ({
+      ...current,
+      dealId,
+      clientId: selectedDealClientId || current.clientId,
+      name: selectedDeal?.title || current.name,
+      price:
+        selectedDeal?.finalPrice !== undefined
+          ? String(selectedDeal.finalPrice)
+          : selectedDeal?.estimatedBudget !== undefined
+            ? String(selectedDeal.estimatedBudget)
+            : current.price,
+    }));
+
+    setFormErrors((current) => ({
+      ...current,
+      dealId: undefined,
+      clientId: undefined,
+      name: undefined,
+      price: undefined,
+    }));
+  }
+
+  function handleActionMenuOpen(
+    event: React.MouseEvent<HTMLElement>,
+    project: Project,
+  ) {
+    setActionAnchorEl(event.currentTarget);
+    setActionProject(project);
+  }
+
+  function handleActionMenuClose() {
+    setActionAnchorEl(null);
+    setActionProject(null);
+  }
+
+  function handleActionMenuExited() {
+    const action = pendingMenuAction.current;
+    pendingMenuAction.current = null;
+    action?.();
+  }
+
+  function handleMenuEdit() {
+    if (!actionProject) return;
+
+    const selectedProject = actionProject;
+    pendingMenuAction.current = () => handleEditOpen(selectedProject);
+    handleActionMenuClose();
+  }
+
+  function handleMenuDelete() {
+    if (!actionProject) return;
+
+    const selectedProject = actionProject;
+    pendingMenuAction.current = () => setDeleteProject(selectedProject);
+    handleActionMenuClose();
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+const validation = validateProjectForm(formData, editingProject, canManageFinancials);
+
+if (!validation.isValid) {
+      setFormErrors(validation.errors);
+      setError("Please fix the highlighted fields");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    setFormErrors({});
+
+    const values = validation.values;
+
+    const payload = {
+      clientId: values.clientId,
+      dealId: values.dealId,
+      name: values.name,
+      type: values.type,
+      ...(canManageFinancials && values.price ? {
+        price: Number((Number(values.price) + Number(values.agreedExtras)).toFixed(2)),
+        agreedExtras: Number(values.agreedExtras),
+        cost: Number(values.cost || 0),
+        paymentStatus: values.paymentStatus,
+      } : {}),
+      deadline: values.deadline,
+      status: values.status,
+      description: values.description,
+      notes: values.notes,
+    };
+
+    try {
+      if (editingProject) {
+        await apiFetch(`/api/projects/${editingProject._id}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+
+        setSuccess("Project updated successfully");
+      } else {
+        await apiFetch("/api/projects", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        setSuccess("Project created successfully");
+      }
+
+      handleFormClose();
+      setPage(1);
+      await fetchData(1, searchQuery);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save project";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteProject) return;
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiFetch(`/api/projects/${deleteProject._id}`, {
+        method: "DELETE",
+      });
+
+      setSuccess("Project archived successfully");
+      setDeleteProject(null);
+      await fetchData(page, searchQuery);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to archive project";
+      setDeleteProject(null);
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Box>
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          flexDirection: { xs: "column", sm: "row" },
+          justifyContent: "space-between",
+          alignItems: { xs: "stretch", sm: "center" },
+          gap: 2,
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+            }}
+          >
+            Projects
+          </Typography>
+
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+            Manage website projects and delivery. Financial fields require a separate permission.
+          </Typography>
+        </Box>
+
+        <Button
+          variant="contained"
+          onClick={handleCreateOpen}
+          sx={{
+            px: 2.5,
+            height: 44,
+            borderRadius: 2,
+            fontWeight: 800,
+            alignSelf: { xs: "stretch", sm: "center" },
+          }} disabled={!canCreate}
+        >
+          Add Project
+        </Button>
+      </Box>
+
+      <Box
+        sx={{
+          mb: 3,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <TextField
+          size="small"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search by project, client, deal, type, status, or payment..."
+          sx={{
+            width: { xs: "100%", sm: 520, md: 620 },
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "background.paper",
+            },
+          }}
+        />
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
+          {error}
+        </Alert>
+      )}
+
+      {success && (
+        <Alert
+          severity="success"
+          sx={{ mb: 2 }}
+          onClose={() => setSuccess("")}
+        >
+          {success}
+        </Alert>
+      )}
+
+      <Card
+        sx={{
+          borderRadius: 4,
+          overflow: "hidden",
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+          bgcolor: "background.paper",
+        }}
+      >
+        <CardContent sx={{ p: 0 }}>
+          {loading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+              <CircularProgress />
+            </Box>
+          ) : projects.length === 0 ? (
+            <Box sx={{ textAlign: "center", py: 8, px: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                {searchQuery.trim() ? "No matching results" : "No projects yet"}
+              </Typography>
+
+              <Typography color="text.secondary" sx={{ mt: 1 }}>
+                {searchQuery.trim() ? "Try another search or clear the search field." : "Convert a closed deal or add a project manually."}
+              </Typography>
+
+              <Button
+                variant="contained"
+                onClick={handleCreateOpen}
+                sx={{ mt: 3, borderRadius: 2, fontWeight: 800 }} disabled={!canCreate}
+              >
+                Add Project
+              </Button>
+            </Box>
+          ) : (
+            <>
+              <TableContainer
+              sx={{
+                width: "100%",
+                maxWidth: "100%",
+                overflowX: "auto",
+              }}
+            >
+              <Table
+                sx={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                    minWidth: 360,
+                }}
+              >
+                <TableHead>
+                  <TableRow
+                    sx={{
+                      bgcolor: (theme) =>
+                        theme.palette.mode === "dark"
+                          ? alpha(theme.palette.primary.main, 0.08)
+                          : alpha(theme.palette.primary.main, 0.04),
+                    }}
+                  >
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: 56,
+                      }}
+                    >
+                      #
+                    </TableCell>
+
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: {
+                          xs: "52%",
+                          sm: "38%",
+                          md: "28%",
+                          lg: "24%",
+                          xl: "22%",
+                        },
+                      }}
+                    >
+                      Project
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "16%", lg: "13%", xl: "11%" },
+                      }}
+                    >
+                      Client
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilExtraLargeSx,
+                        width: { xl: "9%" },
+                      }}
+                    >
+                      Deal
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideFromMobileSx,
+                        width: { md: "14%", lg: "10%", xl: "9%" },
+                      }}
+                    >
+                      Deadline
+                    </TableCell>
+
+                    {canReadFinancials && (<TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilLargeSx,
+                        width: { lg: "8%" },
+                      }}
+                    >
+                      Price
+                    </TableCell>)}
+
+                    {canReadFinancials && (<TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilExtraLargeSx,
+                        width: { xl: "7%" },
+                      }}
+                    >
+                      Cost
+                    </TableCell>)}
+
+                    {canReadFinancials && (<TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: {
+                          xs: "23%",
+                          sm: "20%",
+                          md: "12%",
+                          lg: "8%",
+                          xl: "8%",
+                        },
+                      }}
+                    >
+                      Profit
+                    </TableCell>)}
+
+                    <TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideOnPhoneSx,
+                        width: { sm: "22%", md: "14%", lg: "10%", xl: "10%" },
+                      }}
+                    >
+                      Status
+                    </TableCell>
+
+                    {canReadFinancials && (<TableCell
+                      sx={{
+                        ...tableHeaderCellSx,
+                        ...hideUntilLargeSx,
+                        width: { lg: "12%", xl: "10%" },
+                      }}
+                    >
+                      Payment
+                    </TableCell>)}
+
+                    <TableCell
+                      align="center"
+                      sx={{
+                        ...tableHeaderCellSx,
+                        width: {
+                          xs: "25%",
+                          sm: "20%",
+                          md: "14%",
+                          lg: "10%",
+                          xl: "8%",
+                        },
+                      }}
+                    >
+                      Actions
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+
+                <TableBody>
+                  {sortedProjects.map((project, index) => (
+                    <TableRow
+                      key={project._id}
+                      hover
+                      sx={{
+                        "&:last-child td": {
+                          borderBottom: 0,
+                        },
+                      }}
+                    >
+                      <TableCell
+                        align="center"
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: 56,
+                          fontWeight: 800,
+                          color: "text.secondary",
+                        }}
+                      >
+                        {(page - 1) * PROJECTS_PER_PAGE + index + 1}
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: {
+                            xs: "52%",
+                            sm: "38%",
+                            md: "28%",
+                            lg: "24%",
+                            xl: "22%",
+                          },
+                          minWidth: 0,
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: { xs: 0.75, md: 1.5 },
+                            minWidth: 0,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              width: { xs: 32, md: 40 },
+                              height: { xs: 32, md: 40 },
+                              borderRadius: 2.5,
+                              display: "grid",
+                              placeItems: "center",
+                              flexShrink: 0,
+                              fontWeight: 900,
+                              fontSize: { xs: 12, md: 14 },
+                              color: "primary.main",
+                              bgcolor: (theme) =>
+                                alpha(theme.palette.primary.main, 0.12),
+                              border: (theme) =>
+                                `1px solid ${alpha(
+                                  theme.palette.primary.main,
+                                  0.18,
+                                )}`,
+                            }}
+                          >
+                            {getProjectInitial(project.name)}
+                          </Box>
+
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography
+                              sx={{
+                                fontWeight: 800,
+                                fontSize: { xs: 13, md: 14 },
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {project.name}
+                            </Typography>
+
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{
+                                mt: 0.25,
+                                display: { xs: "none", sm: "block" },
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {project.type}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "16%", lg: "13%", xl: "11%" },
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {getClientName(project.clientId)}
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilExtraLargeSx,
+                          width: { xl: "9%" },
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {getDealName(project.dealId)}
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideFromMobileSx,
+                          width: { md: "14%", lg: "10%", xl: "9%" },
+                          fontWeight: 800,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {formatDate(project.deadline)}
+                      </TableCell>
+
+                      {canReadFinancials && (<TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilLargeSx,
+                          width: { lg: "8%" },
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {formatBHD(project.price)}
+                      </TableCell>)}
+
+                      {canReadFinancials && (<TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilExtraLargeSx,
+                          width: { xl: "7%" },
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {formatBHD(project.cost)}
+                      </TableCell>)}
+
+                      {canReadFinancials && (<TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...getProfitSx(project.profit),
+                          width: {
+                            xs: "23%",
+                            sm: "20%",
+                            md: "12%",
+                            lg: "8%",
+                            xl: "8%",
+                          },
+                          whiteSpace: "nowrap",
+                          fontSize: { xs: 11, sm: 12, md: 14 },
+                        }}
+                      >
+                        {formatBHD(project.profit)}
+                      </TableCell>)}
+
+                      <TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideOnPhoneSx,
+                          width: { sm: "22%", md: "14%", lg: "10%", xl: "10%" },
+                        }}
+                      >
+                        <Chip
+                          label={project.status}
+                          size="small"
+                          sx={getProjectStatusChipSx(project.status)}
+                        />
+                      </TableCell>
+
+                      {canReadFinancials && (<TableCell
+                        sx={{
+                          ...tableBodyCellSx,
+                          ...hideUntilLargeSx,
+                          width: { lg: "12%", xl: "10%" },
+                        }}
+                      >
+                        <Chip
+                          label={project.paymentStatus}
+                          size="small"
+                          sx={getPaymentStatusChipSx(project.paymentStatus ?? "Unpaid")}
+                        />
+                      </TableCell>)}
+
+                      <TableCell
+                        align="right"
+                        sx={{
+                          ...tableBodyCellSx,
+                          width: {
+                            xs: "25%",
+                            sm: "20%",
+                            md: "14%",
+                            lg: "10%",
+                            xl: "8%",
+                          },
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            alignItems: "center",
+                            gap: { xs: 0.5, md: 1 },
+                            flexWrap: "wrap",
+                            rowGap: 1,
+                            "& > .MuiButtonBase-root": {
+                              minWidth: 0,
+                              maxWidth: "100%",
+                              flexShrink: 0,
+                              whiteSpace: "normal",
+                              overflowWrap: "anywhere",
+                            },
+                          }}
+                        >
+                          <ArchiveRequestButton
+                            resource="projects"
+                            recordId={project._id}
+                            label={project.name || "projects record"}
+                          />
+                            <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setViewProject(project)}
+                            sx={{
+                              borderRadius: 2,
+                              fontWeight: 800,
+                              minWidth: { xs: 44, md: 64 },
+                              height: { xs: 30, md: 34 },
+                              px: { xs: 0.75, md: 1.5 },
+                              fontSize: { xs: 11, md: 13 },
+                            }}
+                          >
+                            View
+                          </Button>
+
+                          <IconButton
+                            size="small"
+                            onClick={(event) =>
+                              handleActionMenuOpen(event, project)
+                            }
+                            aria-label={`Open actions for ${project.name}`}
+                            sx={{
+                              display: "inline-flex",
+                              width: 34,
+                              height: 34,
+                              flexShrink: 0,
+                              borderRadius: 2,
+                              border: (theme) =>
+                                `1px solid ${theme.palette.divider}`,
+                              fontWeight: 900,
+                              fontSize: 18,
+                              lineHeight: 1,
+                            }}
+                          >
+                            ⋮
+                          </IconButton>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+              <Box
+                sx={{
+                  px: 2,
+                  py: 2,
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 2,
+                  borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing page {page} of {totalPages} · {totalProjects} projects
+                </Typography>
+
+                <Pagination
+                  count={totalPages}
+                  page={page}
+                  onChange={(_, value) => setPage(value)}
+                  color="primary"
+                  shape="rounded"
+                />
+              </Box>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Menu
+        anchorEl={!loading && actionAnchorEl?.isConnected ? actionAnchorEl : null}
+        open={!loading && Boolean(actionAnchorEl?.isConnected)}
+        slotProps={{ transition: { onExited: handleActionMenuExited } }}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={handleMenuEdit} disabled={!canUpdate}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ✎
+          </Box>
+          Edit
+        </MenuItem>
+
+        <MenuItem onClick={handleMenuDelete} sx={{ color: "error.main" }} disabled={!canDelete}>
+          <Box component="span" sx={{ mr: 1.25, fontWeight: 900 }}>
+            ×
+          </Box>
+          Archive
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={Boolean(viewProject)}
+        onClose={() => setViewProject(null)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+          Project Details
+        </DialogTitle>
+
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Project Name"
+                fullWidth
+                value={viewProject?.name || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Project Type"
+                fullWidth
+                value={viewProject?.type || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Client"
+                fullWidth
+                value={viewProject ? getClientName(viewProject.clientId) : "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Deal"
+                fullWidth
+                value={viewProject ? getDealName(viewProject.dealId) : "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              {canReadFinancials && (<TextField
+                label="Price"
+                fullWidth
+                value={formatBHD(viewProject?.price)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />)}
+
+              {canReadFinancials && (<TextField
+                label="Cost"
+                fullWidth
+                value={formatBHD(viewProject?.cost)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />)}
+
+              {canReadFinancials && (<TextField
+                label="Profit"
+                fullWidth
+                value={formatBHD(viewProject?.profit)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />)}
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Deadline"
+                fullWidth
+                value={formatDate(viewProject?.deadline)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+                
+              />
+
+              <TextField
+                label="Status"
+                fullWidth
+                value={viewProject?.status || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              {canReadFinancials && (<TextField
+                label="Payment Status"
+                fullWidth
+                value={viewProject?.paymentStatus || "-"}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />)}
+            </Box>
+
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewProject?.description || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={viewProject?.notes || "-"}
+              sx={readonlyMultilineTextFieldSx}
+              slotProps={{ input: { readOnly: true } }}
+            />
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Created At"
+                fullWidth
+                value={formatDate(viewProject?.createdAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+
+              <TextField
+                label="Updated At"
+                fullWidth
+                value={formatDate(viewProject?.updatedAt)}
+                sx={readonlyTextFieldSx}
+                slotProps={{ input: { readOnly: true } }}
+              />
+            </Box>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewProject(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={openForm}
+        onClose={handleFormClose}
+        maxWidth="md"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <Box component="form" onSubmit={handleSubmit}>
+          <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
+            {editingProject ? "Edit Project" : "Add Project"}
+          </DialogTitle>
+            {!canManageFinancials && <Alert severity="info" sx={{ mx: 3, mt: 1 }}>Project details can be saved. An authorized colleague will complete pricing.</Alert>}
+
+          <DialogContent>
+            <Box
+              sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
+            >
+              <TextField
+                select
+                label="Client"
+                required
+                fullWidth
+                value={formData.clientId}
+                error={Boolean(formErrors.clientId)}
+                helperText={formErrors.clientId}
+                onChange={(event) => handleClientSelect(event.target.value)}
+              >
+                {clients.map((client) => (
+                  <MenuItem key={client._id} value={client._id}>
+                    {client.companyName}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                select
+                label="Deal"
+                fullWidth
+                value={formData.dealId}
+                error={Boolean(formErrors.dealId)}
+                helperText={
+                  formErrors.dealId ||
+                  "Optional. Only Closed Won deals can be linked."
+                }
+                onChange={(event) => handleDealSelect(event.target.value)}
+              >
+                <MenuItem value="">No linked deal</MenuItem>
+
+                {availableDeals.map((deal) => (
+                  <MenuItem key={deal._id} value={deal._id}>
+                    {deal.title}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                label="Project Name"
+                required
+                fullWidth
+                value={formData.name}
+                error={Boolean(formErrors.name)}
+                helperText={formErrors.name}
+                onChange={(event) =>
+                  updateFormField("name", event.target.value)
+                }
+              />
+
+              <TextField
+                select
+                label="Project Type"
+                fullWidth
+                value={formData.type}
+                error={Boolean(formErrors.type)}
+                helperText={formErrors.type}
+                onChange={(event) =>
+                  updateFormField("type", event.target.value as ProjectType)
+                }
+              >
+                {PROJECT_TYPES.map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                  gap: 2,
+                }}
+              >
+                {canManageFinancials && (<TextField
+                  label="Original agreed price"
+                  type="number"
+                  fullWidth
+                  value={formData.price}
+                  error={Boolean(formErrors.price)}
+                  helperText={formErrors.price}
+                  onChange={(event) =>
+                    updateFormField("price", event.target.value)
+                  }
+                  slotProps={{
+                    htmlInput: {
+                      step: "0.01",
+                      min: "0",
+                    },
+                  }}
+                />)}
+
+                {canManageFinancials && (<TextField
+                  label="Agreed extras"
+                  type="number"
+                  fullWidth
+                  value={formData.agreedExtras}
+                  error={Boolean(formErrors.agreedExtras)}
+                  helperText={formErrors.agreedExtras || "Additional charges approved by the client."}
+                  onChange={(event) => updateFormField("agreedExtras", event.target.value)}
+                  slotProps={{ htmlInput: { step: "0.01", min: "0" } }}
+                />)}
+
+                {canManageFinancials && (<TextField
+                  label="Cost"
+                  type="number"
+                  fullWidth
+                  value={formData.cost}
+                  error={Boolean(formErrors.cost)}
+                  helperText={formErrors.cost}
+                  onChange={(event) =>
+                    updateFormField("cost", event.target.value)
+                  }
+                  slotProps={{
+                    htmlInput: {
+                      step: "0.01",
+                      min: "0",
+                    },
+                  }}
+                />)}
+              </Box>
+
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                  gap: 2,
+                }}
+              >
+                <TextField
+                  select
+                  label="Status"
+                  fullWidth
+                  value={formData.status}
+                  error={Boolean(formErrors.status)}
+                  helperText={formErrors.status}
+                  onChange={(event) =>
+                    updateFormField(
+                      "status",
+                      event.target.value as ProjectStatus,
+                    )
+                  }
+                >
+                  {PROJECT_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                {canManageFinancials && (<TextField
+                  select
+                  label="Payment Status"
+                  fullWidth
+                  value={formData.paymentStatus}
+                  error={Boolean(formErrors.paymentStatus)}
+                  helperText={formErrors.paymentStatus}
+                  onChange={(event) =>
+                    updateFormField(
+                      "paymentStatus",
+                      event.target.value as PaymentStatus,
+                    )
+                  }
+                >
+                  {PAYMENT_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </TextField>)}
+              </Box>
+
+              <TextField
+                label="Deadline"
+                type="date"
+                fullWidth
+                value={formData.deadline}
+                error={Boolean(formErrors.deadline)}
+                helperText={
+                  formErrors.deadline || "Choose today or a future date"
+                }
+                onChange={(event) =>
+                  updateFormField("deadline", event.target.value)
+                }
+                slotProps={{
+                  inputLabel: {
+                    shrink: true,
+                  },
+                  htmlInput: {
+                    min: editingProject ? undefined : todayInputValue,
+                  },
+                }}
+              />
+
+              <TextField
+                label="Description"
+                fullWidth
+                multiline
+                minRows={3}
+                value={formData.description}
+                error={Boolean(formErrors.description)}
+                helperText={formErrors.description}
+                onChange={(event) =>
+                  updateFormField("description", event.target.value)
+                }
+              />
+
+              <TextField
+                label="Notes"
+                fullWidth
+                multiline
+                minRows={3}
+                value={formData.notes}
+                error={Boolean(formErrors.notes)}
+                helperText={formErrors.notes}
+                onChange={(event) =>
+                  updateFormField("notes", event.target.value)
+                }
+              />
+            </Box>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button onClick={handleFormClose} disabled={saving}>
+              Cancel
+            </Button>
+
+            <Button type="submit" variant="contained" disabled={(saving) || !(editingProject ? canUpdate : canCreate)}>
+              {saving ? "Saving..." : editingProject ? "Update" : "Create"}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteProject)}
+        onClose={() => {
+          if (!saving) setDeleteProject(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 4,
+              bgcolor: "background.paper",
+              backgroundImage: "none",
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Archive Project</DialogTitle>
+
+        <DialogContent>
+          <Typography color="text.secondary">
+            Are you sure you want to archive{" "}
+            <Box
+              component="span"
+              sx={{ color: "text.primary", fontWeight: 900 }}
+            >
+              {deleteProject?.name}
+            </Box>
+            ?
+          </Typography>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={() => setDeleteProject(null)} disabled={saving}>
+            Cancel
+          </Button>
+
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDeleteConfirm}
+            disabled={(saving) || !canDelete}
+          >
+            {saving ? "Archiving..." : "Archive"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}

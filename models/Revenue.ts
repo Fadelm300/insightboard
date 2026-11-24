@@ -2,6 +2,9 @@ import { Schema, model, models } from "mongoose";
 
 const RevenueSchema = new Schema(
   {
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date },
+
     projectId: {
       type: Schema.Types.ObjectId,
       ref: "Project",

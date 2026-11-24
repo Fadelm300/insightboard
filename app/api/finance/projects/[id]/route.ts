@@ -1,8 +1,10 @@
+import { paymentProgressPercent, projectPaymentBalance } from "@/lib/paymentProgress";
+import { logServerError } from "@/lib/serverLogger";
 import { NextRequest } from "next/server";
 
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Project from "@/models/Project";
 import Revenue from "@/models/Revenue";
 import Expense from "@/models/Expense";
@@ -13,11 +15,8 @@ type RouteContext = {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "finance.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -35,6 +34,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const revenueSummary = await Revenue.aggregate([
       {
         $match: {
+          isDeleted: { $ne: true },
           projectId: project._id,
         },
       },
@@ -50,6 +50,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const expenseSummary = await Expense.aggregate([
       {
         $match: {
+          isDeleted: { $ne: true },
           projectId: project._id,
         },
       },
@@ -69,10 +70,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const expenseCount = expenseSummary[0]?.expenseCount || 0;
 
     const netProfit = totalRevenue - totalExpenses;
-    const remainingBalance = project.price - totalRevenue;
+    const balance = projectPaymentBalance(totalRevenue, project.price);
 
-    const paymentProgress =
-      project.price > 0 ? Math.round((totalRevenue / project.price) * 100) : 0;
+    const paymentProgress = paymentProgressPercent(totalRevenue, project.price);
 
     return successResponse(
       {
@@ -81,21 +81,22 @@ export async function GET(req: NextRequest, context: RouteContext) {
           name: project.name,
           type: project.type,
           price: project.price,
+          agreedExtras: project.agreedExtras ?? 0,
           status: project.status,
           paymentStatus: project.paymentStatus,
         },
         totalRevenue,
         totalExpenses,
         netProfit,
-        remainingBalance,
+        ...balance,
         paymentProgress,
         revenueCount,
         expenseCount,
       },
       "Project finance summary fetched successfully"
     );
-  } catch (error) {
-    console.error("GET_PROJECT_FINANCE_SUMMARY_ERROR:", error);
+  } catch {
+    logServerError("GET_PROJECT_FINANCE_SUMMARY_ERROR");
     return errorResponse("Server error", 500);
   }
 }

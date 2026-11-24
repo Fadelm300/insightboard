@@ -1,6 +1,7 @@
 import { Box } from "@mui/material";
 
 import LoginForm from "@/components/auth/LoginForm";
+import { isDemoMode } from "@/lib/demoMode";
 
 export default function LoginPage() {
   return (
@@ -15,7 +16,7 @@ export default function LoginPage() {
         p: 2,
       }}
     >
-      <LoginForm />
+      <LoginForm demoMode={isDemoMode()} />
     </Box>
   );
 }

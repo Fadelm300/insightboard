@@ -1,9 +1,12 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
+import { changeFinancialArchive } from "@/lib/financialArchive";
+import { revenueDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Revenue from "@/models/Revenue";
 import "@/models/Project";
 import "@/models/Client";
@@ -27,8 +30,6 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   "Other",
 ];
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
-
 const UNSAFE_TEXT_PATTERN =
   /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
 
@@ -47,15 +48,6 @@ function cleanText(value: unknown) {
 
 function hasUnsafeText(value: string) {
   return UNSAFE_TEXT_PATTERN.test(value);
-}
-
-function isValidMoney(value: unknown) {
-  const stringValue = getString(value);
-  return MONEY_PATTERN.test(stringValue);
-}
-
-function parseMoney(value: unknown) {
-  return Number(getString(value));
 }
 
 function isValidDate(value: string) {
@@ -81,11 +73,8 @@ function isFutureDate(value: string) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "revenue.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -95,7 +84,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid revenue ID", 400);
     }
 
-    const revenue = await Revenue.findById(id)
+    const revenue = await Revenue.findOne({ _id: id, isDeleted: { $ne: true } })
       .populate("projectId", "name type price status paymentStatus")
       .populate("clientId", "companyName contactPerson email");
 
@@ -103,7 +92,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Revenue record not found", 404);
     }
 
-    return successResponse({ revenue }, "Revenue record fetched successfully");
+    return successResponse({ revenue: revenueDTO(revenue, authorization.user!) }, "Revenue record fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -111,11 +100,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "revenue.update");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -135,14 +121,13 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     const updateData: Record<string, unknown> = {};
 
     if (body.amount !== undefined && body.amount !== null && body.amount !== "") {
-      if (!isValidMoney(body.amount)) {
+      const amount = parseCrmMoney(body.amount);
+      if (amount === null) {
         return errorResponse(
-          "Amount must be a valid number with up to 2 decimals",
+          "Amount must have up to 2 decimals and be within the supported range",
           400
         );
       }
-
-      const amount = parseMoney(body.amount);
 
       if (amount <= 0) {
         return errorResponse("Amount must be greater than 0", 400);
@@ -206,18 +191,20 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       updateData.notes = notes;
     }
 
-    const revenue = await Revenue.findByIdAndUpdate(id, updateData, {
-      returnDocument: "after",
-      runValidators: true,
-    })
-      .populate("projectId", "name type price status paymentStatus")
-      .populate("clientId", "companyName contactPerson email");
+    return await withCrmWriteTransaction(async (session) => {
+      const revenue = await Revenue.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, { session,
+        returnDocument: "after",
+        runValidators: true,
+      })
+        .populate("projectId", "name type price status paymentStatus")
+        .populate("clientId", "companyName contactPerson email");
 
-    if (!revenue) {
-      return errorResponse("Revenue record not found", 404);
-    }
+      if (!revenue) {
+        return errorResponse("Revenue record not found", 404);
+      }
 
-    return successResponse({ revenue }, "Revenue record updated successfully");
+      return successResponse({ revenue: revenueDTO(revenue, authorization.user!) }, "Revenue record updated successfully");
+    });
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -225,11 +212,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "revenue.delete");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -240,9 +224,9 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid revenue ID", 400);
     }
 
-    const revenue = await Revenue.findByIdAndDelete(id);
+    const result = await changeFinancialArchive("revenue", id, authorization.user!.id, "archive");
 
-    if (!revenue) {
+    if (result !== "changed") {
       return errorResponse("Revenue record not found", 404);
     }
 

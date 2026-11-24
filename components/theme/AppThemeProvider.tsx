@@ -3,6 +3,8 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 
+import { getPreference } from "@/lib/preferences";
+
 const THEME_MODE_KEY = "insightboard_theme_mode";
 
 type SavedThemeMode = "Light" | "Dark" | "System";
@@ -11,7 +13,7 @@ type EffectiveMode = "light" | "dark";
 function getSavedThemeMode(): SavedThemeMode {
   if (typeof window === "undefined") return "Light";
 
-  const saved = localStorage.getItem(THEME_MODE_KEY);
+  const saved = getPreference(THEME_MODE_KEY);
 
   if (saved === "Light" || saved === "Dark" || saved === "System") {
     return saved;
@@ -52,12 +54,12 @@ export default function AppThemeProvider({
 
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-    window.addEventListener("storage", syncThemeMode);
+    window.addEventListener("focus", syncThemeMode);
     window.addEventListener("insightboard-theme-changed", syncThemeMode);
     mediaQuery.addEventListener("change", syncThemeMode);
 
     return () => {
-      window.removeEventListener("storage", syncThemeMode);
+      window.removeEventListener("focus", syncThemeMode);
       window.removeEventListener("insightboard-theme-changed", syncThemeMode);
       mediaQuery.removeEventListener("change", syncThemeMode);
     };

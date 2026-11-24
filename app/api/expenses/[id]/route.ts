@@ -1,11 +1,15 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
+import { changeFinancialArchive } from "@/lib/financialArchive";
+import { expenseDTO, parseCrmMoney } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Expense from "@/models/Expense";
 import "@/models/Project";
+import "@/models/Client";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -30,8 +34,6 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Other",
 ];
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
-
 const UNSAFE_TEXT_PATTERN =
   /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[<>{}\[\]`$|\\]/i;
 
@@ -50,14 +52,6 @@ function cleanText(value: unknown) {
 
 function hasUnsafeText(value: string) {
   return UNSAFE_TEXT_PATTERN.test(value);
-}
-
-function isValidMoney(value: unknown) {
-  return MONEY_PATTERN.test(getString(value));
-}
-
-function parseMoney(value: unknown) {
-  return Number(getString(value));
 }
 
 function isValidDate(value: string) {
@@ -82,11 +76,8 @@ function isFutureDate(value: string) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "expenses.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -96,16 +87,17 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid expense ID", 400);
     }
 
-    const expense = await Expense.findById(id).populate(
-      "projectId",
-      "name type price cost profit status paymentStatus"
-    );
+    const expense = await Expense.findOne({ _id: id, isDeleted: { $ne: true } }).populate({
+      path: "projectId",
+      select: "name type price cost profit status paymentStatus clientId",
+      populate: { path: "clientId", select: "companyName" },
+    });
 
     if (!expense) {
       return errorResponse("Expense record not found", 404);
     }
 
-    return successResponse({ expense }, "Expense record fetched successfully");
+    return successResponse({ expense: expenseDTO(expense, authorization.user!) }, "Expense record fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -113,11 +105,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "expenses.update");
+    if (authorization.response) return authorization.response;
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
@@ -153,14 +142,13 @@ if (demoBlock) return demoBlock;
       return errorResponse("Title contains invalid characters", 400);
     }
 
-    if (!isValidMoney(amountValue)) {
+    const amount = parseCrmMoney(amountValue);
+    if (amount === null) {
       return errorResponse(
-        "Amount must be a valid number with up to 2 decimals",
+        "Amount must have up to 2 decimals and be within the supported range",
         400
       );
     }
-
-    const amount = parseMoney(amountValue);
 
     if (amount <= 0) {
       return errorResponse("Amount must be greater than 0", 400);
@@ -203,16 +191,18 @@ if (demoBlock) return demoBlock;
       notes,
     };
 
-    const expense = await Expense.findByIdAndUpdate(id, updateData, {
-      returnDocument: "after",
-      runValidators: true,
-    }).populate("projectId", "name type price cost profit status paymentStatus");
+    return await withCrmWriteTransaction(async (session) => {
+      const expense = await Expense.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, updateData, { session,
+        returnDocument: "after",
+        runValidators: true,
+      }).populate({ path: "projectId", select: "name type price cost profit status paymentStatus clientId", populate: { path: "clientId", select: "companyName" } });
 
-    if (!expense) {
-      return errorResponse("Expense record not found", 404);
-    }
+      if (!expense) {
+        return errorResponse("Expense record not found", 404);
+      }
 
-    return successResponse({ expense }, "Expense record updated successfully");
+      return successResponse({ expense: expenseDTO(expense, authorization.user!) }, "Expense record updated successfully");
+    });
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -220,11 +210,8 @@ if (demoBlock) return demoBlock;
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "expenses.delete");
+    if (authorization.response) return authorization.response;
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
@@ -235,9 +222,9 @@ if (demoBlock) return demoBlock;
       return errorResponse("Invalid expense ID", 400);
     }
 
-    const expense = await Expense.findByIdAndDelete(id);
+    const result = await changeFinancialArchive("expenses", id, authorization.user!.id, "archive");
 
-    if (!expense) {
+    if (result !== "changed") {
       return errorResponse("Expense record not found", 404);
     }
 

@@ -1,10 +1,5 @@
 import mongoose from "mongoose";
-
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error("Please define MONGODB_URI inside .env.local");
-}
+import { getMongoUri } from "@/lib/serverEnv";
 
 interface MongooseCache {
   conn: typeof mongoose | null;
@@ -30,14 +25,19 @@ async function connectDB() {
   }
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI as string, {
+    cached.promise = mongoose.connect(getMongoUri(), {
       bufferCommands: false,
     });
   }
 
-  cached.conn = await cached.promise;
-
-  return cached.conn;
+  try {
+    cached.conn = await cached.promise;
+    return cached.conn;
+  } catch (error) {
+    // Allow a later request to retry after a temporary connection failure.
+    cached.promise = null;
+    throw error;
+  }
 }
 
 export default connectDB;

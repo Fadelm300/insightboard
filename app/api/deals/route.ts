@@ -1,9 +1,12 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
+import { hasPermission } from "@/lib/permissions";
+import { dealDTO, parseCrmMoney, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Deal from "@/models/Deal";
 import Client from "@/models/Client";
 
@@ -182,8 +185,8 @@ function validateDealPayload(body: unknown) {
   try {
     const clientId = getStringField(data, "clientId");
     const title = cleanSingleLineText(getStringField(data, "title"));
-    const estimatedBudget = getNumberField(data, "estimatedBudget");
-    const finalPrice = getNumberField(data, "finalPrice");
+    const estimatedBudget = parseCrmMoney(data.estimatedBudget);
+    const finalPrice = parseCrmMoney(data.finalPrice === "" ? 0 : data.finalPrice ?? 0);
     const status = (getStringField(data, "status") || "Lead") as DealStatus;
     const probability = getNumberField(data, "probability");
     const expectedCloseDateValue = getStringField(data, "expectedCloseDate");
@@ -200,17 +203,17 @@ function validateDealPayload(body: unknown) {
       return { values: null, error: titleError };
     }
 
-    if (estimatedBudget <= 0) {
+    if (estimatedBudget === null || estimatedBudget <= 0) {
       return {
         values: null,
-        error: "Estimated budget must be greater than 0",
+        error: "Estimated budget must be a positive amount with up to 2 decimals within the supported range",
       };
     }
 
-    if (finalPrice < 0) {
+    if (finalPrice === null) {
       return {
         values: null,
-        error: "Final price cannot be negative",
+        error: "Final price must be a non-negative amount with up to 2 decimals within the supported range",
       };
     }
 
@@ -262,37 +265,27 @@ function validateDealPayload(body: unknown) {
     };
 
     return { values, error: "" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid deal data";
-
+  } catch {
     return {
       values: null,
-      error: message,
+      error: "Invalid deal data",
     };
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+    const query = parseCrmListQuery(searchParams);
+    if (!query.data) return errorResponse(query.error, 400);
 
-    const limit = Math.min(
-      Math.max(Number(searchParams.get("limit")) || 10, 1),
-      50
-    );
-
-    const search = searchParams.get("search")?.trim() || "";
-    const skip = (page - 1) * limit;
+    const { page, limit, skip, search, pattern } = query.data;
 
     const filter: DealFilter = {
   isDeleted: { $ne: true },
@@ -302,9 +295,11 @@ export async function GET(req: NextRequest) {
       const matchingClients = await Client.find({
         isDeleted: { $ne: true },
         $or: [
-          { companyName: { $regex: search, $options: "i" } },
-          { contactPerson: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
+          { companyName: { $regex: pattern, $options: "i" } },
+          ...(hasPermission(authorization.user!, "clients.read") ? [
+            { contactPerson: { $regex: pattern, $options: "i" } },
+            { email: { $regex: pattern, $options: "i" } },
+          ] : []),
         ],
       }).select("_id");
 
@@ -312,10 +307,10 @@ export async function GET(req: NextRequest) {
             (client) => client._id as Types.ObjectId
           );
       filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { status: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { notes: { $regex: search, $options: "i" } },
+        { title: { $regex: pattern, $options: "i" } },
+        { status: { $regex: pattern, $options: "i" } },
+        { description: { $regex: pattern, $options: "i" } },
+        { notes: { $regex: pattern, $options: "i" } },
       ];
 
       if (matchingClientIds.length > 0) {
@@ -336,7 +331,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(
       {
-        deals,
+        deals: deals.map((record) => dealDTO(record, authorization.user!)),
         total,
         page,
         limit,
@@ -351,11 +346,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "deals.create");
+    if (authorization.response) return authorization.response;
 const demoBlock = blockIfDemoMode();
 if (demoBlock) return demoBlock;
     await connectDB();
@@ -367,23 +359,25 @@ if (demoBlock) return demoBlock;
       return errorResponse(error, 400);
     }
 
-    const client = await Client.findOne({
-      _id: values.clientId,
-      isDeleted: { $ne: true },
+    return await withCrmWriteTransaction(async (session) => {
+      const client = await Client.findOne({
+        _id: values.clientId,
+        isDeleted: { $ne: true },
+      }, null, { session });
+
+      if (!client) {
+        return errorResponse("Client not found", 404);
+      }
+
+      const [createdDeal] = await Deal.create([values], { session, ordered: true });
+
+      const deal = await Deal.findById(createdDeal._id, null, { session }).populate(
+        "clientId",
+        "companyName contactPerson email status"
+      );
+
+      return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal created successfully", 201);
     });
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    const createdDeal = await Deal.create(values);
-
-    const deal = await Deal.findById(createdDeal._id).populate(
-      "clientId",
-      "companyName contactPerson email status"
-    );
-
-    return successResponse({ deal }, "Deal created successfully", 201);
   } catch {
     return errorResponse("Server error", 500);
   }

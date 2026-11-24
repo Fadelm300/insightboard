@@ -1,9 +1,12 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
+import { archiveCrmRecord } from "@/lib/crmArchive";
+import { clientDTO } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Client from "@/models/Client";
 import { blockIfDemoMode } from "@/lib/demoMode";
 type RouteContext = {
@@ -234,13 +237,10 @@ function validateClientPayload(body: unknown) {
     }
 
     return { values, error: "" };
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Invalid client data";
-
+  } catch {
     return {
       values: null,
-      error: message,
+      error: "Invalid client data",
     };
   }
 }
@@ -257,11 +257,8 @@ async function getClientId(context: RouteContext) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "clients.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
@@ -280,7 +277,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return errorResponse("Client not found", 404);
     }
 
-    return successResponse({ client }, "Client fetched successfully");
+    return successResponse({ client: clientDTO(client) }, "Client fetched successfully");
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -288,11 +285,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "clients.update");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -310,23 +304,22 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse(error, 400);
     }
 
-    const client = await Client.findOneAndUpdate(
-      {
-        _id: id,
-        isDeleted: { $ne: true },
-      },
-      values,
-      {
-        new: true,
-        runValidators: true,
+    return await withCrmWriteTransaction(async (session) => {
+      const client = await Client.findOneAndUpdate({
+          _id: id,
+          isDeleted: { $ne: true },
+        }, values, { session,
+          returnDocument: "after",
+          runValidators: true,
+        }
+      );
+
+      if (!client) {
+        return errorResponse("Client not found", 404);
       }
-    );
 
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    return successResponse({ client }, "Client updated successfully");
+      return successResponse({ client: clientDTO(client) }, "Client updated successfully");
+    });
   } catch {
     return errorResponse("Server error", 500);
   }
@@ -334,11 +327,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "clients.delete");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
@@ -349,20 +339,13 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid client id", 400);
     }
 
-    const client = await Client.findOneAndUpdate(
-      {
-        _id: id,
-        isDeleted: { $ne: true },
-      },
-      { isDeleted: true },
-      { new: true }
-    );
-
-    if (!client) {
-      return errorResponse("Client not found", 404);
+    const result = await archiveCrmRecord("clients", id, authorization.user!.id);
+    if (result === "missing") return errorResponse("Client not found", 404);
+    if (result === "active-dependants") {
+      return errorResponse("Archive linked deals, projects, and revenue before archiving this client", 409);
     }
 
-    return successResponse({}, "Client deleted successfully");
+    return successResponse({}, "Client archived successfully");
   } catch {
     return errorResponse("Server error", 500);
   }

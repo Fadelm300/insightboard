@@ -63,15 +63,55 @@ export function extractObject<T>(
   return fallback;
 }
 
-export function formatMoney(value?: number) {
+export function formatReportGeneratedAt(date: Date = new Date(), timeZone?: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    dateStyle: "medium",
+    timeStyle: "medium",
+    calendar: "gregory",
+    numberingSystem: "latn",
+    hourCycle: "h23",
+  }).format(date);
+}
+
+export function averagePricedProjectValue(
+  items: ReadonlyArray<{
+    project?: { price?: number | null } | null;
+  }>
+): number | null {
+  let total = 0;
+  let count = 0;
+
+  for (const item of items) {
+    const price = item.project?.price;
+
+    if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
+      continue;
+    }
+
+    total += price;
+    count += 1;
+  }
+
+  return count === 0 ? null : total / count;
+}
+
+export function formatAverageProjectValue(value: number | null) {
+  return value === null ? "No priced projects" : formatMoney(value);
+}
+
+export function formatMoney(value?: number | null) {
+  if (value === null) return "Pending pricing";
   return `${Number(value || 0).toFixed(2)} BHD`;
 }
 
-export function formatNumber(value?: number) {
+export function formatNumber(value?: number | null) {
+  if (value === null) return "Pending pricing";
   return Number(value || 0).toFixed(2);
 }
 
-export function formatPercent(value?: number) {
+export function formatPercent(value?: number | null) {
+  if (value === null) return "Pending pricing";
   return `${Number(value || 0).toFixed(1)}%`;
 }
 
@@ -154,4 +194,23 @@ export function formatDateToInputValue(date?: string) {
 export function getMonthKey(date?: string) {
   const inputDate = formatDateToInputValue(date);
   return inputDate ? inputDate.slice(0, 7) : "";
+}
+/** Excel money stays numeric; pending pricing remains explicit text. */
+export function excelMoney(value?: number | null): number | string {
+  return value === null ? "Pending pricing" : Number(Number(value || 0).toFixed(2));
+}
+
+export function formatSheetNumbers(sheet: WorkSheet) {
+  for (const [address, cell] of Object.entries(sheet)) {
+    if (!address.startsWith("!") && cell && typeof cell === "object" && "t" in cell && cell.t === "n") {
+      const column = address.replace(/\d+$/, "");
+      const row = address.replace(/^[A-Z]+/, "");
+      const header = sheet[`${column}1`]?.v;
+      const label = sheet[`A${row}`]?.v;
+      const summaryMoney = column === "B" && [
+        "Total Revenue", "Total Expenses", "Net Profit", "Average Project Value",
+      ].includes(String(label));
+      if (String(header).includes("BHD") || summaryMoney) cell.z = "#,##0.00";
+    }
+  }
 }

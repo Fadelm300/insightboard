@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import CookieConsent from "./CookieConsent";
 
 import {
   content,
@@ -34,10 +35,12 @@ function savePreference(name: "theme" | "language", value: string) {
 export default function Landing({
   initialLanguage,
   initialTheme,
+  showInitialCookieBanner,
   fontClasses
 }: {
   initialLanguage: Language;
   initialTheme: Theme;
+  showInitialCookieBanner: boolean;
   fontClasses: string;
 }) {
   const [language, setLanguage] = useState(initialLanguage);
@@ -245,12 +248,19 @@ export default function Landing({
       <div className="ib-container ib-header-row">
         <Link
           href="/"
-          className="ib-brand"
+          className="ib-brand ib-header-brand"
           aria-label="InsightBoard"
+          dir="ltr"
         >
-          <span dir="ltr">
-            InsightBoard<span className="ib-brand-dot">.</span>
-          </span>
+          <Image
+            src="/images/logo/insightboard-logo3.png"
+            alt=""
+            width={36}
+            height={36}
+            className="ib-brand-logo"
+            style={{ width: 36, height: 36 }}
+          />
+          <span>InsightBoard</span>
         </Link>
 
         <nav
@@ -775,6 +785,9 @@ export default function Landing({
           <Link href="/login">
             {t.login}
           </Link>
+          <Link href="/privacy">{rtl ? "الخصوصية" : "Privacy"}</Link>
+          <Link href="/terms">{rtl ? "شروط الاستخدام" : "Terms of use"}</Link>
+          <CookieConsent language={language} showInitialBanner={showInitialCookieBanner} />
         </nav>
 
         <p>

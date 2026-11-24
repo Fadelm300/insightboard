@@ -1,0 +1,220 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import test from "node:test";
+import vm from "node:vm";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
+
+const root = fileURLToPath(new URL("..", import.meta.url));
+
+function harness(initialUnauthorized = false, idleMs = 600_000) {
+  const effects = [];
+  const events = new Map();
+  const navigations = [];
+  const broadcasts = [];
+  const fetches = [];
+  const pending = [];
+  let now = Date.now();
+  let interval;
+  class TestDate extends Date {
+    static now() { return now; }
+  }
+  let refreshes = 0;
+  const channels = [];
+  const router = { replace: (url) => navigations.push(url), refresh: () => { refreshes += 1; } };
+  const add = (name, callback) => events.set(name, callback);
+  const fakeWindow = {
+    addEventListener: add,
+    removeEventListener: (name) => events.delete(name),
+    setInterval: (callback) => { interval = callback; return 1; },
+    clearInterval: () => {},
+    dispatchEvent: (event) => events.get(event.type)?.(event),
+  };
+  class FakeChannel {
+    constructor() { channels.push(this); }
+    postMessage(type) { broadcasts.push(type); }
+    close() {}
+  }
+  const api = {
+    AUTH_CHANGED_EVENT: "insightboard-auth-changed",
+    logout: async () => {},
+    notifyAuthChanged: (type) => {
+      fakeWindow.dispatchEvent({ type: "insightboard-auth-changed", detail: type });
+      broadcasts.push(type);
+    },
+  };
+  const react = {
+    Fragment: "Fragment",
+    useState: (initial) => [initial, () => {}],
+    useRef: (initial) => ({ current: initial }),
+    useEffect: (callback) => effects.push(callback),
+  };
+  const dependencies = {
+    react,
+    "react/jsx-runtime": { jsx: () => ({}), jsxs: () => ({}), Fragment: "Fragment" },
+    "next/navigation": { useRouter: () => router },
+    "@mui/material": new Proxy({}, { get: () => "component" }),
+    "@/lib/apiClient": api,
+  };
+  const source = fs.readFileSync(path.join(root, "components/auth/AuthGuard.tsx"), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const exports = {};
+  vm.runInNewContext(compiled, {
+    exports, console, Date: TestDate, Number, Math, JSON,
+    window: fakeWindow,
+    document: { visibilityState: "visible", addEventListener: add, removeEventListener: (name) => events.delete(name) },
+    BroadcastChannel: FakeChannel,
+    fetch: (url, options) => {
+      fetches.push({ url, options });
+      return new Promise((resolve, reject) => {
+        pending.push(resolve);
+        resolve.networkFailure = reject;
+      });
+    },
+    require: (name) => {
+      if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
+      return dependencies[name];
+    },
+  });
+  exports.default({ children: null });
+  const cleanup = effects[0]();
+  const valid = () => ({ status: 200, ok: true, json: async () => ({ data: { user: { id: "test-user" }, session: { expiresAt: new Date(now+idleMs).toISOString(), absoluteExpiresAt: new Date(now+28_800_000).toISOString(), serverNow: new Date(now).toISOString(), warningSeconds: 30 } } }) });
+  return {
+    navigations, broadcasts, fetches, pending, cleanup,
+    get refreshes() { return refreshes; },
+    resolveInitial: () => pending.shift()(initialUnauthorized ? {status:401,ok:false} : valid()),
+    resolveNext: () => pending.shift()(valid()),
+    rejectNext: () => pending.shift().networkFailure(new Error("network down")),
+    respond: (status) => pending.shift()({ status, ok: false }),
+    tick: (milliseconds, activity = false) => {
+      now += milliseconds;
+      if (activity) events.get("keydown")?.({ isTrusted: true });
+      interval();
+    },
+    pointer: () => events.get("pointermove")?.({ type: "pointermove", isTrusted: true }),
+    auth: (type) => events.get("insightboard-auth-changed")?.({detail:type}),
+    broadcast: (type) => channels[0].onmessage?.({data:type}),
+    continue: () => events.get("insightboard-session-continue")?.(),
+    visible: () => events.get("visibilitychange")?.(),
+    retry: () => events.get("insightboard-session-retry")?.(),
+  };
+}
+
+const settle = async () => { for (let i=0;i<6;i++) await Promise.resolve(); };
+
+test("repeated logout and cross-tab events navigate once without refreshing", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  for (let i=0;i<20;i++) { h.auth("logout"); h.broadcast("logout"); }
+  assert.equal(h.navigations.length, 1);
+  assert.equal(h.navigations[0], "/");
+  assert.equal(h.refreshes, 0);
+  h.cleanup();
+});
+
+test("401 plus duplicate expired notifications terminate once and stop further requests", async () => {
+  const h = harness(true);
+  h.resolveInitial(); await settle();
+  for (let i=0;i<20;i++) { h.auth("expired"); h.broadcast("expired"); h.visible(); }
+  assert.equal(h.navigations.length, 1);
+  assert.equal(h.navigations[0], "/login?reason=session-expired");
+  assert.equal(h.refreshes, 0);
+  assert.equal(h.fetches.length, 1);
+  assert.equal(h.broadcasts.length, 1);
+  h.cleanup();
+});
+
+test("explicit continuation is queued behind an in-flight status request", async () => {
+  const h = harness();
+  h.continue();
+  h.resolveInitial(); await settle();
+  assert.equal(h.fetches.length, 2);
+  assert.equal(h.fetches[1].url, "/api/auth/renew");
+  assert.equal(JSON.parse(h.fetches[1].options.body).mode, "continue");
+  h.resolveNext(); await settle();
+  h.cleanup();
+});
+
+test("activity renewals back off after server and network failures and stop after three retries", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  h.tick(120_000, true);
+  assert.equal(h.fetches.length, 2);
+  h.respond(503); await settle();
+  for (const [index, delay] of [2000, 4000, 8000].entries()) {
+    h.tick(delay - 1, true);
+    assert.equal(h.fetches.length, index + 2);
+    h.tick(1, true);
+    assert.equal(h.fetches.length, index + 3);
+    h.rejectNext(); await settle();
+  }
+  h.tick(10_000, true);
+  assert.equal(h.fetches.length, 5);
+  h.visible();
+  h.resolveNext(); await settle();
+  h.tick(1000, true);
+  assert.equal(h.fetches.length, 6, "status success does not reset renewal failures");
+  h.continue();
+  h.resolveNext(); await settle();
+  h.tick(120_000, true);
+  assert.equal(h.fetches.length, 8, "successful continuation restores automatic renewal");
+  h.cleanup();
+});
+
+test("expired session checks back off and a manual retry still handles server expiry", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  h.tick(600_000);
+  h.respond(503); await settle();
+  h.visible();
+  h.broadcast("changed");
+  assert.equal(h.fetches.length, 2);
+  h.retry();
+  h.respond(401); await settle();
+  assert.deepEqual(h.navigations, ["/login?reason=session-expired"]);
+  h.cleanup();
+});
+
+
+test("typing renews at most once every two minutes and idle time never renews", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  for (let i = 0; i < 119; i++) h.tick(1000, true);
+  assert.equal(h.fetches.length, 1);
+  h.tick(1000, true);
+  assert.equal(h.fetches.length, 2);
+  h.resolveNext(); await settle();
+  for (let i = 0; i < 119; i++) h.tick(1000, true);
+  assert.equal(h.fetches.length, 2);
+  h.tick(1000, true);
+  assert.equal(h.fetches.length, 3);
+  h.resolveNext(); await settle();
+  h.tick(120_000);
+  assert.equal(h.fetches.length, 3, "no renewal without recent user activity");
+  h.cleanup();
+});
+
+test("active older short sessions renew before their warning window", async () => {
+  const h = harness(false, 120_000);
+  h.resolveInitial(); await settle();
+  h.tick(1000);
+  h.pointer();
+  h.tick(1000);
+  assert.equal(h.fetches.length, 2);
+  assert.equal(h.fetches[1].url, "/api/auth/renew");
+  h.resolveNext(); await settle();
+  h.cleanup();
+});
+
+test("pointer activity keeps a session alive at the bounded renewal interval", async () => {
+  const h = harness();
+  h.resolveInitial(); await settle();
+  h.tick(119_000);
+  h.pointer();
+  h.tick(1000);
+  assert.equal(h.fetches.length, 2);
+  assert.equal(h.fetches[1].url, "/api/auth/renew");
+  h.resolveNext(); await settle();
+  h.cleanup();
+});

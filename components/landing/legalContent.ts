@@ -1,0 +1,56 @@
+export const legalContent = {
+  privacy: {
+    en: {
+      title: "Privacy notice",
+      summary: "How InsightBoard handles information on its public website, in the demo, and in authorised CRM workspaces.",
+      sections: [
+        ["Scope and responsibility", "Fadel Mohammad Fadel operates the InsightBoard public site and demo. For a company-managed workspace, that company generally determines why and how it uses its customer and staff records. Direct requests about company workspace records to the company that manages them."],
+        ["Information we handle", "Website hosting may process technical information needed to deliver and secure requests. If you contact the project, we receive the details you send. For authorised CRM use, the system processes account details, role and permission information, session records, and business data entered by users, including customer contact details, deals, projects and financial records. It also records selected administrative actions for audit."],
+        ["Why information is used", "Information is used to deliver the site and workspace, respond to enquiries, authenticate users, apply permissions, protect accounts and investigate misuse. Workspace records are used for the business purposes authorised by the organisation that manages them. Optional website analytics run only when you allow them."],
+        ["Cookies and analytics", "The session cookie keeps a signed-in session working and is cleared at sign-out. Preference cookies remember language, appearance and your analytics choice for up to one year. Choosing necessary only still allows sign-in and normal operation. If you allow analytics, Vercel Web Analytics measures visits to the public homepage without using analytics cookies. It may process page-view details such as the time, referrer, approximate location and browser or device type. The integration limits page views to the homepage and removes query parameters and fragments from the reported page URL. Change or withdraw your choice through Cookie settings."],
+        ["Service providers and location", "Hosting, database and optional analytics providers process information needed for their services. The public hosting and optional analytics services use Vercel, and the application uses MongoDB for workspace storage. Processing locations depend on the environment and provider configuration. Information may also be disclosed when required by law or to protect the service and its users."],
+        ["Retention and security", "We retain information according to its purpose, operational needs and applicable obligations. Session and sign-in records have expiry rules. Workspace records, audit history and backups follow the policies of the organisation operating the workspace. Access controls and session safeguards protect the application. Please use the authorised workspace for business records and keep credentials private."],
+        ["Your choices and requests", "Depending on the applicable law and circumstances, you may ask for access, correction, erasure or restriction of personal data, or object to certain processing. You can withdraw analytics consent at any time. For the public site, use the contact link below and describe the request. We may ask for information needed to verify your identity. You may also raise a concern with the competent data protection authority."],
+      ],
+    },
+    ar: {
+      title: "إشعار الخصوصية",
+      summary: "كيف يتعامل InsightBoard مع المعلومات في الموقع العام والنسخة التجريبية ومساحات العمل المصرّح بها.",
+      sections: [
+        ["نطاق الإشعار والجهة المسؤولة", "يدير فاضل محمد فاضل موقع InsightBoard العام والنسخة التجريبية. إذا كانت مساحة العمل تديرها شركة، فالشركة هي التي تحدد عادةً أغراض استخدام سجلات عملائها وموظفيها وطريقة معالجتها. وجّه الطلبات المتعلقة بسجلات تلك المساحة إلى الشركة التي تديرها."],
+        ["المعلومات التي نعالجها", "قد تعالج خدمة الاستضافة معلومات تقنية لازمة لتقديم الموقع وتأمين طلباته. إذا تواصلت مع المشروع، نتلقى المعلومات التي ترسلها. وعند استخدام النظام المصرّح به، تُعالج بيانات الحساب والدور والصلاحيات والجلسات وسجلات العمل التي يُدخلها المستخدمون، ومنها بيانات تواصل العملاء والصفقات والمشاريع والسجلات المالية. يسجّل النظام بعض الإجراءات الإدارية لأغراض التدقيق."],
+        ["أغراض الاستخدام", "نستخدم المعلومات لتقديم الموقع ومساحة العمل والرد على الاستفسارات وتسجيل الدخول وتطبيق الصلاحيات وحماية الحسابات والتحقق من إساءة الاستخدام. تُستخدم سجلات مساحة العمل لأغراض العمل التي تجيزها الجهة المشغلة. تعمل تحليلات الموقع الاختيارية عند الموافقة عليها."],
+        ["الكوكيز والتحليلات", "تتيح كوكي الجلسة استمرار تسجيل الدخول وتُمسح عند الخروج. تحفظ كوكيز التفضيلات اختيار اللغة والمظهر وقرار التحليلات لمدة تصل إلى سنة. اختيار الضرورية فقط يتيح تسجيل الدخول والاستخدام المعتاد. إذا وافقت، تقيس Vercel Web Analytics زيارات الصفحة الرئيسية العامة دون كوكيز للتحليلات. قد تعالج وقت الزيارة ومصدرها والموقع التقريبي ونوع المتصفح أو الجهاز. يحصر التطبيق القياس في الصفحة الرئيسية ويزيل معلمات الرابط والجزء الذي يلي علامة المربع من عنوان الصفحة المبلّغ عنه. يمكنك تعديل اختيارك أو سحب موافقتك من إعدادات الكوكيز."],
+        ["مزوّدو الخدمة ومكان المعالجة", "يعالج مزوّدو الاستضافة وقاعدة البيانات والتحليلات الاختيارية المعلومات اللازمة لتقديم خدماتهم. يستخدم الموقع Vercel للاستضافة والتحليلات الاختيارية، ويستخدم التطبيق MongoDB لتخزين سجلات العمل. تختلف أماكن المعالجة بحسب البيئة وإعدادات المزوّد. قد يُفصح عن معلومات إذا اقتضى القانون أو حماية الخدمة ومستخدميها ذلك."],
+        ["الاحتفاظ والأمن", "نحتفظ بالمعلومات وفق الغرض والحاجة التشغيلية والالتزامات السارية. تخضع الجلسات وسجلات محاولات الدخول لقواعد انتهاء صلاحية. تخضع سجلات مساحة العمل والتدقيق والنسخ الاحتياطية لسياسة الجهة المشغلة. يستخدم التطبيق ضوابط وصول وجلسات لحماية الحسابات. حافظ على سرية بيانات دخولك واستخدم مساحة العمل المصرّح بها للسجلات الفعلية."],
+        ["خياراتك وطلباتك", "بحسب القانون الساري وظروف الطلب، يمكنك طلب الوصول إلى بياناتك الشخصية أو تصحيحها أو محوها أو تقييد معالجتها، أو الاعتراض على بعض المعالجات. يمكنك سحب موافقة التحليلات في أي وقت. لطلبات الموقع العام، استخدم رابط التواصل أدناه ووضّح طلبك. قد نطلب ما يلزم للتحقق من هويتك. يمكنك أيضًا تقديم شكوى للجهة الرقابية المختصة بحماية البيانات."],
+      ],
+    },
+  },
+  terms: {
+    en: {
+      title: "Terms of use",
+      summary: "The rules for using the InsightBoard website, demo and authorised CRM workspaces.",
+      sections: [
+        ["Website and demo", "The public site explains InsightBoard. The demo is provided for evaluation and training, with sample data and restricted actions. Use fictitious information in demonstrations. Do not submit genuine customer records, confidential documents or payment details to the demo."],
+        ["Authorised accounts", "Use the account assigned to you and only the features and records your role permits. Keep credentials confidential and report suspected compromise to the workspace administrator. You are responsible for actions you authorise through your account and for signing out of shared devices."],
+        ["Acceptable use", "Use the service lawfully and for purposes authorised by your organisation. Do not attempt to access another account or workspace, evade access controls, disrupt the service, or introduce malicious content. Report security concerns through the project contact rather than testing against real users or records."],
+        ["Records and reports", "Only enter, share, or export records you are authorised to handle. The workspace operator is responsible for deciding what it may collect and for verifying figures before relying on a report for accounting, tax or legal decisions. The platform provides tools to organise records and prepare reports."],
+        ["Ownership and availability", "The site and software are protected by applicable intellectual property rights. Using the platform does not transfer ownership of your organisation’s records. Features may be maintained, updated or temporarily unavailable. Where appropriate, access may be restricted to protect accounts and data or respond to misuse."],
+        ["Privacy, applicable law and contact", "The privacy notice explains data handling and optional analytics. These terms are subject to applicable law, including mandatory rights and protections. Any written agreement governing an organisation’s workspace applies to that workspace. Use the project contact link for questions about this site or these terms."],
+      ],
+    },
+    ar: {
+      title: "شروط الاستخدام",
+      summary: "ضوابط استخدام موقع InsightBoard والنسخة التجريبية ومساحات عمل النظام المصرّح بها.",
+      sections: [
+        ["الموقع والنسخة التجريبية", "يعرّف الموقع العام بنظام InsightBoard. النسخة التجريبية مخصصة للتقييم والتدريب، وتحتوي بيانات نموذجية وعمليات مقيّدة. استخدم بيانات افتراضية عند العرض أو الشرح. لا تُدخل فيها سجلات عملاء حقيقية أو مستندات سرية أو بيانات دفع."],
+        ["الحسابات المصرّح بها", "استخدم الحساب المخصص لك والوظائف والسجلات التي يجيزها دورك فقط. حافظ على سرية بيانات الدخول وأبلغ مسؤول مساحة العمل إذا اشتبهت بتعريض الحساب للخطر. أنت مسؤول عن الإجراءات التي تعتمدها من حسابك وعن تسجيل الخروج من الأجهزة المشتركة."],
+        ["الاستخدام المقبول", "استخدم الخدمة على نحو مشروع وفي حدود الأغراض التي تسمح بها الجهة التي تعمل معها. يُحظر محاولة دخول حساب أو مساحة عمل أخرى، أو تجاوز ضوابط الوصول، أو تعطيل الخدمة، أو إدخال محتوى ضار. أبلغ عن المشكلات الأمنية عبر قناة التواصل بدل الاختبار على مستخدمين أو سجلات فعلية."],
+        ["السجلات والتقارير", "أدخل وشارك وصدّر السجلات التي يحق لك التعامل معها فقط. تتحمل الجهة المشغلة لمساحة العمل مسؤولية تحديد البيانات التي يحق لها جمعها، ومراجعة الأرقام قبل الاعتماد على أي تقرير في قرارات محاسبية أو ضريبية أو قانونية. توفر المنصة أدوات لتنظيم السجلات وإعداد التقارير."],
+        ["الملكية وتوفر الخدمة", "تخضع البرمجيات ومحتويات الموقع لحقوق الملكية الفكرية السارية. استخدام المنصة لا ينقل ملكية سجلات مؤسستك. قد تخضع بعض الوظائف للصيانة أو التحديث أو التوقف المؤقت. يجوز تقييد الوصول عند الحاجة لحماية الحسابات والبيانات أو التعامل مع إساءة الاستخدام."],
+        ["الخصوصية والقانون والتواصل", "يوضح إشعار الخصوصية كيفية معالجة البيانات والتحليلات الاختيارية. تخضع هذه الشروط للقانون الساري، مع مراعاة الحقوق والحمايات الإلزامية. تسري الاتفاقية المكتوبة الخاصة بمساحة العمل، إن وجدت، على تلك المساحة. استخدم رابط التواصل للاستفسار عن الموقع أو الشروط."],
+      ],
+    },
+  },
+};

@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
-  Alert,
   Box,
   Card,
   CardContent,
-  CircularProgress,
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
@@ -20,29 +18,8 @@ import {
   YAxis,
 } from "recharts";
 
-import { apiFetch } from "@/lib/apiClient";
+import type { DashboardOverview } from "@/lib/dashboardOverviewTypes";
 import MeasuredChartBox from "@/components/dashboard/charts/MeasuredChartBox";
-
-type Deal = {
-  _id: string;
-  title: string;
-  status?: string;
-};
-
-type DealsResponse = {
-  success?: boolean;
-  message?: string;
-  data?:
-    | Deal[]
-    | {
-        deals?: Deal[];
-        items?: Deal[];
-        records?: Deal[];
-      };
-  deals?: Deal[];
-  items?: Deal[];
-  records?: Deal[];
-};
 
 const DEAL_STATUS_ORDER = [
   "Lead",
@@ -52,21 +29,6 @@ const DEAL_STATUS_ORDER = [
   "Closed Won",
   "Closed Lost",
 ];
-
-function getDealsFromResponse(response: DealsResponse): Deal[] {
-  if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.deals)) return response.deals;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.records)) return response.records;
-
-  if (response.data && !Array.isArray(response.data)) {
-    if (Array.isArray(response.data.deals)) return response.data.deals;
-    if (Array.isArray(response.data.items)) return response.data.items;
-    if (Array.isArray(response.data.records)) return response.data.records;
-  }
-
-  return [];
-}
 
 function getShortStatusLabel(status: string) {
   if (status === "Proposal Sent") return "Proposal";
@@ -165,47 +127,17 @@ function NeonBarShape({
     </g>
   );
 }
-export default function DealsPipelineChart() {
+export default function DealsPipelineChart({ counts }: { counts: DashboardOverview["dealStatusCounts"] }) {
   const theme = useTheme();
 
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function fetchDeals() {
-      try {
-        setError("");
-
-        const response = await apiFetch<DealsResponse>("/api/deals");
-        setDeals(getDealsFromResponse(response));
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to load deals pipeline";
-
-        setError(message);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchDeals();
-  }, []);
-
   const chartData = useMemo(() => {
-    const counts = deals.reduce<Record<string, number>>((acc, deal) => {
-      const status = deal.status || "Lead";
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {});
-
     return DEAL_STATUS_ORDER.map((status) => ({
       status: getShortStatusLabel(status),
       fullStatus: status,
       deals: counts[status] || 0,
       color: getStatusColor(status),
     }));
-  }, [deals]);
+  }, [counts]);
 
   const gridColor = alpha(theme.palette.text.secondary, 0.13);
   const axisColor = alpha(theme.palette.text.secondary, 0.62);
@@ -279,7 +211,7 @@ export default function DealsPipelineChart() {
             </Typography>
           </Box>
 
-          {!loading && !error && (
+          {(
             <Box
               sx={{
                 px: 1.4,
@@ -301,19 +233,7 @@ export default function DealsPipelineChart() {
           )}
         </Box>
 
-        {loading && (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-            <CircularProgress size={28} />
-          </Box>
-        )}
-
-        {!loading && error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {!loading && !error && (
+        {(
           <Box
             sx={{
               position: "relative",
@@ -351,7 +271,7 @@ export default function DealsPipelineChart() {
                 opacity: 0.9,
                 pointerEvents: "none",
               },
-             
+
             }}
           >
             <MeasuredChartBox height={330}>

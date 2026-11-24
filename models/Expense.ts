@@ -12,6 +12,9 @@ const EXPENSE_CATEGORIES = [
 
 const ExpenseSchema = new Schema(
   {
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date },
+
     projectId: {
       type: Schema.Types.ObjectId,
       ref: "Project",

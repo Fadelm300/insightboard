@@ -1,9 +1,13 @@
+import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
+import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
+import { hasPermission } from "@/lib/permissions";
+import { projectFinancialInput, canReadProjectFinancials, projectDTO, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { blockIfDemoMode } from "@/lib/demoMode";
 import connectDB from "@/lib/mongodb";
 import { errorResponse, successResponse } from "@/lib/apiResponse";
-import { getAuthUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/authorization";
 import Project from "@/models/Project";
 import Client from "@/models/Client";
 import Deal from "@/models/Deal";
@@ -30,9 +34,9 @@ type ProjectPayload = {
   dealId?: string | null;
   name: string;
   type: ProjectType;
-  price: number;
-  cost: number;
-  profit: number;
+  price: number | null;
+  cost: number | null;
+  profit: number | null;
   deadline?: string;
   status: ProjectStatus;
   paymentStatus: PaymentStatus;
@@ -63,7 +67,6 @@ const PAYMENT_STATUSES: PaymentStatus[] = [
   "Paid",
 ];
 
-const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 const UNSAFE_TEXT_PATTERN =
   /<\s*script|<\/\s*script|javascript:|data:|on\w+\s*=|[{}[\]`$|\\]/i;
@@ -85,10 +88,6 @@ function hasUnsafeText(value: string) {
   return UNSAFE_TEXT_PATTERN.test(value);
 }
 
-function isValidMoney(value: unknown) {
-  const stringValue = getString(value);
-  return MONEY_PATTERN.test(stringValue);
-}
 
 function parseMoney(value: unknown) {
   return Number(getString(value));
@@ -174,30 +173,8 @@ function validateProjectPayload(body: unknown):
     return { error: "Invalid project type" };
   }
 
-  if (!isValidMoney(body.price)) {
-    return { error: "Price must be a valid number with up to 2 decimals" };
-  }
-
-  const price = parseMoney(body.price);
-
-  if (price <= 0) {
-    return { error: "Price must be greater than 0" };
-  }
-
-  const costValue =
-    body.cost === undefined || body.cost === null || body.cost === ""
-      ? 0
-      : body.cost;
-
-  if (!isValidMoney(costValue)) {
-    return { error: "Cost must be a valid number with up to 2 decimals" };
-  }
-
-  const cost = parseMoney(costValue);
-
-  if (cost < 0) {
-    return { error: "Cost cannot be negative" };
-  }
+  const price = body.price === null ? null : parseMoney(body.price);
+  const cost = body.cost === null ? null : parseMoney(body.cost);
 
   if (deadline && isPastDate(deadline)) {
     return { error: "Deadline cannot be in the past" };
@@ -235,7 +212,7 @@ function validateProjectPayload(body: unknown):
       type,
       price,
       cost,
-      profit: price - cost,
+      profit: price === null || cost === null ? null : price - cost,
       deadline: deadline || undefined,
       status,
       paymentStatus,
@@ -246,25 +223,17 @@ function validateProjectPayload(body: unknown):
 }
 export async function GET(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "projects.read");
+    if (authorization.response) return authorization.response;
 
     await connectDB();
 
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(Number(searchParams.get("page")) || 1, 1);
+    const query = parseCrmListQuery(searchParams);
+    if (!query.data) return errorResponse(query.error, 400);
 
-    const limit = Math.min(
-      Math.max(Number(searchParams.get("limit")) || 10, 1),
-      50
-    );
-
-    const search = searchParams.get("search")?.trim() || "";
-    const skip = (page - 1) * limit;
+    const { page, limit, skip, search, pattern } = query.data;
 
     const filter: Record<string, unknown> = {
       isDeleted: { $ne: true },
@@ -274,35 +243,37 @@ export async function GET(req: NextRequest) {
       const matchingClients = await Client.find({
         isDeleted: { $ne: true },
         $or: [
-          { companyName: { $regex: search, $options: "i" } },
-          { contactPerson: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
+          { companyName: { $regex: pattern, $options: "i" } },
+          ...(hasPermission(authorization.user!, "clients.read") ? [
+            { contactPerson: { $regex: pattern, $options: "i" } },
+            { email: { $regex: pattern, $options: "i" } },
+          ] : []),
         ],
       }).select("_id");
 
-      const matchingDeals = await Deal.find({
+      const matchingDeals = hasPermission(authorization.user!, "deals.read") ? await Deal.find({
         isDeleted: { $ne: true },
         $or: [
-          { title: { $regex: search, $options: "i" } },
-          { status: { $regex: search, $options: "i" } },
+          { title: { $regex: pattern, $options: "i" } },
+          { status: { $regex: pattern, $options: "i" } },
         ],
-      }).select("_id");
+      }).select("_id") : [];
 
       const matchingClientIds = matchingClients.map((client) => client._id);
       const matchingDealIds = matchingDeals.map((deal) => deal._id);
 
       const searchConditions: Record<string, unknown>[] = [
-        { name: { $regex: search, $options: "i" } },
-        { type: { $regex: search, $options: "i" } },
-        { status: { $regex: search, $options: "i" } },
-        { paymentStatus: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { notes: { $regex: search, $options: "i" } },
+        { name: { $regex: pattern, $options: "i" } },
+        { type: { $regex: pattern, $options: "i" } },
+        { status: { $regex: pattern, $options: "i" } },
+        ...(canReadProjectFinancials(authorization.user!) ? [{ paymentStatus: { $regex: pattern, $options: "i" } }] : []),
+        { description: { $regex: pattern, $options: "i" } },
+        { notes: { $regex: pattern, $options: "i" } },
       ];
 
       const amount = Number(search);
 
-      if (Number.isFinite(amount)) {
+      if (canReadProjectFinancials(authorization.user!) && Number.isFinite(amount)) {
         searchConditions.push({ price: amount });
         searchConditions.push({ cost: amount });
         searchConditions.push({ profit: amount });
@@ -335,7 +306,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(
       {
-        projects,
+        projects: projects.map((record) => projectDTO(record, authorization.user!)),
         total,
         page,
         limit,
@@ -350,17 +321,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const authUser = getAuthUser(req);
-
-    if (!authUser) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const authorization = await authorizeRequest(req, "projects.create");
+    if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
     await connectDB();
 
     const body = await req.json().catch(() => null);
-    const validation = validateProjectPayload(body);
+    const financial = projectFinancialInput(authorization.user!, body);
+    if (financial.error) return errorResponse(financial.error, financial.status);
+    const validation = validateProjectPayload({ ...body, ...financial.data });
 
     if ("error" in validation) {
       return errorResponse(validation.error, 400);
@@ -368,41 +338,48 @@ export async function POST(req: NextRequest) {
 
     const payload = validation.data;
 
-    const client = await Client.findOne({
-      _id: payload.clientId,
-      isDeleted: { $ne: true },
-    });
+    if (payload.dealId) await ensureProjectDealIndex();
 
-    if (!client) {
-      return errorResponse("Client not found", 404);
-    }
-
-    if (payload.dealId) {
-      const deal = await Deal.findOne({
-        _id: payload.dealId,
+    return await withCrmWriteTransaction(async (session) => {
+      const client = await Client.findOne({
+        _id: payload.clientId,
         isDeleted: { $ne: true },
-      });
+      }, null, { session });
 
-      if (!deal) {
-        return errorResponse("Deal not found", 404);
+      if (!client) {
+        return errorResponse("Client not found", 404);
       }
 
-      if (deal.status !== "Closed Won") {
-        return errorResponse(
-          "Project can only be linked to a Closed Won deal",
-          400
-        );
+      if (payload.dealId) {
+        const deal = await Deal.findOne({
+          _id: payload.dealId,
+          isDeleted: { $ne: true },
+        }, null, { session });
+
+        if (!deal) {
+          return errorResponse("Deal not found", 404);
+        }
+
+        if (deal.status !== "Closed Won") {
+          return errorResponse(
+            "Project can only be linked to a Closed Won deal",
+            400
+          );
+        }
+
+        if (String(deal.clientId) !== payload.clientId) {
+          return errorResponse("Selected deal does not belong to this client", 400);
+        }
       }
 
-      if (String(deal.clientId) !== payload.clientId) {
-        return errorResponse("Selected deal does not belong to this client", 400);
-      }
-    }
 
-    const project = await Project.create(payload);
+      const [project] = await Project.create([{ ...payload, ...financial.data }], { session, ordered: true });
 
-    return successResponse({ project }, "Project created successfully", 201);
-  } catch {
+      return successResponse({ project: projectDTO(project, authorization.user!) }, "Project created successfully", 201);
+    });
+  } catch (error) {
+    if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
+    if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);
     return errorResponse("Server error", 500);
   }
 }

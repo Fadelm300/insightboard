@@ -1,40 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
-  Alert,
   Box,
   Card,
   CardContent,
-  CircularProgress,
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import { Cell, Legend, Pie, PieChart, Tooltip } from "recharts";
 
-import { apiFetch } from "@/lib/apiClient";
+import type { DashboardOverview } from "@/lib/dashboardOverviewTypes";
 import MeasuredChartBox from "@/components/dashboard/charts/MeasuredChartBox";
-
-type Project = {
-  _id: string;
-  name: string;
-  status?: string;
-};
-
-type ProjectsResponse = {
-  success?: boolean;
-  message?: string;
-  data?:
-    | Project[]
-    | {
-        projects?: Project[];
-        items?: Project[];
-        records?: Project[];
-      };
-  projects?: Project[];
-  items?: Project[];
-  records?: Project[];
-};
 
 const STATUS_ORDER = [
   "Not Started",
@@ -43,21 +20,6 @@ const STATUS_ORDER = [
   "Completed",
   "Cancelled",
 ];
-
-function getProjectsFromResponse(response: ProjectsResponse): Project[] {
-  if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.projects)) return response.projects;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.records)) return response.records;
-
-  if (response.data && !Array.isArray(response.data)) {
-    if (Array.isArray(response.data.projects)) return response.data.projects;
-    if (Array.isArray(response.data.items)) return response.data.items;
-    if (Array.isArray(response.data.records)) return response.data.records;
-  }
-
-  return [];
-}
 
 function getStatusColor(status: string) {
   if (status === "Completed") return "#10B981";
@@ -68,46 +30,16 @@ function getStatusColor(status: string) {
   return "#8B5CF6";
 }
 
-export default function ProjectStatusChart() {
+export default function ProjectStatusChart({ counts }: { counts: DashboardOverview["projectStatusCounts"] }) {
   const theme = useTheme();
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function fetchProjects() {
-      try {
-        setError("");
-
-        const response = await apiFetch<ProjectsResponse>("/api/projects");
-        setProjects(getProjectsFromResponse(response));
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to load project status";
-
-        setError(message);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchProjects();
-  }, []);
-
   const chartData = useMemo(() => {
-    const counts = projects.reduce<Record<string, number>>((acc, project) => {
-      const status = project.status || "Unknown";
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {});
-
     return STATUS_ORDER.map((status) => ({
       name: status,
       value: counts[status] || 0,
       color: getStatusColor(status),
     })).filter((item) => item.value > 0);
-  }, [projects]);
+  }, [counts]);
 
   const totalProjects = chartData.reduce((total, item) => total + item.value, 0);
 
@@ -179,7 +111,7 @@ export default function ProjectStatusChart() {
             </Typography>
           </Box>
 
-          {!loading && !error && chartData.length > 0 && (
+          {chartData.length > 0 && (
             <Box
               sx={{
                 px: 1.4,
@@ -201,23 +133,11 @@ export default function ProjectStatusChart() {
           )}
         </Box>
 
-        {loading && (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-            <CircularProgress size={28} />
-          </Box>
-        )}
-
-        {!loading && error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {!loading && !error && chartData.length === 0 && (
+        {chartData.length === 0 && (
           <Typography color="text.secondary">No projects yet.</Typography>
         )}
 
-        {!loading && !error && chartData.length > 0 && (
+        {chartData.length > 0 && (
           <MeasuredChartBox height={330}>
             {({ width, height }) => (
               <Box
@@ -344,7 +264,7 @@ export default function ProjectStatusChart() {
 
                       "@media (min-width: 1800px)": {
                         top: "40%",
-                      }, 
+                      },
                       "@media (max-width: 430px) and (min-height: 900px)": {
                               top: "40%",
                             },

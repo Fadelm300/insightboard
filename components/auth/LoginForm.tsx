@@ -8,7 +8,6 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
   CircularProgress,
   IconButton,
   InputAdornment,
@@ -17,25 +16,26 @@ import {
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 
-import { setToken } from "@/lib/apiClient";
+import { notifyAuthChanged } from "@/lib/apiClient";
+import { firstAllowedPage } from "@/lib/permissions";
 
 type LoginResponse = {
   success: boolean;
   message: string;
   data?: {
-    token?: string;
     user?: {
       _id?: string;
       id?: string;
       name?: string;
       email?: string;
       role?: string;
+      allowedPermissions?: string[];
     };
   };
-  token?: string;
 };
-const DEMO_EMAIL = "admin@insightboard.demo";
-const DEMO_PASSWORD = "Admin@123456";
+
+const DEMO_EMAIL = "investor-layla@insightboard.test";
+const DEMO_PASSWORD = "cZzi-SfE0KZmBT5DEg1t8XBZkR29V_zr";
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -155,7 +155,7 @@ function LockIcon() {
   );
 }
 
-export default function LoginForm() {
+export default function LoginForm({ demoMode }: { demoMode: boolean }) {
   const router = useRouter();
 
   // يشتغل على اللابتوبات فقط: عرض متوسط + ارتفاع قصير
@@ -163,12 +163,9 @@ export default function LoginForm() {
   const compactLaptop =
     "@media (min-width: 900px) and (max-width: 1700px) and (max-height: 850px)";
 
-  // const [email, setEmail] = useState("");
-  // const [password, setPassword] = useState("");
-const [email, setEmail] = useState(DEMO_EMAIL);
-const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [email, setEmail] = useState(demoMode ? DEMO_EMAIL : "");
+  const [password, setPassword] = useState(demoMode ? DEMO_PASSWORD : "");
 
-  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -194,6 +191,7 @@ const [demoNotice, setDemoNotice] = useState("");
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-InsightBoard-Request": "1",
         },
         body: JSON.stringify({
           email: normalizeEmail(email),
@@ -207,14 +205,12 @@ const [demoNotice, setDemoNotice] = useState("");
         throw new Error(data.message || "Login failed");
       }
 
-      const token = data.data?.token || data.token;
-
-      if (!token) {
-        throw new Error("Token not found in login response");
-      }
-
-      setToken(token);
-      router.replace("/dashboard");
+      notifyAuthChanged("changed");
+      router.replace(firstAllowedPage({
+        role: data.data?.user?.role ?? "",
+        allowedPermissions: data.data?.user?.allowedPermissions ?? [],
+      }) ?? "/dashboard");
+      router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
       setError(getFriendlyLoginError(message));
@@ -829,6 +825,7 @@ const [demoNotice, setDemoNotice] = useState("");
           >
             Sign in to your InsightBoard account
           </Typography>
+{demoMode && (
 <Alert
   severity="info"
   sx={{
@@ -847,8 +844,9 @@ const [demoNotice, setDemoNotice] = useState("");
     },
   }}
 >
-  Demo access is pre-filled for preview only.
+  Demo account is pre-filled. Sign in to explore with view-only access.
 </Alert>
+)}
           {error && (
             <Alert
               severity="error"
@@ -1023,34 +1021,7 @@ const [demoNotice, setDemoNotice] = useState("");
               },
             }}
           >
-            <Box
-              component="label"
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.8,
-                cursor: "pointer",
-                color: "#93C5FD",
-                fontSize: { xs: 14, md: 15 },
-                fontWeight: 600,
-                userSelect: "none",
-              }}
-            >
-              <Checkbox
-                checked={rememberMe}
-                onChange={(event) => setRememberMe(event.target.checked)}
-                sx={{
-                  p: 0,
-                  color: alpha("#93C5FD", 0.55),
-
-                  "&.Mui-checked": {
-                    color: "#60A5FA",
-                  },
-                }}
-              />
-
-              Remember me
-            </Box>
+            <Typography sx={{ color: "#93C5FD", fontSize: 13 }}>Up to 8 hours per session</Typography>
 
             <Button
               type="button"
@@ -1058,7 +1029,7 @@ const [demoNotice, setDemoNotice] = useState("");
                onClick={() => {
                 setError("");
                 setDemoNotice(
-                  "Nice try 😂 This is demo mode, so password reset is disabled for security."
+                  demoMode ? "Password reset is unavailable in the view-only demo." : "Password reset is not available yet. Contact your administrator."
                 );
               }}
               sx={{
