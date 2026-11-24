@@ -34,6 +34,9 @@ type LoginResponse = {
   };
 };
 
+const DEMO_EMAIL = "investor-layla@insightboard.test";
+const DEMO_PASSWORD = "cZzi-SfE0KZmBT5DEg1t8XBZkR29V_zr";
+
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
@@ -160,8 +163,8 @@ export default function LoginForm({ demoMode }: { demoMode: boolean }) {
   const compactLaptop =
     "@media (min-width: 900px) and (max-width: 1700px) and (max-height: 850px)";
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(demoMode ? DEMO_EMAIL : "");
+  const [password, setPassword] = useState(demoMode ? DEMO_PASSWORD : "");
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -841,7 +844,7 @@ const [demoNotice, setDemoNotice] = useState("");
     },
   }}
 >
-  Demo accounts have view-only access. Sign in with the account shared with you.
+  Demo account is pre-filled. Sign in to explore with view-only access.
 </Alert>
 )}
           {error && (
