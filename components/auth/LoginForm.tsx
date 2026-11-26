@@ -794,7 +794,7 @@ const [demoNotice, setDemoNotice] = useState("");
             },
           }}
         >
-          <Typography
+          <Typography component="h1"
             sx={{
               color: "#F8FAFC",
               fontSize: { xs: 28, sm: 38, md: 48 },
@@ -902,8 +902,9 @@ const [demoNotice, setDemoNotice] = useState("");
               },
             }}
           >
-            <Typography
+            <Typography component="label" htmlFor="login-email"
               sx={{
+                display: "block",
                 mb: { xs: 0.8, md: 1 },
                 color: "#93C5FD",
                 fontSize: 12.5,
@@ -919,7 +920,7 @@ const [demoNotice, setDemoNotice] = useState("");
               Email Address
             </Typography>
 
-            <TextField
+            <TextField id="login-email"
               fullWidth
               type="email"
               autoComplete="email"
@@ -948,8 +949,9 @@ const [demoNotice, setDemoNotice] = useState("");
               },
             }}
           >
-            <Typography
+            <Typography component="label" htmlFor="login-password"
               sx={{
+                display: "block",
                 mb: { xs: 0.8, md: 1 },
                 color: "#93C5FD",
                 fontSize: 12.5,
@@ -965,7 +967,7 @@ const [demoNotice, setDemoNotice] = useState("");
               Password
             </Typography>
 
-            <TextField
+            <TextField id="login-password"
               fullWidth
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
