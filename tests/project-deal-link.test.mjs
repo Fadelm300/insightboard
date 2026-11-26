@@ -7,12 +7,14 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-function load(file, deps) {
+function load(file, deps = {}) {
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
-  vm.runInNewContext(code, { exports, URL, Date, Object, Number, require(name) {
+  vm.runInNewContext(code, { exports, TextDecoder, URL, Date, Object, Number, require(name) {
+    if (name === "@/lib/boundedJson") return load("lib/boundedJson.ts", {});
+    if (name === "@/lib/serverLogger") return { logServerError: () => "test-request-id" };
     if (!(name in deps)) throw Error(`Unexpected dependency: ${name}`);
     return deps[name];
   } });
@@ -78,9 +80,20 @@ function setup(options = {}) {
   return { rows, calls, link, conversion: load("app/api/deals/[id]/convert-to-project/route.ts", deps),
     projects: load("app/api/projects/route.ts", deps), item: load("app/api/projects/[id]/route.ts", deps) };
 }
-const request = (body = {}) => ({ json: async () => body });
+const request = (body = {}) => new Request("https://crm.example/api/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 const context = (value = id) => ({ params: Promise.resolve({ id: value }) });
 const payload = () => ({ clientId, dealId: id, name: "Synthetic project", type: "Business Website", price: 900, cost: 0 });
+
+test("conversion keeps supporting the existing UI request without a JSON body", async () => {
+  for (const body of [undefined, ""]) {
+    const s = setup();
+    const req = new Request("https://crm.example/api/test", { method: "POST", headers: { "content-type": "application/json" }, body });
+    const result = await s.conversion.POST(req, context());
+    assert.equal(result.status, 201);
+    assert.equal(s.rows.length, 1);
+    assert.ok(s.rows[0].deadline instanceof Date);
+  }
+});
 
 test("database deal constraint is shared, partial only for ObjectIds, and includes soft-deleted projects", async () => {
   const s = setup();

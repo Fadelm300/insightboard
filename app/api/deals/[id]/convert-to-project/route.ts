@@ -1,3 +1,5 @@
+import { CRM_JSON_MAX_BYTES, readBoundedJsonObject } from "@/lib/boundedJson";
+import { logServerError } from "@/lib/serverLogger";
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { ensureProjectDealIndex, isProjectDealConflict, ProjectDealLinkUnavailable } from "@/lib/projectDealLink";
 import { canManageProjectFinancials, projectDTO, parseCrmMoney } from "@/lib/crmData";
@@ -73,7 +75,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
     if (!canManageProjectFinancials(authorization.user!)) return errorResponse("Project financial permission required", 403);
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
-    await connectDB();
 
     const { id } = await context.params;
 
@@ -81,7 +82,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid deal id", 400);
     }
 
-    const body = await req.json().catch(() => null);
+    const parsed = await readBoundedJsonObject(req, CRM_JSON_MAX_BYTES, { allowEmpty: true });
+    if (!parsed.ok) {
+      const message = parsed.status === 413 ? "Request body is too large" : parsed.status === 415 ? "Expected application/json" : "Invalid request body";
+      return errorResponse(message, parsed.status);
+    }
+    const body = parsed.value;
+    await connectDB();
 
     const deadlineInput = isPlainObject(body) ? getString(body.deadline) : "";
 
@@ -170,6 +177,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
   } catch (error) {
     if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
     if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);
-    return errorResponse("Server error", 500);
+    return errorResponse("Server error", 500, logServerError("CRM_DEALS_POST_ERROR", error));
   }
 }

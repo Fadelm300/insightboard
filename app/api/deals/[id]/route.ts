@@ -1,3 +1,5 @@
+import { CRM_JSON_MAX_BYTES, readBoundedJsonObject } from "@/lib/boundedJson";
+import { logServerError } from "@/lib/serverLogger";
 import Project from "@/models/Project";
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { archiveCrmRecord } from "@/lib/crmArchive";
@@ -329,8 +331,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
 
     return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal fetched successfully");
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_DEALS_GET_ERROR", error));
   }
 }
 
@@ -340,14 +342,19 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
-    await connectDB();
 
     const id = await getDealId(context);
 
     if (!id) {
       return errorResponse("Invalid deal id", 400);
     }
-    const body = await req.json().catch(() => null);
+    const parsed = await readBoundedJsonObject(req, CRM_JSON_MAX_BYTES);
+    if (!parsed.ok) {
+      const message = parsed.status === 413 ? "Request body is too large" : parsed.status === 415 ? "Expected application/json" : "Invalid request body";
+      return errorResponse(message, parsed.status);
+    }
+    const body = parsed.value;
+    await connectDB();
 
     return await withCrmWriteTransaction(async (session) => {
       const existingDeal = await Deal.findOne({
@@ -397,8 +404,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
       return successResponse({ deal: dealDTO(deal, authorization.user!) }, "Deal updated successfully");
     });
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_DEALS_PUT_ERROR", error));
   }
 }
 
@@ -423,7 +430,7 @@ if (demoBlock) return demoBlock;
     }
 
     return successResponse({}, "Deal archived successfully");
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_DEALS_DELETE_ERROR", error));
   }
 }
