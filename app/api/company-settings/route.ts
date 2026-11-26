@@ -13,9 +13,8 @@ export async function GET(req: NextRequest) {
 
   try {
     return successResponse(await readCompanySettings());
-  } catch {
-    logServerError("COMPANY_SETTINGS_ERROR");
-    return errorResponse("Unable to load company settings");
+  } catch (error) {
+    return errorResponse("Unable to load company settings", 500, logServerError("COMPANY_SETTINGS_ERROR", error));
   }
 }
 
@@ -41,8 +40,7 @@ export async function PUT(req: NextRequest) {
   try {
     await saveCompanySettings(settings);
     return successResponse(settings, "Company settings saved");
-  } catch {
-    logServerError("COMPANY_SETTINGS_ERROR");
-    return errorResponse("Unable to save company settings");
+  } catch (error) {
+    return errorResponse("Unable to save company settings", 500, logServerError("COMPANY_SETTINGS_ERROR", error));
   }
 }

@@ -9,8 +9,7 @@ export async function GET(req: NextRequest) {
     const current = await getRequestSession(req);
     if (!current) return errorResponse("Session expired. Please sign in again.", 401);
     return successResponse({ user: current.user, session: sessionDetails(current.session) });
-  } catch {
-    logServerError("ME_ERROR");
-    return errorResponse("Unable to check your session", 503);
+  } catch (error) {
+    return errorResponse("Unable to check your session", 503, logServerError("ME_ERROR", error));
   }
 }

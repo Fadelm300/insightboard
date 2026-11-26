@@ -74,10 +74,8 @@ export async function GET(req: NextRequest) {
       page: requestedPage,
       limit
     });
-  } catch {
-    logServerError("USER_MANAGEMENT_ERROR");
-
-    return errorResponse("Unable to load users", 500);
+  } catch (error) {
+    return errorResponse("Unable to load users", 500, logServerError("USER_MANAGEMENT_ERROR", error));
   }
 }
 
