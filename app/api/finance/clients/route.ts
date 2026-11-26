@@ -151,8 +151,7 @@ export async function GET(req: NextRequest) {
       { clients: clients.map((item) => ({ ...item, client: clientLabelDTO(item.client, authorization.user!) })) },
       "Clients finance summary fetched successfully"
     );
-  } catch {
-    logServerError("GET_CLIENTS_FINANCE_SUMMARY_ERROR");
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("GET_CLIENTS_FINANCE_SUMMARY_ERROR", error));
   }
 }

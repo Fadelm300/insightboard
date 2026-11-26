@@ -95,8 +95,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       },
       "Project finance summary fetched successfully"
     );
-  } catch {
-    logServerError("GET_PROJECT_FINANCE_SUMMARY_ERROR");
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("GET_PROJECT_FINANCE_SUMMARY_ERROR", error));
   }
 }
