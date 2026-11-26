@@ -147,14 +147,19 @@ test("diagnostic failures expose neither credentials nor internal hostnames", as
   assert.equal(calls.logs[0], "DATABASE_DIAGNOSTIC_ERROR");
 });
 
-test("server logger records only the operation label", () => {
+test("server logger records safe categories and a generated correlation ID without raw error details", () => {
   const calls = [];
   const logger = loadSource("lib/serverLogger.ts", {
+    "node:crypto": { randomUUID: () => "server-generated-id" },
     console: { error: (...args) => calls.push(args) },
   });
 
-  logger.logServerError("LOGIN_API_ERROR");
-  assert.equal(JSON.stringify(calls), '[["[server-error]",{"event":"LOGIN_API_ERROR"}]]');
+  const requestId = logger.logServerError("LOGIN_API_ERROR", Object.assign(new Error("mongodb://private-password@private-host"), { name: "MongoServerSelectionError" }));
+  assert.equal(requestId, "server-generated-id");
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [["[server-error]", {
+    event: "LOGIN_API_ERROR", category: "database_unavailable", requestId: "server-generated-id",
+  }]]);
+  assert.ok(!JSON.stringify(calls).includes("private-"));
 });
 
 test("a failed database connection is retried and a successful one is reused", async () => {

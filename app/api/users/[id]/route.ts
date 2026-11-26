@@ -43,8 +43,6 @@ export async function PUT(
     if (error instanceof UserManagementError)
       return errorResponse(error.message, error.status);
 
-    logServerError("USER_MANAGEMENT_ERROR");
-
-    return errorResponse("Unable to update user", 500);
+    return errorResponse("Unable to update user", 500, logServerError("USER_MANAGEMENT_ERROR", error));
   }
 }

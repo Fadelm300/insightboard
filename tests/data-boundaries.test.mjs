@@ -12,7 +12,9 @@ function load(file, dependencies = {}) {
   const compiled = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
-  vm.runInNewContext(compiled, { exports, Buffer, URL, Date, Number, Object, require(name) {
+  vm.runInNewContext(compiled, { exports, Buffer, TextDecoder, URL, Date, Number, Object, require(name) {
+    if (name === "@/lib/boundedJson") return load("lib/boundedJson.ts", {});
+    if (name === "@/lib/serverLogger") return { logServerError: () => "test-request-id" };
     if (!(name in dependencies)) throw Error(`Unexpected dependency: ${name}`);
     return dependencies[name];
   } });
@@ -20,6 +22,7 @@ function load(file, dependencies = {}) {
 }
 const permissions = load("lib/permissions.ts");
 const data = load("lib/crmData.ts", { "@/lib/permissions": permissions });
+const jsonRequest = (body) => new Request("https://crm.example/api/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 test("CRM money preserves cents and rejects unsupported values", () => {
@@ -72,17 +75,17 @@ for (const [resource, model, fields, payload] of [
     const context = { params: Promise.resolve({ id }) };
     for (const field of fields) {
       for (const value of [-1, "1.001", "9".repeat(400), "90071992547409.92"]) {
-        const req = { json: async () => ({ ...stored, [field]: value }) };
-        assert.equal((await collection.POST(req)).status, 400, `POST ${field}`);
+        const req = jsonRequest({ ...stored, [field]: value });
+        assert.equal((await collection.POST(req.clone())).status, 400, `POST ${field}`);
         assert.equal((await item.PUT(req, context)).status, 400, `PUT ${field}`);
       }
     }
     assert.equal(writes, 0);
     assert.equal(stored[fields[0]], 15);
-    const valid = { json: async () => ({ ...stored, [fields[0]]: "15.25" }) };
+    const valid = jsonRequest({ ...stored, [fields[0]]: "15.25" });
     assert.equal((await collection.POST(valid)).status, 201);
     assert.equal(stored[fields[0]], 15.25);
-    const update = { json: async () => ({ ...stored, [fields[0]]: 16.75 }) };
+    const update = jsonRequest({ ...stored, [fields[0]]: 16.75 });
     assert.equal((await item.PUT(update, context)).status, 200);
     assert.equal(stored[fields[0]], 16.75);
   });
@@ -248,13 +251,13 @@ test("project search cannot test hidden money, payment state, contacts or unauth
 
 test("project create rejects hidden financial fields before relationship reads or writes", async () => {
   const f = routeFixture(employee);
-  const result = await f.collection.POST({ json: async () => ({ name: "QA", price: 900 }) });
+  const result = await f.collection.POST(jsonRequest({ name: "QA", price: 900 }));
   assert.equal(result.status, 403); assert.equal(f.calls.writes, 0);
 });
 
 test("employee can create an unpriced project and the mutation response stays filtered", async () => {
   const f = routeFixture(employee);
-  const result = await f.collection.POST({ json: async () => ({ name: "New QA", type: "Business Website", clientId: project.clientId._id }) });
+  const result = await f.collection.POST(jsonRequest({ name: "New QA", type: "Business Website", clientId: project.clientId._id }));
   assert.equal(result.status, 201); assert.equal(f.calls.writes, 1);
   assert.equal(f.stored.price, null); assert.equal(f.stored.cost, null);
   assert.equal("price" in result.data.project, false); assert.equal("profit" in result.data.project, false);
@@ -262,27 +265,27 @@ test("employee can create an unpriced project and the mutation response stays fi
 
 test("non-financial project update does not rewrite old financial values and rejects attempted overrides", async () => {
   const f = routeFixture(employee);
-  const result = await f.item.PUT({ json: async () => ({ name: "Updated QA" }) }, { params: Promise.resolve({ id: project._id }) });
+  const result = await f.item.PUT(jsonRequest({ name: "Updated QA" }), { params: Promise.resolve({ id: project._id }) });
   assert.equal(result.status, 200);
   for (const field of ["price", "cost", "profit", "paymentStatus"]) assert.equal(field in f.calls.updates[0].$set, false);
   assert.equal(f.stored.price, 900); assert.equal("price" in result.data.project, false);
-  const denied = await f.item.PUT({ json: async () => ({ cost: 0 }) }, { params: Promise.resolve({ id: project._id }) });
+  const denied = await f.item.PUT(jsonRequest({ cost: 0 }), { params: Promise.resolve({ id: project._id }) });
   assert.equal(denied.status, 403); assert.equal(f.calls.writes, 1);
 });
 
 test("financial writer can price a project and a financial reader still cannot change it", async () => {
   const f = routeFixture(writer);
-  const result = await f.item.PUT({ json: async () => ({ price: "950", cost: "250" }) }, { params: Promise.resolve({ id: project._id }) });
+  const result = await f.item.PUT(jsonRequest({ price: "950", cost: "250" }), { params: Promise.resolve({ id: project._id }) });
   assert.equal(result.status, 200); assert.equal(result.data.project.price, 950); assert.equal(result.data.project.profit, 700);
   const readOnly = routeFixture(reader);
-  const denied = await readOnly.item.PUT({ json: async () => ({ price: 1 }) }, { params: Promise.resolve({ id: project._id }) });
+  const denied = await readOnly.item.PUT(jsonRequest({ price: 1 }), { params: Promise.resolve({ id: project._id }) });
   assert.equal(denied.status, 403); assert.equal(readOnly.calls.writes, 0);
 });
 
 test("deal conversion cannot assign project pricing without the independent financial manage permission", async () => {
   const actor = { role: "employee", allowedPermissions: permissions.withPermissionDependencies(["deals.convert"]) };
   const f = routeFixture(actor);
-  const result = await f.conversion.POST({ json: async () => ({}) }, { params: Promise.resolve({ id: project.dealId._id }) });
+  const result = await f.conversion.POST(jsonRequest({}), { params: Promise.resolve({ id: project.dealId._id }) });
   assert.equal(result.status, 403); assert.equal(f.calls.writes, 0);
 });
 

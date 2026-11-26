@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { Box } from "@mui/material";
 
 import LoginForm from "@/components/auth/LoginForm";
 import { isDemoMode } from "@/lib/demoMode";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function LoginPage() {
   return (

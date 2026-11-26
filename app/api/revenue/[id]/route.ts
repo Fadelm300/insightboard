@@ -1,3 +1,5 @@
+import { CRM_JSON_MAX_BYTES, readBoundedJsonObject } from "@/lib/boundedJson";
+import { logServerError } from "@/lib/serverLogger";
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { changeFinancialArchive } from "@/lib/financialArchive";
 import { revenueDTO, parseCrmMoney } from "@/lib/crmData";
@@ -93,8 +95,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
 
     return successResponse({ revenue: revenueDTO(revenue, authorization.user!) }, "Revenue record fetched successfully");
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_REVENUE_GET_ERROR", error));
   }
 }
 
@@ -104,7 +106,6 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
-    await connectDB();
 
     const { id } = await context.params;
 
@@ -112,7 +113,13 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid revenue ID", 400);
     }
 
-    const body = await req.json().catch(() => null);
+    const parsed = await readBoundedJsonObject(req, CRM_JSON_MAX_BYTES);
+    if (!parsed.ok) {
+      const message = parsed.status === 413 ? "Request body is too large" : parsed.status === 415 ? "Expected application/json" : "Invalid request body";
+      return errorResponse(message, parsed.status);
+    }
+    const body = parsed.value;
+    await connectDB();
 
     if (!isPlainObject(body)) {
       return errorResponse("Invalid request body", 400);
@@ -205,8 +212,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
       return successResponse({ revenue: revenueDTO(revenue, authorization.user!) }, "Revenue record updated successfully");
     });
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_REVENUE_PUT_ERROR", error));
   }
 }
 
@@ -231,7 +238,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     }
 
     return successResponse({}, "Revenue record deleted successfully");
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_REVENUE_DELETE_ERROR", error));
   }
 }

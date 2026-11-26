@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
 
     const user = await User.findOne({ email: cleanEmail });
 
-    const passwordHash = user?.password ?? "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    // Match the cost used when creating accounts, including when the email does not exist.
+    const passwordHash = user?.password ?? "$2b$12$6s7MkXo4VBZ8sV.xDcTmQOPlg.TR6nQhZNXzaXUn.6upjxzfK0mpa";
     const isPasswordValid = await bcrypt.compare(cleanPassword, passwordHash);
 
     if (!user || !isPasswordValid || !isAccountEnabled(user)) {
@@ -97,8 +98,7 @@ export async function POST(req: NextRequest) {
     );
     await createSession(user._id.toString(), req, response, user.authVersion ?? 0);
     return response;
-  } catch {
-    logServerError("LOGIN_API_ERROR");
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("LOGIN_API_ERROR", error));
   }
 }

@@ -60,8 +60,7 @@ export async function GET(req: NextRequest) {
     };
 
     return successResponse(overview);
-  } catch {
-    logServerError("DASHBOARD_OVERVIEW_ERROR");
-    return errorResponse("Failed to load dashboard data", 500);
+  } catch (error) {
+    return errorResponse("Failed to load dashboard data", 500, logServerError("DASHBOARD_OVERVIEW_ERROR", error));
   }
 }

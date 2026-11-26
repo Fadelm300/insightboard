@@ -14,8 +14,7 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     return successResponse(await readFinanceSummary(), "Finance summary fetched successfully");
-  } catch {
-    logServerError("GET_FINANCE_SUMMARY_ERROR");
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("GET_FINANCE_SUMMARY_ERROR", error));
   }
 }

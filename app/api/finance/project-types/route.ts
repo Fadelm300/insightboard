@@ -132,8 +132,7 @@ export async function GET(req: NextRequest) {
       { projectTypes },
       "Project type finance summary fetched successfully"
     );
-  } catch {
-    logServerError("GET_PROJECT_TYPE_FINANCE_SUMMARY_ERROR");
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("GET_PROJECT_TYPE_FINANCE_SUMMARY_ERROR", error));
   }
 }

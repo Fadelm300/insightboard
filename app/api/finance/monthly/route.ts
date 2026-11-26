@@ -14,8 +14,7 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     return successResponse({ monthly: await readMonthlyFinance() }, "Monthly finance data fetched successfully");
-  } catch {
-    logServerError("GET_MONTHLY_FINANCE_ERROR");
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("GET_MONTHLY_FINANCE_ERROR", error));
   }
 }

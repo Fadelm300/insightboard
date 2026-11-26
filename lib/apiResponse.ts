@@ -15,12 +15,12 @@ export function successResponse(
   );
 }
 
-export function errorResponse(message = "Error", status = 500) {
+export function errorResponse(message = "Error", status = 500, requestId?: string) {
   return NextResponse.json(
     {
       success: false,
       message,
     },
-    { status, headers: { "Cache-Control": "no-store" } }
+    { status, headers: { "Cache-Control": "no-store", ...(requestId ? { "X-Request-ID": requestId } : {}) } }
   );
 }

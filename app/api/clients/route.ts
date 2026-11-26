@@ -1,3 +1,5 @@
+import { CRM_JSON_MAX_BYTES, readBoundedJsonObject } from "@/lib/boundedJson";
+import { logServerError } from "@/lib/serverLogger";
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { clientDTO, parseCrmListQuery } from "@/lib/crmData";
 import { NextRequest } from "next/server";
@@ -305,8 +307,8 @@ export async function GET(req: NextRequest) {
       },
       "Clients fetched successfully",
     );
-  } catch  {
-    return errorResponse("Failed to fetch clients", 500);
+  } catch (error) {
+    return errorResponse("Failed to fetch clients", 500, logServerError("CRM_CLIENTS_GET_ERROR", error));
   }
 }
 
@@ -316,9 +318,14 @@ export async function POST(req: NextRequest) {
     if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
-    await connectDB();
 
-    const body = await req.json().catch(() => null);
+    const parsed = await readBoundedJsonObject(req, CRM_JSON_MAX_BYTES);
+    if (!parsed.ok) {
+      const message = parsed.status === 413 ? "Request body is too large" : parsed.status === 415 ? "Expected application/json" : "Invalid request body";
+      return errorResponse(message, parsed.status);
+    }
+    const body = parsed.value;
+    await connectDB();
     const { values, error } = validateClientPayload(body);
 
     if (!values) {
@@ -330,7 +337,7 @@ export async function POST(req: NextRequest) {
 
       return successResponse({ client: clientDTO(client) }, "Client created successfully", 201);
     });
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_CLIENTS_POST_ERROR", error));
   }
 }

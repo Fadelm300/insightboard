@@ -1,8 +1,10 @@
+export const CRM_JSON_MAX_BYTES = 16 * 1024;
+
 type JsonResult =
   | { ok: true; value: Record<string, unknown> }
   | { ok: false; status: 400 | 413 | 415 };
 
-export async function readBoundedJsonObject(req: Request, maxBytes: number): Promise<JsonResult> {
+export async function readBoundedJsonObject(req: Request, maxBytes: number, options: { allowEmpty?: boolean } = {}): Promise<JsonResult> {
   const mediaType = req.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
   if (mediaType !== "application/json") return { ok: false, status: 415 };
 
@@ -12,7 +14,7 @@ export async function readBoundedJsonObject(req: Request, maxBytes: number): Pro
   }
 
   const reader = req.body?.getReader();
-  if (!reader) return { ok: false, status: 400 };
+  if (!reader) return options.allowEmpty ? { ok: true, value: {} } : { ok: false, status: 400 };
 
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let size = 0;
@@ -29,7 +31,9 @@ export async function readBoundedJsonObject(req: Request, maxBytes: number): Pro
       text += decoder.decode(value, { stream: true });
     }
 
-    const value: unknown = JSON.parse(text + decoder.decode());
+    text += decoder.decode();
+    if (options.allowEmpty && text.length === 0) return { ok: true, value: {} };
+    const value: unknown = JSON.parse(text);
     if (value && typeof value === "object" && !Array.isArray(value)) {
       return { ok: true, value: value as Record<string, unknown> };
     }

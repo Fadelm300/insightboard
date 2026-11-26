@@ -10,6 +10,8 @@ function load(file, deps) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
   vm.runInNewContext(code, { exports, Date, Object, URL, require(name) {
+    if (name === "@/lib/boundedJson") return {};
+    if (name === "@/lib/serverLogger") return { logServerError: () => "test-request-id" };
     if (!(name in deps)) throw Error(`Unexpected dependency: ${name}`);
     return deps[name];
   } });

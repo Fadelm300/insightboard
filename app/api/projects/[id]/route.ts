@@ -1,3 +1,5 @@
+import { CRM_JSON_MAX_BYTES, readBoundedJsonObject } from "@/lib/boundedJson";
+import { logServerError } from "@/lib/serverLogger";
 import Revenue from "@/models/Revenue";
 import { withCrmWriteTransaction } from "@/lib/crmWriteTransaction";
 import { archiveCrmRecord } from "@/lib/crmArchive";
@@ -145,8 +147,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
 
     return successResponse({ project: projectDTO(project, authorization.user!) }, "Project fetched successfully");
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_PROJECTS_GET_ERROR", error));
   }
 }
 
@@ -156,7 +158,6 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     if (authorization.response) return authorization.response;
     const demoBlock = blockIfDemoMode();
     if (demoBlock) return demoBlock;
-    await connectDB();
 
     const { id } = await context.params;
 
@@ -164,7 +165,13 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return errorResponse("Invalid project ID", 400);
     }
 
-    const body = await req.json().catch(() => null);
+    const parsed = await readBoundedJsonObject(req, CRM_JSON_MAX_BYTES);
+    if (!parsed.ok) {
+      const message = parsed.status === 413 ? "Request body is too large" : parsed.status === 415 ? "Expected application/json" : "Invalid request body";
+      return errorResponse(message, parsed.status);
+    }
+    const body = parsed.value;
+    await connectDB();
 
     await ensureProjectDealIndex();
 
@@ -368,7 +375,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
   } catch (error) {
     if (error instanceof ProjectDealLinkUnavailable) return errorResponse("Project linking is temporarily unavailable", 503);
     if (isProjectDealConflict(error)) return errorResponse("This deal already has a project, including archived projects", 409);
-    return errorResponse("Server error", 500);
+    return errorResponse("Server error", 500, logServerError("CRM_PROJECTS_PUT_ERROR", error));
   }
 }
 
@@ -393,7 +400,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     }
 
     return successResponse({}, "Project archived successfully");
-  } catch {
-    return errorResponse("Server error", 500);
+  } catch (error) {
+    return errorResponse("Server error", 500, logServerError("CRM_PROJECTS_DELETE_ERROR", error));
   }
 }
