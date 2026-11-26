@@ -73,19 +73,35 @@ The complete model contains **16 collections, 156 stored fields and 31 expanded 
 
 `recordId` history links select one target type through `resource`; historical targets may no longer exist. `CompanySettings`, `LoginAttempt` and `CrmWriteLock` have no stored entity-reference links. The optional Project–Deal 1:1 constraint depends on a pre-provisioned unique partial index.
 
-### Wireframes and editable diagrams
+### Wireframes and diagrams
 
-Open `.drawio` files in diagrams.net. SVG files provide scalable previews of the same diagrams.
+#### Dashboard wireframe
 
-| Diagram | View | Editable source |
-| --- | --- | --- |
-| Dashboard wireframe | [SVG](design/InsightBoard-Dashboard-Wireframe.svg) | [drawio](design/InsightBoard-Dashboard-Wireframe.drawio) |
-| Complete system wireframe | [SVG](design/InsightBoard-Complete-System.svg) | [drawio](design/InsightBoard-Complete-System.drawio) |
-| Architecture | [SVG](design/InsightBoard-Architecture.svg) | [drawio](design/InsightBoard-Architecture.drawio) |
-| ERD by area | [SVG](design/InsightBoard-ERD.svg) | [drawio](design/InsightBoard-ERD.drawio) |
-| Complete connected ERD | [SVG](design/InsightBoard-Complete-Connected-ERD.svg) | [drawio](design/InsightBoard-Complete-Connected-ERD.drawio) |
-| 07 :Connected Chen ERD | [SVG](design/07-InsightBoard-Chen-Connected.svg) | [drawio](design/07-InsightBoard-Chen-Connected.drawio) |
-| 08 :Connected table ERD | [SVG](design/08-InsightBoard-Tables-Connected.svg) | [drawio](design/08-InsightBoard-Tables-Connected.drawio) |
+![Dashboard wireframe](design/InsightBoard-Dashboard-Wireframe.png)
+
+#### Complete system wireframe
+
+![Complete system wireframe](design/InsightBoard-Complete-System.png)
+
+#### Architecture
+
+![Architecture](design/InsightBoard-Architecture.png)
+
+#### ERD by area
+
+![ERD by area](design/InsightBoard-ERD.png)
+
+#### Complete connected ERD
+
+![Complete connected ERD](design/InsightBoard-Complete-Connected-ERD.png)
+
+#### 07 — Connected Chen ERD
+
+![07 — Connected Chen ERD](design/07-InsightBoard-Chen-Connected.png)
+
+#### 08 — Connected table ERD
+
+![08 — Connected table ERD](design/08-InsightBoard-Tables-Connected.png)
 
 ### CI/CD
 
