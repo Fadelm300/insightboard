@@ -10,6 +10,7 @@ export async function legalMetadata(kind: keyof typeof legalContent) {
   const language = preferences.get("language")?.value === "ar" ? "ar" : "en";
   return {
     title: legalContent[kind][language].title + " | InsightBoard",
+    alternates: { canonical: `/${kind}` },
     robots: process.env.LEGAL_NOTICE_MODE === "review" ? { index: false, follow: false } : undefined,
   };
 }

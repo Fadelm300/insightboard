@@ -5,6 +5,7 @@ import AppThemeProvider from "@/components/theme/AppThemeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://insightboard-one.vercel.app"),
   title: "InsightBoard",
   description: "CRM Dashboard for web design business",
 };

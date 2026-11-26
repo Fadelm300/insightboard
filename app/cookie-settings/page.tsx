@@ -5,7 +5,11 @@ import PublicPolicyLayout from "@/components/landing/PublicPolicyLayout";
 export async function generateMetadata() {
   const preferences = await cookies();
   const arabic = preferences.get("language")?.value === "ar";
-  return { title: arabic ? "إعدادات الكوكيز | InsightBoard" : "Cookie settings | InsightBoard" };
+  return {
+    title: arabic ? "إعدادات الكوكيز | InsightBoard" : "Cookie settings | InsightBoard",
+    alternates: { canonical: "/cookie-settings" },
+    robots: { index: false, follow: false },
+  };
 }
 
 export default async function CookieSettingsPage() {
