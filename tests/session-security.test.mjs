@@ -76,9 +76,9 @@ function sessionHarness() {
   }
   const user = { _id: { toString: () => "user-1" }, name: "Example", email: "example@example.invalid", role: "admin" };
   const Session = {
-    create: async (row) => { rows.push(row); },
+    create: async (records) => { rows.push(...records); },
     deleteOne: async ({ tokenHash }) => { rows = rows.filter((row) => row.tokenHash !== tokenHash); },
-    findOne: ({ tokenHash }) => ({ lean: async () => rows.find((row) => row.tokenHash === tokenHash) ?? null }),
+    findOne: ({ tokenHash }) => ({ session() { return this; }, lean: async () => rows.find((row) => row.tokenHash === tokenHash) ?? null }),
     findOneAndUpdate: (query, update, options) => ({ lean: async () => {
       assert.equal(options.returnDocument, "after");
       assert.equal("new" in options, false);
@@ -90,6 +90,11 @@ function sessionHarness() {
     } }),
   };
   const auth = load("lib/auth.ts", {
+    "@/lib/securityAudit": {
+      withSecurityTransaction: (fn) => fn({}), startSecuritySession: async () => {},
+      renewSecuritySession: async () => {}, closeSecuritySession: async () => {},
+    },
+    "@/lib/securityContext": { securityRequestContext: () => ({}) },
     "node:crypto": crypto,
     react: { cache: (fn) => fn },
     "next/headers": { cookies: async () => ({ get: () => undefined }) },
@@ -239,6 +244,7 @@ function loginHarness(userPresent = true, validPassword = true) {
   let created = 0;
   const makeResponse = (data = {}, message = "", status = 200) => Response.json({ success: status < 400, message, data }, { status });
   const route = load("app/api/auth/login/route.ts", {
+    "@/lib/securityAudit": { recordSecurityEvent: async () => {} },
     "@/lib/serverLogger": { logServerError: () => {} },
     "next/server": { NextResponse: { json: (body, options) => Response.json(body, options) } },
     bcryptjs: { __esModule: true, default: { compare: async () => { comparisons += 1; return validPassword; } } },

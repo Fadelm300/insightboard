@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import User from "@/models/User";
 import Session from "@/models/Session";
 import UserAuditEvent from "@/models/UserAuditEvent";
+import { closeSecuritySessionsForUser } from "@/lib/securityAudit";
 import {
   canDelegatePermissions, canManageUser, getPermissions, isAccountEnabled,
   PERMISSIONS, withPermissionDependencies, type Permission,
@@ -180,6 +181,7 @@ export async function saveManagedUser(actor: Actor, input: UserInput, targetId?:
           { returnDocument: "after", runValidators: true, session },
         ).select(SAFE_USER_FIELDS).lean() as UserRecord | null;
         if (!saved) throw new UserManagementError(409, "Account changed. Reload and try again");
+        await closeSecuritySessionsForUser(targetId, actor.id, session);
         await Session.deleteMany({ userId: targetId }).session(session);
       } else {
         if (!passwordHash || !input.email) throw new UserManagementError(400, "Missing account credentials");
