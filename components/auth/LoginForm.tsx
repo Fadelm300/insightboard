@@ -34,7 +34,7 @@ type LoginResponse = {
   };
 };
 
-const DEMO_EMAIL = "investor-layla@insightboard.test";
+const DEMO_EMAIL = "investor-Fadel@insightboard.test";
 const DEMO_PASSWORD = "cZzi-SfE0KZmBT5DEg1t8XBZkR29V_zr";
 
 function normalizeEmail(value: string) {
