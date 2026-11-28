@@ -27,8 +27,8 @@ export default async function LegalNotice({ kind }: { kind: keyof typeof legalCo
     <PublicPolicyLayout
       language={language} theme={theme} current={`/${kind}`} title={title} summary={summary}
       detail={<>
-        <time dateTime="2026-11-18">
-          {arabic ? "آخر تحديث 18 نوفمبر 2026" : "Last updated 18 November 2026"}
+        <time dateTime="2026-11-26">
+          {arabic ? "آخر تحديث 26 نوفمبر 2026" : "Last updated 26 November 2026"}
         </time>
         {review && <span>{arabic ? "مسودة للمراجعة" : "Draft for review"}</span>}
       </>}

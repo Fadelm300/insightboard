@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 type ServerErrorEvent =
+  | "SECURITY_AUDIT_ERROR"
   | "USER_MANAGEMENT_ERROR"
   | "LOGIN_API_ERROR"
   | "ME_ERROR"
