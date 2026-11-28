@@ -73,6 +73,7 @@ test("delegation is bounded by actor grants and protected accounts cannot be ass
 test("request authorization distinguishes missing identity, CSRF and resource denial", async () => {
   let user = null, trusted = true, lookups = 0;
   const authorization = load("lib/authorization.ts", {
+    "@/lib/securityAudit": { recordSecurityEvent: async () => {} },
     "next/server": { NextResponse: { redirect: (url) => ({ status: 307, location: url.href }) } },
     "next/navigation": { redirect() { throw new Error("redirect"); } },
     "@/lib/auth": { getAuthUser: async () => { lookups++; return user; }, getCurrentUser: async () => user },
@@ -142,6 +143,7 @@ for (const [file, expected] of routeCases) {
 test("denied document navigation opens the access page while API clients keep JSON errors", async () => {
   let user = employee;
   const authorization = load("lib/authorization.ts", {
+    "@/lib/securityAudit": { recordSecurityEvent: async () => {} },
     "next/server": { NextResponse: { redirect: (url) => ({ status: 307, location: url.href }) } },
     "next/navigation": { redirect() { throw new Error("redirect"); } },
     "@/lib/auth": { getAuthUser: async () => user, getCurrentUser: async () => user },
@@ -171,6 +173,7 @@ test("denied document navigation opens the access page while API clients keep JS
 test("protected pages deny on the server before the isolated access navigation", async () => {
   let user = employee;
   const authorization = load("lib/authorization.ts", {
+    "@/lib/securityAudit": { recordSecurityEvent: async () => {} },
     "next/server": {},
     "next/navigation": { redirect: (url) => { throw new Error("REDIRECT " + url); } },
     "@/lib/auth": { getAuthUser: async () => user, getCurrentUser: async () => user },

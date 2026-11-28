@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:security": "node --test tests/*.test.mjs",
+    "test:security:integration": "node --test tests/security-audit.integration.mjs",
     "setup:dev-user": "node --env-file=.env.development.local scripts/create-dev-user.mjs",
     "configure:dev-db": "node scripts/configure-dev-db.mjs"
   },

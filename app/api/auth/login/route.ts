@@ -11,6 +11,7 @@ import { allowLoginAttempt } from "@/lib/loginRateLimit";
 import { getPermissions, isAccountEnabled } from "@/lib/permissions";
 
 import User from "@/models/User";
+import { recordSecurityEvent } from "@/lib/securityAudit";
 
 type LoginFailResponse = {
   success: false;
@@ -36,18 +37,24 @@ function loginFail(message: string) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isTrustedMutation(req)) return errorResponse("Forbidden", 403);
+  if (!isTrustedMutation(req)) {
+    await recordSecurityEvent(req, { kind: "request.rejected", reason: "untrusted_origin", status: 403 });
+    return errorResponse("Forbidden", 403);
+  }
 
   try {
 
     const parsed = await readBoundedJsonObject(req, 4096);
     if (!parsed.ok) {
+      await recordSecurityEvent(req, { kind: "login.failed", status: parsed.status === 400 ? 401 : parsed.status,
+        reason: parsed.status === 413 ? "body_too_large" : parsed.status === 415 ? "unsupported_media_type" : "invalid_request" });
       if (parsed.status === 400) return loginFail("Invalid login request");
       return errorResponse(parsed.status === 413 ? "Request body is too large" : "Expected application/json", parsed.status);
     }
     const body = parsed.value;
 
     if (typeof body.email !== "string" || typeof body.password !== "string") {
+      await recordSecurityEvent(req, { kind: "login.failed", reason: "invalid_request", status: 401 });
       return loginFail("Invalid email or password");
     }
 
@@ -55,20 +62,24 @@ export async function POST(req: NextRequest) {
     const cleanPassword = body.password;
 
     if (cleanEmail.length > 254 || cleanPassword.length > 128) {
+      await recordSecurityEvent(req, { kind: "login.failed", reason: "invalid_request", status: 401, attemptedEmail: cleanEmail });
       return loginFail("Invalid email or password");
     }
 
     if (!cleanEmail || !cleanPassword) {
+      await recordSecurityEvent(req, { kind: "login.failed", reason: "invalid_request", status: 401, attemptedEmail: cleanEmail });
       return loginFail("Email and password are required");
     }
 
     if (!isValidEmail(cleanEmail)) {
+      await recordSecurityEvent(req, { kind: "login.failed", reason: "invalid_request", status: 401 });
       return loginFail("Enter a valid email address");
     }
 
     await connectDB();
 
     if (!(await allowLoginAttempt(req, cleanEmail))) {
+      await recordSecurityEvent(req, { kind: "login.rate_limited", reason: "rate_limit", status: 429, attemptedEmail: cleanEmail });
       const response = errorResponse("Too many sign-in attempts. Try again later.", 429);
       response.headers.set("Retry-After", "900");
       return response;
@@ -81,6 +92,7 @@ export async function POST(req: NextRequest) {
     const isPasswordValid = await bcrypt.compare(cleanPassword, passwordHash);
 
     if (!user || !isPasswordValid || !isAccountEnabled(user)) {
+      await recordSecurityEvent(req, { kind: "login.failed", reason: "invalid_credentials", status: 401, attemptedEmail: cleanEmail });
       return loginFail("Invalid email or password");
     }
 
@@ -96,7 +108,7 @@ export async function POST(req: NextRequest) {
       },
       "Login successful"
     );
-    await createSession(user._id.toString(), req, response, user.authVersion ?? 0);
+    await createSession(user._id.toString(), req, response, user.authVersion ?? 0, { name: user.name, email: user.email });
     return response;
   } catch (error) {
     return errorResponse("Server error", 500, logServerError("LOGIN_API_ERROR", error));

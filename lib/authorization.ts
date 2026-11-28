@@ -4,6 +4,7 @@ import { getAuthUser, getCurrentUser } from "@/lib/auth";
 import { errorResponse } from "@/lib/apiResponse";
 import { firstAllowedPage, hasPermission, type Permission } from "@/lib/permissions";
 import { isTrustedMutation } from "@/lib/sessionPolicy";
+import { recordSecurityEvent } from "@/lib/securityAudit";
 
 function accessFailure(req: NextRequest, status: 401 | 403) {
   // A document navigation receives a page; fetch clients retain JSON errors.
@@ -20,12 +21,17 @@ function accessFailure(req: NextRequest, status: 401 | 403) {
 
 export async function authorizeRequest(req: NextRequest, permission: Permission | readonly Permission[]) {
   if (!isTrustedMutation(req)) {
+    await recordSecurityEvent(req, { kind: "request.rejected", reason: "untrusted_origin", status: 403 });
     return { user: null, response: accessFailure(req, 403) };
   }
   const user = await getAuthUser(req);
-  if (!user) return { user: null, response: accessFailure(req, 401) };
+  if (!user) {
+    await recordSecurityEvent(req, { kind: "access.denied", reason: "unauthenticated", status: 401 });
+    return { user: null, response: accessFailure(req, 401) };
+  }
   const permissions = typeof permission === "string" ? [permission] : permission;
   if (!permissions.some((required) => hasPermission(user, required))) {
+    await recordSecurityEvent(req, { kind: "access.denied", reason: "insufficient_permission", status: 403, userId: user.id });
     return { user: null, response: accessFailure(req, 403) };
   }
   return { user, response: null };

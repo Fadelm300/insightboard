@@ -34,7 +34,7 @@ const updateInput = () => {
   return { ...input, version: 0 };
 };
 
-function harness({ actorRole = "manager", targetRole = "employee", managedBy = actorId, staleActor = false, failAudit = false } = {}) {
+function harness({ actorRole = "manager", targetRole = "employee", managedBy = actorId, staleActor = false, failAudit = false, failSecurityAudit = false } = {}) {
   const actor = { id: actorId, role: actorRole };
   let rows = new Map([
     [actorId, { _id: actorId, name: "Manager", email: "manager@example.invalid", role: actorRole, isActive: !staleActor }],
@@ -72,6 +72,10 @@ function harness({ actorRole = "manager", targetRole = "employee", managedBy = a
     },
   };
   const management = load("lib/userManagement.ts", {
+    "@/lib/securityAudit": { closeSecuritySessionsForUser: async (userId, byId, session) => {
+      assert.equal(userId, targetId); assert.equal(byId, actorId); assert.equal(session, transaction);
+      if (failSecurityAudit) throw Error("Session audit unavailable");
+    } },
     bcryptjs: { __esModule: true, default: { async hash(password, cost) { hashes.push({ password, cost }); return "HASHED_FIXTURE"; } } },
     mongoose: { __esModule: true, default: { startSession: async () => transaction } },
     "@/models/User": { __esModule: true, default: User },
@@ -132,6 +136,15 @@ test("account updates atomically increment revision, revoke sessions and record 
   assert.equal(h.audit[0].action, "user.updated");
   assert.equal(JSON.stringify(h.audit).includes("employee@example.invalid"), false);
   assert.equal("password" in result, false);
+});
+
+test("session security audit failure rolls an account change back before sessions can be revoked without history", async () => {
+  const h = harness({ failSecurityAudit: true });
+  await assert.rejects(h.module.saveManagedUser(h.actor, { ...updateInput(), isActive: false }, targetId));
+  assert.equal(h.rows.get(targetId).authVersion, 0);
+  assert.equal(h.rows.get(targetId).isActive, undefined);
+  assert.equal(h.sessions.length, 1);
+  assert.equal(h.audit.length, 0);
 });
 
 test("self, protected roles and other managers' teams cannot be modified", async () => {
